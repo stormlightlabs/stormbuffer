@@ -13,7 +13,7 @@ cargo run -p stormbuffer -- --version
 ```
 
 Stores are global by default. Add `--project` to use the nearest
-`.stormbuffer/` directory instead:
+`.sbuf/` directory instead:
 
 ```sh
 stormbuffer|stormbuf|sbuf --project init

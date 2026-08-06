@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+// TODO: use the tempdir crate
 fn temporary_directory(name: &str) -> PathBuf {
     let suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -49,6 +50,19 @@ where
         .expect("run CLI process")
 }
 
+fn run_with_editor<I, S>(name: &str, directory: &Path, arguments: I) -> Output
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut command = Command::new(binary(name));
+    command
+        .current_dir(directory)
+        .args(arguments)
+        .env("EDITOR", "true");
+    command.output().expect("run CLI with editor")
+}
+
 fn with_store_environment(command: &mut Command, root: &Path) {
     let home = root.join("home");
     let data = root.join("data");
@@ -71,12 +85,12 @@ fn init_root_and_status_work_for_project_and_global_stores() {
     let project_init = run("stormbuffer", &project, ["--project", "init"]);
     assert_eq!(project_init.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&project_init.stdout).contains("Initialized project store"));
-    assert!(project.join(".stormbuffer/store.toml").is_file());
+    assert!(project.join(".sbuf/store.toml").is_file());
 
     let project_root = run("stormbuffer", &project, ["--project", "root"]);
     assert_eq!(project_root.status.code(), Some(0));
     let expected_project_root = project
-        .join(".stormbuffer")
+        .join(".sbuf")
         .canonicalize()
         .expect("canonicalize project root");
     assert_eq!(
@@ -104,6 +118,45 @@ fn init_root_and_status_work_for_project_and_global_stores() {
 }
 
 #[test]
+fn shared_project_init_is_explicit_and_global_shared_is_rejected() {
+    let root = temporary_directory("shared");
+    let project = root.join("project");
+    fs::create_dir_all(&project).expect("create project directory");
+
+    let global_shared = run("stormbuffer", &root, ["init", "--shared"]);
+    assert_eq!(global_shared.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&global_shared.stderr).contains("project scope"));
+    assert!(!root.join("data/stormbuffer").exists());
+
+    let global_flag = run("stormbuffer", &root, ["--shared", "init"]);
+    assert_eq!(global_flag.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&global_flag.stderr).contains("unexpected argument"));
+    assert!(!root.join("data/stormbuffer").exists());
+
+    let shared_init = run("stormbuffer", &project, ["--project", "init", "--shared"]);
+    assert_eq!(shared_init.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&shared_init.stdout).contains("shared"));
+    assert!(project.join(".sbuf/store.toml").is_file());
+    let ignore =
+        fs::read_to_string(project.join(".sbuf/.gitignore")).expect("read shared ignore rules");
+    assert!(ignore.contains("/models/"));
+    assert!(ignore.contains("**/*.sqlite*"));
+    assert!(ignore.contains("**/*.lock"));
+    assert!(ignore.contains("**/*.tmp"));
+    assert!(ignore.contains("**/*.log"));
+
+    let status = run("stormbuffer", &project, ["--project", "status"]);
+    assert_eq!(status.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&status.stdout).contains("Visibility: shared"));
+
+    let status_json = run("stormbuffer", &project, ["--project", "status", "--json"]);
+    assert_eq!(status_json.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&status_json.stdout).contains("\"visibility\":\"shared\""));
+
+    fs::remove_dir_all(root).expect("remove test directory");
+}
+
+#[test]
 fn invalid_input_and_unfinished_commands_are_explicit_and_safe() {
     let root = temporary_directory("errors");
 
@@ -112,16 +165,118 @@ fn invalid_input_and_unfinished_commands_are_explicit_and_safe() {
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("unexpected argument"));
     assert!(!String::from_utf8_lossy(&invalid.stderr).contains("panicked"));
 
-    let stub = run("stormbuffer", &root, ["--project", "add"]);
-    assert_eq!(stub.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&stub.stderr).contains("not implemented yet"));
-    assert!(stub.stdout.is_empty());
-    assert!(!root.join(".stormbuffer").exists());
+    let add = run("stormbuffer", &root, ["--project", "add"]);
+    assert_eq!(add.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&add.stderr).contains("not initialized"));
+    assert!(add.stdout.is_empty());
+    assert!(!root.join(".sbuf").exists());
 
     let forget = run("stormbuffer", &root, ["forget", "memory-id"]);
     assert_eq!(forget.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&forget.stderr).contains("--destroy"));
-    assert!(!root.join(".stormbuffer").exists());
+    assert!(!root.join(".sbuf").exists());
+
+    fs::remove_dir_all(root).expect("remove test directory");
+}
+
+#[test]
+fn lifecycle_commands_preserve_records_and_use_tab_delimited_output() {
+    let root = temporary_directory("lifecycle");
+    let init = run("stormbuffer", &root, ["--project", "init"]);
+    assert_eq!(init.status.code(), Some(0));
+
+    let add = run_with_editor(
+        "stormbuffer",
+        &root,
+        [
+            "--project",
+            "add",
+            "--title",
+            "A durable fact",
+            "--kind",
+            "fact",
+            "--body",
+            "The body stays readable.",
+        ],
+    );
+    assert_eq!(
+        add.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&add.stderr)
+    );
+    let id = String::from_utf8_lossy(&add.stdout).trim().to_owned();
+    assert!(!id.is_empty());
+
+    let list = run("stormbuffer", &root, ["--project", "list"]);
+    assert_eq!(list.status.code(), Some(0));
+    let line = String::from_utf8_lossy(&list.stdout);
+    let fields: Vec<_> = line.trim_end().split('\t').collect();
+    assert_eq!(fields.len(), 5, "unexpected list output: {line:?}");
+    assert_eq!(fields[0], id);
+    assert_eq!(fields[1], "active");
+    assert_eq!(fields[2], "fact");
+    assert!(fields[3].starts_with("project:"));
+    assert_eq!(fields[4], "A durable fact");
+    assert!(!line.contains("\\t"));
+
+    let show = run("stormbuffer", &root, ["--project", "show", &id]);
+    assert_eq!(show.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&show.stdout).contains("The body stays readable."));
+
+    let edit = run_with_editor("stormbuffer", &root, ["--project", "edit", &id]);
+    assert_eq!(edit.status.code(), Some(0));
+    assert_eq!(String::from_utf8_lossy(&edit.stdout).trim(), id);
+
+    let archive = run("stormbuffer", &root, ["--project", "archive", &id]);
+    assert_eq!(archive.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8_lossy(&archive.stdout).trim(),
+        format!("{id}\tarchived")
+    );
+    assert!(
+        run("stormbuffer", &root, ["--project", "list"])
+            .stdout
+            .is_empty()
+    );
+    let all = run("stormbuffer", &root, ["--project", "list", "--all"]);
+    assert!(String::from_utf8_lossy(&all.stdout).contains(&format!("{id}\tarchived")));
+
+    let restore = run("stormbuffer", &root, ["--project", "restore", &id]);
+    assert_eq!(restore.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8_lossy(&restore.stdout).trim(),
+        format!("{id}\tactive")
+    );
+
+    let supersede = run_with_editor("stormbuffer", &root, ["--project", "supersede", &id]);
+    assert_eq!(
+        supersede.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&supersede.stderr)
+    );
+    let replacement = String::from_utf8_lossy(&supersede.stdout).trim().to_owned();
+    assert_ne!(replacement, id);
+    let active = run("stormbuffer", &root, ["--project", "list"]);
+    let active_output = String::from_utf8_lossy(&active.stdout);
+    assert!(active_output.contains(&replacement));
+    assert!(!active_output.contains(&id));
+
+    let blocked_forget = run(
+        "stormbuffer",
+        &root,
+        ["--project", "forget", &replacement, "--destroy"],
+    );
+    assert_eq!(blocked_forget.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&blocked_forget.stderr).contains("--yes"));
+    let forgotten = run(
+        "stormbuffer",
+        &root,
+        ["--project", "forget", &replacement, "--destroy", "--yes"],
+    );
+    assert_eq!(forgotten.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&forgotten.stdout).contains("Forgot"));
 
     fs::remove_dir_all(root).expect("remove test directory");
 }

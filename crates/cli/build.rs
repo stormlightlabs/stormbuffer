@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     fs::create_dir_all(&man_directory)?;
     fs::create_dir_all(&completions_directory)?;
 
-    let (man_pages, completions) = artifacts::render(command::command("stormbuffer"))?;
+    let (man_pages, completions) = artifacts::render(command::command_name("stormbuffer"))?;
     write_directory(&man_directory, &man_pages)?;
     write_directory(&completions_directory, &completions)?;
 

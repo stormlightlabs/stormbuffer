@@ -11,8 +11,8 @@ pub enum ColorMode {
 #[command(
     name = "stormbuffer",
     version,
-    about = "A local-first memory store for sourced facts, decisions, procedures, and checkpoints.",
-    long_about = "Stormbuffer keeps durable memory in readable Markdown and exposes the same command shell through stormbuffer, stormbuf, and sbuf.",
+    about = "A memory store for facts, decisions, procedures, and checkpoints.",
+    long_about = "Stormbuffer keeps memories in readable, indexed Markdown.",
     propagate_version = true,
     arg_required_else_help = true,
     subcommand_required = true
@@ -33,55 +33,62 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum CliCommand {
     /// Initialize a global or project store without changing existing metadata.
-    Init,
+    Init(InitArgs),
     /// Print the resolved store root, whether or not it is initialized.
     Root,
     /// Inspect the resolved store and report its initialization state.
     Status(StatusArgs),
-    /// Add a human-authored memory (not implemented in this milestone).
-    Add(WriteStubArgs),
-    /// Propose an agent memory candidate (not implemented in this milestone).
+    /// Add a human-authored memory.
+    Add(AddArgs),
+    /// Propose an agent memory candidate (not implemented).
     Propose(WriteStubArgs),
-    /// Approve a candidate memory (not implemented in this milestone).
+    /// Approve a candidate memory (not implemented).
     Approve(IdArgs),
-    /// Reject a candidate memory (not implemented in this milestone).
+    /// Reject a candidate memory (not implemented).
     Reject(IdArgs),
-    /// Edit a memory (not implemented in this milestone).
-    Edit(IdArgs),
-    /// Show one memory (not implemented in this milestone).
+    /// Edit a memory.
+    Edit(EditArgs),
+    /// Show one memory.
     Show(IdArgs),
-    /// List memories (not implemented in this milestone).
+    /// List memories.
     List(ListArgs),
-    /// Search indexed memories (not implemented in this milestone).
+    /// Search indexed memories (not implemented).
     Search(QueryArgs),
-    /// Compile bounded context from indexed memories (not implemented in this milestone).
+    /// Compile bounded context from indexed memories (not implemented).
     Context(QueryArgs),
-    /// Supersede a memory (not implemented in this milestone).
-    Supersede(IdArgs),
-    /// Archive a memory (not implemented in this milestone).
+    /// Supersede a memory with a new active record.
+    Supersede(SupersedeArgs),
+    /// Archive a memory.
     Archive(IdArgs),
-    /// Restore an archived memory (not implemented in this milestone).
+    /// Restore an archived memory.
     Restore(IdArgs),
-    /// Permanently delete a memory only with explicit --destroy (not implemented in this milestone).
+    /// Permanently delete a memory only with explicit --destroy.
     Forget(ForgetArgs),
-    /// Reconcile canonical Markdown with the disposable index (not implemented in this milestone).
+    /// Reconcile canonical Markdown with the disposable index (not implemented).
     Sync,
-    /// Watch for canonical Markdown changes (not implemented in this milestone).
+    /// Watch for canonical Markdown changes (not implemented).
     Watch,
-    /// Rebuild the disposable index (not implemented in this milestone).
+    /// Rebuild the disposable index (not implemented).
     Reindex,
-    /// Remove disposable cache data (not implemented in this milestone).
+    /// Remove disposable cache data (not implemented).
     Gc,
-    /// Diagnose canonical data and projections (not implemented in this milestone).
+    /// Diagnose canonical data and projections (not implemented).
     Doctor,
-    /// Export canonical records (not implemented in this milestone).
+    /// Export canonical records (not implemented).
     Export(PathArgs),
-    /// Import canonical records (not implemented in this milestone).
+    /// Import canonical records (not implemented).
     Import(PathArgs),
-    /// Invoke the versioned JSON protocol (not implemented in this milestone).
+    /// Invoke the versioned JSON protocol (not implemented).
     Invoke(InvokeArgs),
-    /// Run the MCP adapter over stdio (not implemented in this milestone).
+    /// Run the MCP adapter over stdio (not implemented).
     Mcp(McpArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct InitArgs {
+    /// Make a project store shareable by tracking its configuration and canonical Markdown.
+    #[arg(long)]
+    pub shared: bool,
 }
 
 #[derive(Args, Debug)]
@@ -100,6 +107,40 @@ pub struct WriteStubArgs {
     #[arg(long)]
     pub kind: Option<String>,
     /// Optional body that a future write command will store.
+    #[arg(long)]
+    pub body: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct AddArgs {
+    /// Optional initial title; the editor can change it.
+    #[arg(long)]
+    pub title: Option<String>,
+    /// Optional initial memory kind.
+    #[arg(long)]
+    pub kind: Option<String>,
+    /// Optional initial body; the editor can change it.
+    #[arg(long)]
+    pub body: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct EditArgs {
+    /// Memory identifier.
+    pub id: String,
+}
+
+#[derive(Args, Debug)]
+pub struct SupersedeArgs {
+    /// Memory identifier to supersede.
+    pub id: String,
+    /// Optional initial replacement title.
+    #[arg(long)]
+    pub title: Option<String>,
+    /// Optional initial replacement kind.
+    #[arg(long)]
+    pub kind: Option<String>,
+    /// Optional initial replacement body.
     #[arg(long)]
     pub body: Option<String>,
 }
@@ -130,6 +171,9 @@ pub struct ForgetArgs {
     /// Explicitly acknowledge the permanent-deletion path.
     #[arg(long)]
     pub destroy: bool,
+    /// Skip the interactive confirmation prompt.
+    #[arg(long, requires = "destroy")]
+    pub yes: bool,
 }
 
 #[derive(Args, Debug)]
@@ -151,7 +195,7 @@ pub struct McpArgs {
     pub stdio: bool,
 }
 
-pub fn command(invoked_name: &str) -> clap::Command {
+pub fn command_name(invoked_name: &str) -> clap::Command {
     let name = if invoked_name.is_empty() {
         "stormbuffer".to_owned()
     } else {

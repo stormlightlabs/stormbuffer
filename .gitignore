@@ -19,3 +19,7 @@ target
 rustc-ice-*.txt
 
 !AGENTS.md
+
+# Project-local agent skills
+!/.agents/
+!/.agents/**

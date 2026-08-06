@@ -16,6 +16,11 @@ SvelteKit documentation site and a local web editor.
   affects stored data.
 - No legacy or compatibility anything.
 
+## Herdr Pi orchestration
+
+When the user explicitly requests Herdr/Pi delegation, use the project-local
+`$orchestrate` skill. Use no more than two Pi instances.
+
 ## Architecture boundaries
 
 - Markdown with TOML frontmatter is canonical. SQLite, FTS, vectors, generated

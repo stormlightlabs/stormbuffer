@@ -1,7 +1,7 @@
 # Release checklist
 
 - Run the Rust workspace checks.
-- Run `cargo test -p stormbuffer --test documented_examples` and
+- Run `cargo test -p stormbuffer --test examples` and
   `pnpm --dir docs check`.
 - Run `pnpm --dir docs lint`, `pnpm --dir docs test`, and `pnpm --dir docs build`.
 - Confirm man pages are in root `assets/man/` and completions are in root

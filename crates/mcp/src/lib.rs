@@ -1,8 +1,7 @@
-use stormbuffer_core::{Error, Result};
+use stormbuffer_core::Error;
 
-/// The MCP adapter is intentionally an explicit stub until the protocol milestone.
-pub fn run_stdio() -> Result<()> {
-    Err(Error::InvalidInput(
-        "the MCP stdio adapter is not implemented yet".to_owned(),
-    ))
+pub fn run_stdio() -> Result<(), Box<Error>> {
+    Err(Box::new(Error::InvalidInput {
+        message: "the MCP stdio adapter is not implemented yet".to_owned(),
+    }))
 }

@@ -4,7 +4,7 @@ description: Keep public behavior, examples, and operator artifacts aligned.
 section: Reference
 group: Contributors
 order: 7
-version: '0.1'
+version: "0.1"
 toc:
   - title: Documentation changes
     slug: documentation-changes
@@ -33,7 +33,7 @@ example smoke test, and check the docs:
 
 ```sh
 cargo build --workspace
-cargo test -p stormbuffer --test documented_examples
+cargo test -p stormbuffer --test examples
 pnpm --dir docs check
 ```
 

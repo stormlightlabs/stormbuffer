@@ -1,0 +1,4 @@
+interface:
+  display_name: "Orchestrate with Pi"
+  short_description: "Delegate bounded work to Pi through Herdr"
+  default_prompt: "Use $orchestrate to complete this task with up to two Pi instances in a neighboring Herdr tab."

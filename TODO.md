@@ -139,31 +139,36 @@ loss-conscious Markdown/TOML parser and renderer for the canonical schema.
 
 **Acceptance criteria:**
 
-- [ ] Valid records round-trip without changing the body or losing metadata.
-- [ ] Missing, unknown, malformed, and incompatible-version fields produce
+- [x] Valid records round-trip without changing the body or losing metadata.
+- [x] Missing, unknown, malformed, and incompatible-version fields produce
       actionable errors with file context.
-- [ ] IDs, scopes, statuses, access values, and lifecycle transitions validate.
-- [ ] Fixtures cover all four kinds, multiple sources, Unicode, code blocks,
+- [x] IDs, scopes, statuses, access values, and lifecycle transitions validate.
+- [x] Fixtures cover all four kinds, multiple sources, Unicode, code blocks,
       and malformed records.
-- [ ] The schema reference and examples match the implemented format.
+- [x] The schema reference and examples match the implemented format.
 
 **Verification:** Run focused core codec and fixture tests.
 
 ### SB-102 — Resolve global and project stores safely
 
 **What to build:** Use platform directories for global data/cache locations and
-discover `.stormbuffer/` project configuration with private defaults.
+discover `.sbuf/` project configuration with private defaults.
 
 **Blocked by:** SB-101
 
 **Acceptance criteria:**
 
-- [ ] Resolution is deterministic and testable without using a real home
+- [x] Resolution is deterministic and testable without using a real home
       directory.
-- [ ] Project discovery handles nested working directories and a missing store.
-- [ ] New project stores default to local/private memory and explain shared-mode
+- [x] Project discovery handles nested working directories and a missing store.
+- [x] New project stores default to local/private memory and explain shared-mode
       implications before opt-in.
-- [ ] `init`, `root`, and `status` use the core resolver instead of CLI-local
+- [x] `stormbuffer --project init --shared` is the explicit shared-store opt-in;
+      `--shared` is rejected for a global store.
+- [x] Shared mode tracks only store configuration, narrow ignore rules, and
+      canonical Markdown; SQLite, FTS/vector projections, embeddings, models,
+      locks, temporary files, and logs are ignored.
+- [x] `init`, `root`, and `status` use the core resolver instead of CLI-local
       logic.
 
 **Verification:** Run resolver integration tests in temporary directory trees.
@@ -177,15 +182,15 @@ show, list, supersede, archive, restore, and guarded permanent deletion.
 
 **Acceptance criteria:**
 
-- [ ] Writes validate before commit and use a same-filesystem temporary file,
+- [x] Writes validate before commit and use a same-filesystem temporary file,
       `fsync`, atomic rename, and a store mutation lock.
-- [ ] `$EDITOR` flows preserve user Markdown and report concurrent changes.
-- [ ] Supersession retains history and default listing excludes inactive data.
-- [ ] `forget --destroy` requires deliberate confirmation or an explicit
+- [x] `$EDITOR` flows preserve user Markdown and report concurrent changes.
+- [x] Supersession retains history and default listing excludes inactive data.
+- [x] `forget --destroy` requires deliberate confirmation or an explicit
       non-interactive acknowledgement; no other command permanently deletes.
-- [ ] Interrupted/competing write tests never produce a partially written
+- [x] Interrupted/competing write tests never produce a partially written
       canonical record.
-- [ ] User and command reference docs describe the implemented behavior.
+- [x] User and command reference docs describe the implemented behavior.
 
 **Verification:** Run core repository tests and process-level lifecycle tests.
 
@@ -342,9 +347,58 @@ FTS-only, vector-only, and hybrid behavior with reported metrics.
 **Milestone exit:** Hybrid search clears the agreed corpus thresholds and emits
 bounded, attributable context.
 
-## Milestone 4: Agent workflow and JSON protocol
+## Milestone 4: Grounded RAG and agent workflow
 
-### SB-401 — Implement candidate review and provenance policy
+### SB-401 — Define the provider-neutral RAG context contract
+
+**What to build:** Make `context` return bounded, ordered evidence blocks and a
+receipt that any host model can consume without giving Stormbuffer responsibility
+for generation or remote model access.
+
+**Blocked by:** SB-303
+
+**Acceptance criteria:**
+
+- [ ] Every evidence block carries stable record/chunk IDs, title, scope, status,
+      access, source references, selected text, and ranking reasons.
+- [ ] The receipt records the query, filters, index/model versions, budget,
+      truncation, and omitted-result count without leaking inaccessible records.
+- [ ] Access, scope, and lifecycle policy runs before context assembly; fixed
+      inputs produce deterministic ordering and truncation.
+- [ ] The contract distinguishes host instructions, user input, and untrusted
+      record text and states that record content cannot grant tools or authority.
+- [ ] The core neither calls a generator nor transmits records to a remote model.
+- [ ] Human, JSON, and MCP presentations derive from the same core result.
+
+**Verification:** Run core context-contract tests for budgets, filtering,
+determinism, hostile record text, and empty or insufficient retrieval.
+
+### SB-402 — Evaluate grounded answers and citations
+
+**What to build:** Extend the retrieval corpus into a RAG question suite with
+inspectable supporting records, expected claims or abstention, and a repeatable
+adapter for evaluating a configured host model.
+
+**Blocked by:** SB-304, SB-401
+
+**Acceptance criteria:**
+
+- [ ] Fixtures cover answerable, unanswerable, conflicting, wrong-scope,
+      superseded, long-context, and indirect prompt-injection cases.
+- [ ] Reports separate retrieval, context-assembly, and generation failures and
+      include context precision/recall, claim support, citation precision/recall,
+      answer relevance, correct abstention, and scope leakage.
+- [ ] Every factual expected claim names its supporting or contradicting record
+      IDs; generated citations are checked against those records.
+- [ ] Evaluation records the generator, model/version, prompt-contract version,
+      parameters, and corpus revision needed to reproduce a run.
+- [ ] Model-assisted judgments remain reviewable and cannot silently replace
+      checked-in expectations or release thresholds.
+
+**Verification:** Run deterministic corpus checks, then one documented configured
+generator evaluation and inspect its claim-level report.
+
+### SB-403 — Implement candidate review and provenance policy
 
 **What to build:** Add propose, approve, and reject flows with source validation,
 duplicate/conflict checks, explicit supersession, and narrowly scoped direct
@@ -363,12 +417,12 @@ activation permissions.
 **Verification:** Run proposal/lifecycle integration tests over duplicate,
 conflict, invalid, and approval cases.
 
-### SB-402 — Publish the versioned JSON invocation protocol
+### SB-404 — Publish the versioned JSON invocation protocol
 
 **What to build:** Expose search, context, get, propose, supersede, and archive
 through `invoke` with stable envelopes and errors.
 
-**Blocked by:** SB-401
+**Blocked by:** SB-401, SB-403
 
 **Acceptance criteria:**
 
@@ -382,7 +436,7 @@ through `invoke` with stable envelopes and errors.
 **Verification:** Run protocol contract tests and pipe every documented example
 through a JSON parser.
 
-### SB-403 — Complete portable import, export, and garbage collection
+### SB-405 — Complete portable import, export, and garbage collection
 
 **What to build:** Add lossless export/import with collision handling and safe
 cleanup of disposable cache/model artifacts.
@@ -398,8 +452,37 @@ cleanup of disposable cache/model artifacts.
 
 **Verification:** Run round-trip, collision, and dry-run cleanup tests.
 
-**Milestone exit:** An unattended agent can retrieve and propose through a stable
-JSON boundary without gaining uncontrolled write or deletion access.
+### SB-406 — Dogfood Stormbuffer with a shared project store
+
+**What to build:** Initialize this repository as the reference shared-store
+example and curate a small memory set that helps agents work on Stormbuffer.
+
+**Blocked by:** SB-103, SB-402, SB-405
+
+**Acceptance criteria:**
+
+- [ ] The repository commits `.sbuf/store.toml`, `.sbuf/.gitignore`, and canonical
+      Markdown under `.sbuf/records/`.
+- [ ] `.sbuf/` ignores SQLite databases and sidecars, FTS/vector projections,
+      embeddings, downloaded models, locks, temporary files, logs, and other
+      rebuildable runtime artifacts.
+- [ ] Records capture sourced project facts, decisions, procedures, and useful
+      checkpoints without copying whole sections of `ROADMAP.md`, `TODO.md`, or
+      `AGENTS.md`.
+- [ ] A clean clone can rebuild all projections from the committed files and run
+      documented retrieval and grounded-answer examples against the project.
+- [ ] Tests fail if a generated or machine-local artifact under `.sbuf/` becomes
+      trackable or if an example cites a missing record.
+- [ ] Contributor docs explain the privacy and merge implications of shared
+      project memory and how to opt out locally without deleting canonical files.
+
+**Verification:** Clone or copy only tracked files into a temporary root, rebuild
+the store, run the checked-in example questions, and audit `.sbuf/` ignore rules.
+
+**Milestone exit:** An unattended agent can retrieve bounded evidence, produce
+cited or correctly abstaining answers, and propose through a stable JSON boundary
+without gaining uncontrolled write or deletion access. This repository provides
+a reproducible shared-store example containing Markdown but no derived index.
 
 ## Milestone 5: MCP and releases
 
@@ -408,7 +491,7 @@ JSON boundary without gaining uncontrolled write or deletion access.
 **What to build:** Map the approved resources and tools to core operations over
 stdio without duplicating storage, ranking, or policy.
 
-**Blocked by:** SB-402
+**Blocked by:** SB-404
 
 **Acceptance criteria:**
 
@@ -425,7 +508,7 @@ stdio without duplicating storage, ranking, or policy.
 **What to build:** Document when agents should search, compile context, propose
 durable memory, report conflicts, and avoid storing unsuitable material.
 
-**Blocked by:** SB-402, SB-501
+**Blocked by:** SB-404, SB-501
 
 **Acceptance criteria:**
 
@@ -444,7 +527,7 @@ least privilege.
 verified model setup, man pages, completions, docs, and a clean-install smoke
 test.
 
-**Blocked by:** SB-003, SB-004, SB-006, SB-304, SB-403, SB-501
+**Blocked by:** SB-003, SB-004, SB-006, SB-304, SB-402, SB-405, SB-406, SB-501
 
 **Acceptance criteria:**
 
@@ -467,7 +550,7 @@ through CLI, JSON, and MCP on supported platforms.
 HTTP API with loopback-only defaults, concurrency protection, and clean process
 behavior suitable for service managers.
 
-**Blocked by:** SB-401, SB-403, SB-503
+**Blocked by:** SB-403, SB-405, SB-503
 
 **Acceptance criteria:**
 

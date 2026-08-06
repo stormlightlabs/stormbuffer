@@ -20,6 +20,7 @@ Stormbuffer should let a person or agent:
 
 - keep a small, sourced memory that remains understandable without Stormbuffer;
 - find exact names and commands as reliably as semantically similar ideas;
+- supply bounded, attributable evidence for retrieval-augmented generation;
 - distinguish proposed memories from approved ones;
 - correct history through explicit supersession rather than silent rewriting;
 - inspect, repair, export, archive, and deliberately destroy their own data;
@@ -52,7 +53,7 @@ Human or agent
       |
       v
 stormbuffer-core
-  validation, policy, retrieval, mutation, context compilation
+  validation, policy, retrieval, mutation, RAG context compilation
       |
       +-- Markdown records       canonical and portable
       +-- SQLite projection      disposable and rebuildable
@@ -83,6 +84,7 @@ Records are Markdown with TOML frontmatter. The initial schema stays small:
 
 ```toml
 +++
+format_version = 1
 id = "01989af2-4305-7b19-88b1-e8ae4ea9a02b"
 title = "The Stormbuffer core owns all writes"
 kind = "decision"
@@ -105,18 +107,23 @@ The Stormbuffer core is the only component allowed to validate and mutate
 durable memory.
 ```
 
-Required fields map to a typed Rust model: ID, title, kind, scope, status,
-access, timestamps, tags, aliases, superseded IDs, sources, and body. Do not add
-confidence or importance scores without an evaluation showing that they solve a
-retrieval failure.
+Required fields map to a typed Rust model: format version, ID, title, kind,
+scope, status, access, timestamps, tags, aliases, superseded IDs, sources, and
+body. The current record format version is `1`; unknown frontmatter fields are
+invalid. Do not add confidence or importance scores without an evaluation showing
+that they solve a retrieval failure.
 
 The lifecycle is `candidate -> active -> superseded|archived`. Normal retrieval
 excludes superseded and archived records. Permanent deletion requires the
 explicit `forget --destroy` path.
 
 Use platform data and cache directories rather than hard-coded Unix paths.
-Project stores live under a `.stormbuffer/` directory. Project memory is private
-and ignored by Git by default; a user must deliberately opt into a shared store.
+Project stores live under a `.sbuf/` directory. Project memory is private and
+ignored by Git by default; a user must deliberately opt into a shared store.
+`stormbuffer --project init --shared` creates that explicit opt-in. A shared
+store commits only its configuration, ignore rules, and canonical Markdown
+records. SQLite databases, FTS and vector projections, embeddings, downloaded
+models, locks, temporary files, and logs remain ignored and rebuildable.
 
 ## Index and retrieval
 
@@ -153,12 +160,54 @@ tracks recall at 5, mean reciprocal rank, wrong-scope and superseded-memory
 retrieval, duplicate/conflicting proposals, and context tokens per useful
 memory. Ranking complexity needs evidence from this suite.
 
+## Retrieval-augmented generation
+
+Stormbuffer owns retrieval and context assembly. The calling agent or application
+owns generation. The initial RAG design does not add a hosted-model SDK, model
+runner, or provider-specific prompt format to the core. This keeps retrieval
+usable offline and prevents the core from sending memory to a remote service.
+
+`context` returns ordered evidence blocks rather than a prose prompt. Each block
+includes stable record and chunk identifiers, title, scope, lifecycle and access
+metadata, source references, and the text selected within the caller's budget.
+The receipt records the query, filters, index and embedding versions, ranking
+reasons, omitted results, and truncation. CLI, JSON, and MCP expose the same core
+shape, with presentation differences only where the interface requires them.
+
+The host places its instructions, the user's question, and retrieved evidence in
+distinct message or data boundaries. Record bodies are untrusted quoted evidence;
+instructions found inside them cannot grant tools, change access, widen scope, or
+override the user's request. Access and lifecycle filters run before context
+assembly. When the evidence does not support an answer, the host says so instead
+of filling the gap from model memory. Factual claims cite the record IDs that
+support them, and conflicting active evidence remains visible.
+
+RAG evaluation separates failures in retrieval, context assembly, and generation.
+The checked-in suite measures retrieval recall and rank, context precision and
+recall, claim support, citation precision and recall, answer relevance, correct
+abstention, scope leakage, and resistance to instructions embedded in records.
+It includes answerable, unanswerable, conflicting, long-context, and adversarial
+questions. Model-assisted scores supplement inspectable expected record IDs and
+claim-level judgments; they do not silently rewrite expected results.
+
+This design follows the retriever/generator split introduced in the
+[original RAG paper](https://arxiv.org/abs/2005.11401), keeps context bounded in
+light of measured [long-context position sensitivity](https://arxiv.org/abs/2307.03172),
+and evaluates retrieval and generation separately as proposed by
+[RAGAS](https://arxiv.org/abs/2309.15217). The threat model treats retrieved text
+as a source of indirect prompt injection, consistent with
+[OWASP's prompt-injection guidance](https://genai.owasp.org/llmrisk/llm01-prompt-injection/).
+Hybrid lexical and semantic retrieval remains the baseline; contextual indexing
+or reranking is added only if the corpus shows a failure it fixes, informed by
+[Anthropic's contextual retrieval experiments](https://www.anthropic.com/engineering/contextual-retrieval).
+
 ## CLI contract
 
 The public command tree is visible in the first milestone:
 
 ```text
-stormbuffer init [--project]       stormbuffer root
+stormbuffer [--project] init [--shared]
+stormbuffer root
 stormbuffer status                 stormbuffer add
 stormbuffer propose                stormbuffer approve <candidate>
 stormbuffer reject <candidate>     stormbuffer edit <id>
@@ -294,15 +343,20 @@ evaluation harness.
 Exit: hybrid retrieval meets the checked-in evaluation thresholds and context
 output stays within its requested budget.
 
-### 4. Agent workflow and stable JSON protocol
+### 4. Grounded RAG and agent workflow
 
-Implement candidate proposal/review, provenance rules, duplicate/conflict
-detection, supersession, permissions, and the versioned `invoke` operations.
-Add import/export and garbage collection where they support recovery and
-portability.
+Define the provider-neutral evidence contract, grounded-answer and injection
+evaluations, candidate proposal/review, provenance rules, duplicate/conflict
+detection, permissions, and versioned `invoke` operations. Dogfood the completed
+flow with this repository's deliberately shared `.sbuf/` store. Commit its
+configuration and Markdown records while keeping every projection and runtime
+artifact ignored. Add import/export and garbage collection where they support
+recovery and portability.
 
-Exit: an unattended process can search and propose safely using only JSON, while
-a person retains control over activation and destructive actions.
+Exit: an unattended agent can retrieve bounded evidence, produce cited answers,
+abstain when evidence is insufficient, and propose memory using public contracts.
+This repository's committed memory supplies a reproducible end-to-end example,
+while a person retains control over activation and destructive actions.
 
 ### 5. MCP compatibility and release hardening
 
@@ -362,7 +416,14 @@ documentation and graph usability receive a human review.
 - Executable aliases differ across package managers and Windows. Packaging
   tests must prove `stormbuffer`, `stormbuf`, and `sbuf`, not assume symlinks.
 - Shared project stores introduce merge and privacy concerns. Private-by-default
-  behavior must remain obvious.
+  behavior must remain obvious. Shared mode tracks only canonical configuration
+  and Markdown; this repository's `.sbuf/` store is the reference example.
+- Retrieved Markdown may contain instructions intended to steer the generator.
+  Treat it as untrusted evidence, enforce policy outside the model, and include
+  indirect prompt injection in the evaluation corpus.
+- Generator behavior varies by model and version. Keep the context contract
+  provider-neutral, record evaluation configuration, and diagnose retrieval,
+  context, and generation failures separately.
 - Web editing introduces concurrent writes and network exposure. Keep the server
   last, loopback-only by default, and reuse core locking and validation.
 - Typed frontmatter and versioned docs need a settled content schema before the

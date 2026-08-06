@@ -25,19 +25,24 @@ cargo run -p stormbuffer -- --version
 cargo run -p stormbuffer -- --help
 ```
 
-The installed command names are `stormbuffer`, `stormbuf`, and `sbuf`. They share the same commands and options. Use the name on your system when following the [CLI reference](/docs/cli/reference/).
+The installed command names are `stormbuffer`, `stormbuf`, and `sbuf`.
+They share the same commands and options. Use the name on your system when following
+the [CLI reference](/docs/cli/reference/).
 
 ## Choose a store
 
-Stormbuffer uses a global store by default. Add `--project` to use the nearest `.stormbuffer/` directory instead:
+Stormbuffer uses a global store by default.
+
+Add `--project` to use the nearest `.sbuf/` directory instead:
 
 ```sh
 cargo run -p stormbuffer -- --project init
 cargo run -p stormbuffer -- --project status
 ```
 
-Project stores are private by default. Add `.stormbuffer/` to the project’s ignore rules before creating project memory:
+Project stores are private by default. Add `.sbuf/` to the project’s ignore rules before
+creating project memory:
 
 ```sh
-printf '%s\n' '.stormbuffer/' >> .gitignore
+printf '%s\n' '.sbuf/' >> .gitignore
 ```

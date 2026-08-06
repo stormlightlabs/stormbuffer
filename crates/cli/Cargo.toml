@@ -20,6 +20,7 @@ name = "sbuf"
 path = "src/bin/stormbuffer.rs"
 
 [dependencies]
+anyhow.workspace = true
 clap.workspace = true
 owo-colors.workspace = true
 stormbuffer-core = { package = "stormbuffer-core", path = "../core" }
