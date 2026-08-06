@@ -51,6 +51,22 @@ Use `show` to print the canonical Markdown, `edit` to change it safely, and `sup
 `archive`, or `restore` to retain lifecycle history. Active records appear in `list`.
 Use `list --all` to include inactive records.
 
+## Search your memory
+
+Search active project memory and any initialized global memory with:
+
+```sh
+stormbuffer --project search release
+```
+
+Stormbuffer synchronizes the disposable search index before each search, so edits made directly
+to the Markdown files appear in the results. Use `context` when another program needs a bounded,
+machine-readable selection:
+
+```sh
+stormbuffer --project context release --budget 400
+```
+
 ## Keep project data private
 
 Project memory lives under `.sbuf/` and is private by default. Add it to the project’s ignore

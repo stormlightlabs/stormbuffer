@@ -4,9 +4,10 @@
 @import '@fontsource-variable/jetbrains-mono';
 
 :root {
+	color-scheme: light;
 	font-family: 'IBM Plex Sans Variable', 'IBM Plex Sans', sans-serif;
-	color: #17332d;
-	background: #f7f5ef;
+	color: var(--ink);
+	background: var(--paper);
 	font-synthesis: none;
 	text-rendering: optimizeLegibility;
 	--ink: #17332d;
@@ -14,12 +15,74 @@
 	--line: #d7ded8;
 	--paper: #f7f5ef;
 	--paper-deep: #eceee7;
-	--white: #fffdf8;
+	--surface-raised: #fffdf8;
+	--on-teal: #fffdf8;
 	--teal: #0b6b5e;
 	--teal-dark: #075044;
 	--coral: #d56f4d;
 	--yellow: #f1c96b;
+	--header-surface: rgb(247 245 239 / 94%);
+	--code-line: #234d43;
+	--code-surface: #163b34;
+	--code-ink: #f5f1df;
+	--callout-surface: #fff8e4;
+	--mark-surface: #f6df9f;
+	--mark-ink: #17332d;
+	--selection-ink: #17332d;
+	--focus-soft: rgb(11 107 94 / 14%);
 	--shadow: 0 12px 30px rgb(23 51 45 / 8%);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme='light']) {
+		color-scheme: dark;
+		--ink: #e8f1ec;
+		--muted: #a7bab2;
+		--line: #345149;
+		--paper: #10211d;
+		--paper-deep: #1a312b;
+		--surface-raised: #183029;
+		--on-teal: #0b2520;
+		--teal: #61c4ad;
+		--teal-dark: #8bd8c5;
+		--coral: #f1a084;
+		--yellow: #f0cf7a;
+		--header-surface: rgb(16 33 29 / 96%);
+		--code-line: #367e6d;
+		--code-surface: #0d2923;
+		--code-ink: #e8f1ec;
+		--callout-surface: #302c21;
+		--mark-surface: #6e5b28;
+		--mark-ink: #faedc3;
+		--selection-ink: #10211d;
+		--focus-soft: rgb(97 196 173 / 22%);
+		--shadow: 0 16px 35px rgb(0 0 0 / 28%);
+	}
+}
+
+:root[data-theme='dark'] {
+	color-scheme: dark;
+	--ink: #e8f1ec;
+	--muted: #a7bab2;
+	--line: #345149;
+	--paper: #10211d;
+	--paper-deep: #1a312b;
+	--surface-raised: #183029;
+	--on-teal: #0b2520;
+	--teal: #61c4ad;
+	--teal-dark: #8bd8c5;
+	--coral: #f1a084;
+	--yellow: #f0cf7a;
+	--header-surface: rgb(16 33 29 / 96%);
+	--code-line: #367e6d;
+	--code-surface: #0d2923;
+	--code-ink: #e8f1ec;
+	--callout-surface: #302c21;
+	--mark-surface: #6e5b28;
+	--mark-ink: #faedc3;
+	--selection-ink: #10211d;
+	--focus-soft: rgb(97 196 173 / 22%);
+	--shadow: 0 16px 35px rgb(0 0 0 / 28%);
 }
 
 * {
@@ -29,6 +92,10 @@
 html {
 	scroll-behavior: smooth;
 	background: var(--paper);
+}
+
+html:not(.js) .theme-toggle {
+	display: none;
 }
 
 body {
@@ -59,6 +126,11 @@ a {
 
 a:hover {
 	color: var(--coral);
+}
+
+::selection {
+	background: var(--yellow);
+	color: var(--selection-ink);
 }
 
 h1,
@@ -119,14 +191,14 @@ h3 {
 	padding: 0.55rem 0.9rem;
 	border: 1px solid var(--teal);
 	background: var(--teal);
-	color: var(--white);
+	color: var(--on-teal);
 	font-weight: 650;
 	text-decoration: none;
 }
 
 .button-link:hover {
 	background: var(--teal-dark);
-	color: var(--white);
+	color: var(--on-teal);
 }
 
 @media (prefers-reduced-motion: reduce) {

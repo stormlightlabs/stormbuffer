@@ -95,7 +95,7 @@
 		min-height: 10rem;
 		padding: 1.1rem;
 		border-left: 3px solid var(--teal);
-		background: var(--white);
+		background: var(--surface-raised);
 		color: var(--ink);
 		text-decoration: none;
 	}

@@ -22,7 +22,7 @@
 		align-items: center;
 		border: 1px solid var(--line);
 		border-radius: 0.35rem;
-		background: var(--white);
+		background: var(--surface-raised);
 	}
 
 	.search input {
@@ -38,7 +38,7 @@
 
 	.search form:focus-within {
 		border-color: var(--teal);
-		box-shadow: 0 0 0 2px rgb(11 107 94 / 14%);
+		box-shadow: 0 0 0 2px var(--focus-soft);
 	}
 
 	.search button {
@@ -61,7 +61,7 @@
 		max-height: 25rem;
 		overflow-y: auto;
 		border: 1px solid var(--line);
-		background: var(--white);
+		background: var(--surface-raised);
 		box-shadow: var(--shadow);
 	}
 
@@ -98,8 +98,8 @@
 	}
 
 	.search-results :global(mark) {
-		background: #f6df9f;
-		color: inherit;
+		background: var(--mark-surface);
+		color: var(--mark-ink);
 	}
 
 	.search-results :global(.search-message) {

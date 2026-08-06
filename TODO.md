@@ -8,125 +8,38 @@ the same change, and check the acceptance criteria before moving on.
 
 ### SB-001 — Establish the Rust workspace and shared conventions
 
-**What to build:** Make the existing crates build as one workspace with a small,
+Made the existing crates build as one workspace with a small,
 clear dependency surface and common error, tracing, and test conventions.
-
-**Blocked by:** None - can start immediately
-
-**Acceptance criteria:**
-
-- [x] The root workspace includes `core`, `cli`, `mcp`, and `server` crates.
-- [x] Package and binary names match the Stormbuffer naming contract.
-- [x] Workspace formatting, linting, and test commands are documented and pass.
-- [x] Placeholder arithmetic and hello-world code is removed.
-
-**Verification:** Run the Rust checks in `ROADMAP.md`.
 
 ### SB-002 — Ship the complete CLI command shell
 
-**What to build:** Define the full public command tree in Clap so users can
+Defined the full public command tree in Clap so users can
 discover Stormbuffer immediately. Implement `--help`, `--version`, `init`,
 `root`, and `status`; make every unfinished command a safe and explicit stub.
 
-**Blocked by:** SB-001
-
-**Acceptance criteria:**
-
-- [x] Every command in the roadmap parses and has useful command-level help.
-- [x] `init`, `root`, and `status` work for global and project stores.
-- [x] Stubs identify themselves, make no data changes, and return a documented
-      non-zero status.
-- [x] Expected user errors are concise and do not expose Rust panics.
-- [x] Process-level tests cover success, invalid input, stubs, and piped output.
-
-**Verification:** Run focused CLI integration tests and inspect top-level and
-nested help in a narrow and a non-interactive terminal.
-
 ### SB-003 — Apply the CLI output, color, and alias contract
 
-**What to build:** Add consistent stdout/stderr behavior, stable exit statuses,
-and `owo-colors` styling that respects terminals, `NO_COLOR`, and
+Added consistent stdout/stderr behavior, stable exit statuses, and
+`owo-colors` styling that respects terminals, `NO_COLOR`, and
 `--color auto|always|never`. Make `stormbuffer`, `stormbuf`, and `sbuf`
 equivalent entry points.
 
-**Blocked by:** SB-002
-
-**Acceptance criteria:**
-
-- [x] Primary output uses stdout; diagnostics and logs use stderr.
-- [x] Redirected and JSON output never contains ANSI escapes.
-- [x] `NO_COLOR` and each `--color` mode have process-level tests.
-- [x] All three executable names expose the same commands and exit behavior.
-- [x] Help uses the invoked name where the packaging approach permits it.
-
-**Verification:** Run CLI process tests with TTY/non-TTY output and each binary
-name.
-
 ### SB-004 — Generate man pages and shell completions
 
-**What to build:** Generate man pages with `clap_mangen` and supported shell
-completions with `clap_complete` from the runtime command definition.
-
-**Blocked by:** SB-002
-
-**Acceptance criteria:**
-
-- [x] A workspace build regenerates all root-level artifacts deterministically.
-- [x] Common shells receive completion files and every public command appears.
-- [x] Man pages cover the top-level CLI and useful subcommand detail.
-- [x] A test exercises the shared artifact renderer and verifies the build outputs.
-
-**Verification:** Build twice with no asset diff, render a man page, and load at
-least one completion file in its target shell.
+Generated man pages with `clap_mangen` and supported shell completions
+with `clap_complete` from the runtime command definition.
 
 ### SB-005 — Build the static documentation foundation
 
-**What to build:** Replace the Svelte starter with a static, mdsvex-based docs
+Replaced the Svelte starter with a static, mdsvex-based docs
 site using typed frontmatter, Docusaurus-like navigation, Pagefind, and the
 specified typography.
 
-**Blocked by:** None - can start immediately
-
-**Acceptance criteria:**
-
-- [x] SvelteKit uses `adapter-static`; Markdown pages use mdsvex and validated
-      frontmatter.
-- [x] The site has top navigation, sidebar, breadcrumbs, table of contents,
-      previous/next links, version display, and responsive navigation.
-- [x] IBM Plex Serif styles headings, IBM Plex Sans styles body/UI, and JetBrains
-      Mono styles code using Fontsource variable packages where available.
-- [x] Pagefind indexes the production build and search works without a hosted
-      service.
-- [x] Reading and navigation work without client-side JavaScript.
-- [x] The first pages cover installation, quick start, CLI status, data model,
-      and architecture without presenting stubs as finished features.
-
-**Verification:** Run the docs checks in `ROADMAP.md`, then keyboard-check the
-built site at desktop and narrow widths with JavaScript disabled.
-
 ### SB-006 — Keep documentation current
 
-**What to build:** Make docs part of the definition of done, exercise documented
+Made docs part of the definition of done, exercise documented
 CLI examples, and verify that build.rs writes root-level operator artifacts from
 the shared Clap command tree.
-
-**Blocked by:** SB-002, SB-004, SB-005
-
-**Acceptance criteria:**
-
-- [x] Contributor guidance names the public changes that require docs updates.
-- [x] A repeatable docs check exercises documented CLI examples and tests the
-      shared artifact renderer against `assets/man/` and `assets/completions/`.
-- [x] Examples used as smoke tests fail when documented commands drift.
-- [x] Release guidance includes a human review for prose and navigation.
-
-**Verification:** Build the workspace, run the focused artifact and documented
-example tests, then run the docs checks. Build outputs remain root-level and
-gitignored; `crates/cli/build.rs` is the only generator.
-
-**Milestone exit:** A development install offers useful initialization and
-inspection, an honest full command shell, all three names, generated operator
-artifacts, and searchable static docs.
 
 ## Milestone 1: Canonical Markdown store
 
@@ -208,10 +121,10 @@ index metadata, and contentless-delete FTS5, with SQLite treated only as cache.
 
 **Acceptance criteria:**
 
-- [ ] A new database enables foreign keys and appropriate WAL behavior.
-- [ ] Schema upgrades are transactional and tested from every supported version.
-- [ ] No projected field is the sole copy of user information.
-- [ ] Dropping and rebuilding the database preserves canonical data.
+- [x] A new database enables foreign keys and appropriate WAL behavior.
+- [x] Schema upgrades are transactional and tested from every supported version.
+- [x] No projected field is the sole copy of user information.
+- [x] Dropping and rebuilding the database preserves canonical data.
 
 **Verification:** Run migration and clean-rebuild integration tests.
 
@@ -224,12 +137,12 @@ per-file transactions while removing stale rows.
 
 **Acceptance criteria:**
 
-- [ ] BLAKE3 hashes skip unchanged files.
-- [ ] Heading-aware chunks do not split code blocks or lists and include the
+- [x] BLAKE3 hashes skip unchanged files.
+- [x] Heading-aware chunks do not split code blocks or lists and include the
       record title/heading in retrieval input.
-- [ ] A failed projection leaves canonical Markdown intact and recoverable.
-- [ ] `sync` reconciles manual edits, moves, invalid files, and deleted files.
-- [ ] Repeated sync with no changes performs no record reindex work.
+- [x] A failed projection leaves canonical Markdown intact and recoverable.
+- [x] `sync` reconciles manual edits, moves, invalid files, and deleted files.
+- [x] Repeated sync with no changes performs no record reindex work.
 
 **Verification:** Run sync tests over checked-in filesystem fixtures.
 
@@ -242,13 +155,13 @@ title/alias behavior, then expose it through `search` and bounded `context`.
 
 **Acceptance criteria:**
 
-- [ ] Results default to active accessible records in current-project then
+- [x] Results default to active accessible records in current-project then
       allowed-global scope.
-- [ ] Results include ID, title, kind, scope, excerpt, source, path, score, and
+- [x] Results include ID, title, kind, scope, excerpt, source, path, score, and
       lexical match reason.
-- [ ] Context output respects its budget and includes a machine-readable receipt.
-- [ ] Exact filenames, commands, aliases, and Unicode text have regression tests.
-- [ ] CLI and docs examples use only the implemented result shape.
+- [x] Context output respects its budget and includes a machine-readable receipt.
+- [x] Exact filenames, commands, aliases, and Unicode text have regression tests.
+- [x] CLI and docs examples use only the implemented result shape.
 
 **Verification:** Run search/context integration tests and documented examples.
 
@@ -261,11 +174,11 @@ diagnostics for canonical/index/model/config inconsistencies.
 
 **Acceptance criteria:**
 
-- [ ] Correctness never depends on the watcher running.
-- [ ] `reindex` builds a fresh projection and switches safely.
-- [ ] `doctor` distinguishes warnings from failures and suggests repair commands.
-- [ ] Interrupting watch or reindex leaves the existing store usable.
-- [ ] Recovery procedures are documented and tested.
+- [x] Correctness never depends on the watcher running.
+- [x] `reindex` builds a fresh projection and switches safely.
+- [x] `doctor` distinguishes warnings from failures and suggests repair commands.
+- [x] Interrupting watch or reindex leaves the existing store usable.
+- [x] Recovery procedures are documented and tested.
 
 **Verification:** Run recovery tests with invalid files and interrupted rebuilds.
 

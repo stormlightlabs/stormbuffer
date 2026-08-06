@@ -3,7 +3,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result as AnyhowResult, bail};
 
@@ -14,8 +14,9 @@ use stormbuffer_core::{self as core, StoreInitMode, StoreScope};
 mod command;
 
 pub use command::{
-    AddArgs, Cli, CliCommand, ColorMode, EditArgs, ForgetArgs, IdArgs, InitArgs, InvokeArgs,
-    ListArgs, McpArgs, PathArgs, QueryArgs, StatusArgs, SupersedeArgs, WriteStubArgs, command_name,
+    AddArgs, Cli, CliCommand, ColorMode, ContextArgs, EditArgs, ForgetArgs, IdArgs, InitArgs,
+    InvokeArgs, ListArgs, McpArgs, PathArgs, SearchArgs, StatusArgs, SupersedeArgs, WatchArgs,
+    WriteStubArgs, command_name,
 };
 
 pub const FAILURE: i32 = 1;
@@ -49,6 +50,8 @@ where
     };
 
     let machine = matches!(&parsed.command, CliCommand::Status(arguments) if arguments.json)
+        || matches!(&parsed.command, CliCommand::Search(arguments) if arguments.json)
+        || matches!(&parsed.command, CliCommand::Context(_))
         || matches!(&parsed.command, CliCommand::Invoke(_));
     let output = Output::new(parsed.color.clone(), machine);
     run_command(parsed, output)
@@ -90,18 +93,218 @@ fn run_command(cli: Cli, output: Output) -> i32 {
             let machine_output = Output::new(ColorMode::Never, true);
             stub("invoke", &machine_output)
         }
+        CliCommand::Search(arguments) => run_search(scope, arguments, &output),
+        CliCommand::Context(arguments) => run_context(scope, arguments, &output),
+        CliCommand::Sync => run_sync(scope, &output),
+        CliCommand::Watch(arguments) => run_watch(scope, arguments, &output),
+        CliCommand::Reindex => run_reindex(scope, &output),
+        CliCommand::Doctor => run_doctor(scope, &output),
         CliCommand::Propose(_)
         | CliCommand::Approve(_)
         | CliCommand::Reject(_)
-        | CliCommand::Search(_)
-        | CliCommand::Context(_)
-        | CliCommand::Sync
-        | CliCommand::Watch
-        | CliCommand::Reindex
         | CliCommand::Gc
-        | CliCommand::Doctor
         | CliCommand::Export(_)
         | CliCommand::Import(_) => stub(command_as_str(&cli.command), &output),
+    }
+}
+
+fn run_search(scope: StoreScope, arguments: SearchArgs, output: &Output) -> i32 {
+    let paths = match resolve(scope) {
+        Ok(paths) => paths,
+        Err(error) => return report_error(error, output),
+    };
+    let mut options = core::SearchOptions::for_store(&paths);
+    let stores = match prepare_retrieval_stores(scope, paths, output) {
+        Some(stores) => stores,
+        None => return FAILURE,
+    };
+    options.limit = arguments.limit;
+    options.include_inactive = arguments.all;
+    let results = match core::search_stores(&stores, &arguments.query, options) {
+        Ok(results) => results,
+        Err(error) => return report_error(anyhow::Error::new(error), output),
+    };
+    if arguments.json {
+        return match serde_json::to_string_pretty(&results) {
+            Ok(value) => {
+                output.line(&value);
+                0
+            }
+            Err(error) => report_error(anyhow::Error::new(error), output),
+        };
+    }
+    for result in results {
+        let source = result
+            .sources
+            .first()
+            .map(|source| source.reference.as_str())
+            .unwrap_or("");
+        output.line(&format!(
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            result.record_id,
+            result.title,
+            result.kind,
+            result.scope,
+            result.excerpt.replace('\n', " "),
+            source,
+            result.path,
+            result.score,
+            result.lexical_match_reason,
+        ));
+    }
+    0
+}
+
+fn run_context(scope: StoreScope, arguments: ContextArgs, output: &Output) -> i32 {
+    let paths = match resolve(scope) {
+        Ok(paths) => paths,
+        Err(error) => return report_error(error, output),
+    };
+    let mut search = core::SearchOptions::for_store(&paths);
+    let stores = match prepare_retrieval_stores(scope, paths, output) {
+        Some(stores) => stores,
+        None => return FAILURE,
+    };
+    search.limit = arguments.limit;
+    search.include_inactive = arguments.all;
+    let result = match core::context_stores(
+        &stores,
+        &arguments.query,
+        core::ContextOptions {
+            budget: arguments.budget,
+            search,
+        },
+    ) {
+        Ok(result) => result,
+        Err(error) => return report_error(anyhow::Error::new(error), output),
+    };
+    match serde_json::to_string_pretty(&result) {
+        Ok(value) => {
+            output.line(&value);
+            0
+        }
+        Err(error) => report_error(anyhow::Error::new(error), output),
+    }
+}
+
+fn run_sync(scope: StoreScope, output: &Output) -> i32 {
+    let paths = match resolve(scope) {
+        Ok(paths) => paths,
+        Err(error) => return report_error(error, output),
+    };
+    match core::sync_store(&paths) {
+        Ok(report) => {
+            output.line(&format!(
+                "Indexed: {}\nSkipped: {}\nRemoved: {}\nInvalid: {}",
+                report.indexed,
+                report.skipped,
+                report.removed,
+                report.invalid_files.len()
+            ));
+            report_invalid_files(&report.invalid_files, output);
+            0
+        }
+        Err(error) => report_error(anyhow::Error::new(error), output),
+    }
+}
+
+fn run_watch(scope: StoreScope, arguments: WatchArgs, output: &Output) -> i32 {
+    let paths = match resolve(scope) {
+        Ok(paths) => paths,
+        Err(error) => return report_error(error, output),
+    };
+    let options = core::WatchOptions {
+        once: arguments.once,
+        interval: Duration::from_millis(arguments.interval_ms.max(50)),
+    };
+    match core::watch_store(&paths, options) {
+        Ok(report) => {
+            output.line(&format!("Watch cycles: {}", report.cycles));
+            report_invalid_files(&report.invalid_files, output);
+            0
+        }
+        Err(error) => report_error(anyhow::Error::new(error), output),
+    }
+}
+
+fn run_reindex(scope: StoreScope, output: &Output) -> i32 {
+    let paths = match resolve(scope) {
+        Ok(paths) => paths,
+        Err(error) => return report_error(error, output),
+    };
+    match core::reindex_store(&paths) {
+        Ok(report) => {
+            output.line(&format!("Reindexed: {}", report.indexed));
+            report_invalid_files(&report.invalid_files, output);
+            0
+        }
+        Err(error) => report_error(anyhow::Error::new(error), output),
+    }
+}
+
+fn run_doctor(scope: StoreScope, output: &Output) -> i32 {
+    let paths = match resolve(scope) {
+        Ok(paths) => paths,
+        Err(error) => return report_error(error, output),
+    };
+    let report = match core::doctor_store(&paths) {
+        Ok(report) => report,
+        Err(error) => return report_error(anyhow::Error::new(error), output),
+    };
+    output.line(&format!("Index: {}", report.index_path));
+    for issue in &report.issues {
+        output.line(&format!(
+            "{}: {} (repair: {})",
+            issue.severity, issue.message, issue.repair
+        ));
+    }
+    if report.failures == 0 { 0 } else { FAILURE }
+}
+
+fn reconcile(paths: &core::StorePaths, output: &Output) -> bool {
+    match core::sync_store(paths) {
+        Ok(report) => {
+            report_invalid_files(&report.invalid_files, output);
+            true
+        }
+        Err(error) => {
+            report_error(anyhow::Error::new(error), output);
+            false
+        }
+    }
+}
+
+fn prepare_retrieval_stores(
+    scope: StoreScope,
+    paths: core::StorePaths,
+    output: &Output,
+) -> Option<Vec<core::StorePaths>> {
+    let mut stores = vec![paths];
+    if scope == StoreScope::Project {
+        let global = match resolve(StoreScope::Global) {
+            Ok(paths) => paths,
+            Err(error) => {
+                report_error(error, output);
+                return None;
+            }
+        };
+        if global.root.join("store.toml").is_file() {
+            stores.push(global);
+        }
+    }
+    if stores.iter().all(|paths| reconcile(paths, output)) {
+        Some(stores)
+    } else {
+        None
+    }
+}
+
+fn report_invalid_files(files: &[core::SyncInvalidFile], output: &Output) {
+    for file in files {
+        output.error(&format!(
+            "invalid canonical record {}: {}",
+            file.path, file.error
+        ));
     }
 }
 
@@ -639,7 +842,7 @@ fn command_as_str(command: &CliCommand) -> &'static str {
         CliCommand::Restore(_) => "restore",
         CliCommand::Forget(_) => "forget",
         CliCommand::Sync => "sync",
-        CliCommand::Watch => "watch",
+        CliCommand::Watch(_) => "watch",
         CliCommand::Reindex => "reindex",
         CliCommand::Gc => "gc",
         CliCommand::Doctor => "doctor",

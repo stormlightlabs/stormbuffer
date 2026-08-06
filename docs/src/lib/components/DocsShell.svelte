@@ -149,7 +149,7 @@
 
 	.doc-content :global(code) {
 		padding: 0.14rem 0.28rem;
-		border: 1px solid #dce1d9;
+		border: 1px solid var(--line);
 		border-radius: 0.2rem;
 		background: var(--paper-deep);
 		font-family: 'JetBrains Mono Variable', 'JetBrains Mono', monospace;
@@ -161,10 +161,10 @@
 		margin: 1.5rem 0;
 		padding: 1.15rem 1.25rem;
 		overflow-x: auto;
-		border: 1px solid #234d43;
+		border: 1px solid var(--code-line);
 		border-radius: 0.35rem;
-		background: #163b34;
-		color: #f5f1df;
+		background: var(--code-surface);
+		color: var(--code-ink);
 		box-shadow: 0.35rem 0.35rem 0 var(--yellow);
 	}
 
@@ -181,7 +181,7 @@
 		margin: 1.5rem 0;
 		padding: 0.8rem 1.1rem;
 		border-left: 4px solid var(--yellow);
-		background: #fff8e4;
+		background: var(--callout-surface);
 	}
 
 	.doc-content :global(blockquote p:last-child) {

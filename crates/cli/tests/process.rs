@@ -76,6 +76,25 @@ fn with_store_environment(command: &mut Command, root: &Path) {
         .env("XDG_CACHE_HOME", &cache);
 }
 
+fn run_with_store_environment<I, S>(
+    name: &str,
+    directory: &Path,
+    root: &Path,
+    arguments: I,
+) -> Output
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut command = Command::new(binary(name));
+    command
+        .current_dir(directory)
+        .args(arguments)
+        .env("EDITOR", "true");
+    with_store_environment(&mut command, root);
+    command.output().expect("run CLI with isolated store")
+}
+
 #[test]
 fn init_root_and_status_work_for_project_and_global_stores() {
     let root = temporary_directory("stores");
@@ -277,6 +296,75 @@ fn lifecycle_commands_preserve_records_and_use_tab_delimited_output() {
     );
     assert_eq!(forgotten.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&forgotten.stdout).contains("Forgot"));
+
+    fs::remove_dir_all(root).expect("remove test directory");
+}
+
+#[test]
+fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
+    let root = temporary_directory("search-scopes");
+    let project = root.join("demo");
+    fs::create_dir_all(&project).expect("create project directory");
+
+    for arguments in [vec!["init"], vec!["--project", "init"]] {
+        let output = run_with_store_environment("stormbuffer", &project, &root, arguments);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let global_add = run_with_store_environment(
+        "stormbuffer",
+        &project,
+        &root,
+        [
+            "add",
+            "--title",
+            "Global collision",
+            "--kind",
+            "fact",
+            "--body",
+            "scope collision from global memory",
+        ],
+    );
+    assert_eq!(global_add.status.code(), Some(0));
+    let project_add = run_with_store_environment(
+        "stormbuffer",
+        &project,
+        &root,
+        [
+            "--project",
+            "add",
+            "--title",
+            "Project collision",
+            "--kind",
+            "fact",
+            "--body",
+            "scope collision from project memory",
+        ],
+    );
+    assert_eq!(project_add.status.code(), Some(0));
+
+    let search = run_with_store_environment(
+        "stormbuffer",
+        &project,
+        &root,
+        ["--project", "search", "scope collision", "--json"],
+    );
+    assert_eq!(
+        search.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&search.stderr)
+    );
+    let results: serde_json::Value =
+        serde_json::from_slice(&search.stdout).expect("parse search results");
+    let results = results.as_array().expect("search result array");
+    assert_eq!(results.len(), 2);
+    assert_eq!(results[0]["scope"], "project:demo");
+    assert_eq!(results[1]["scope"], "global");
 
     fs::remove_dir_all(root).expect("remove test directory");
 }

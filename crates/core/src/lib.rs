@@ -7,10 +7,17 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 mod codec;
+mod index;
 mod record;
 mod repository;
 
 pub use codec::{parse_markdown, render_markdown};
+pub use index::{
+    ContextBlock, ContextOptions, ContextReceipt, ContextResult, DoctorIssue, DoctorReport,
+    SearchOptions, SearchResult, SourceReceipt, SyncInvalidFile, SyncReport, WatchOptions,
+    WatchReport, chunk_record, content_hash, context_store, context_stores, doctor_store,
+    index_path, reindex_store, search_store, search_stores, sync_store, watch_store,
+};
 pub use record::{
     Access, RECORD_FORMAT_VERSION, Record, RecordId, RecordKind, RecordStatus, Scope, Source,
     SourceKind, Timestamp,
@@ -112,6 +119,12 @@ pub enum Error {
         #[source]
         source: RepositoryError,
     },
+    #[error("index operation failed: {operation}: {source}")]
+    Index {
+        operation: &'static str,
+        #[source]
+        source: rusqlite::Error,
+    },
 }
 
 impl Error {
@@ -145,6 +158,12 @@ impl Error {
 
     pub(crate) fn repository(source: RepositoryError) -> Self {
         Self::Repository { source }
+    }
+
+    pub(crate) fn invalid_input(message: impl Into<String>) -> Self {
+        Self::InvalidInput {
+            message: message.into(),
+        }
     }
 }
 

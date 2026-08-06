@@ -18,8 +18,8 @@ close tabs, panes, or agents that this workflow did not create.
 
 ## Create the neighboring tab
 
-Create one background tab in the current workspace and preserve the current
-working directory:
+If one does not exist, create a background tab in the current workspace, preserving
+the current working directory:
 
 ```sh
 herdr tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$PWD" --label PI --no-focus

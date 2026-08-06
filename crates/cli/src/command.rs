@@ -52,10 +52,10 @@ pub enum CliCommand {
     Show(IdArgs),
     /// List memories.
     List(ListArgs),
-    /// Search indexed memories (not implemented).
-    Search(QueryArgs),
-    /// Compile bounded context from indexed memories (not implemented).
-    Context(QueryArgs),
+    /// Search indexed memories.
+    Search(SearchArgs),
+    /// Compile bounded context from indexed memories.
+    Context(ContextArgs),
     /// Supersede a memory with a new active record.
     Supersede(SupersedeArgs),
     /// Archive a memory.
@@ -64,15 +64,15 @@ pub enum CliCommand {
     Restore(IdArgs),
     /// Permanently delete a memory only with explicit --destroy.
     Forget(ForgetArgs),
-    /// Reconcile canonical Markdown with the disposable index (not implemented).
+    /// Reconcile canonical Markdown with the disposable index.
     Sync,
-    /// Watch for canonical Markdown changes (not implemented).
-    Watch,
-    /// Rebuild the disposable index (not implemented).
+    /// Watch for canonical Markdown changes.
+    Watch(WatchArgs),
+    /// Rebuild the disposable index.
     Reindex,
     /// Remove disposable cache data (not implemented).
     Gc,
-    /// Diagnose canonical data and projections (not implemented).
+    /// Diagnose canonical data and projections.
     Doctor,
     /// Export canonical records (not implemented).
     Export(PathArgs),
@@ -153,15 +153,49 @@ pub struct IdArgs {
 
 #[derive(Args, Debug)]
 pub struct ListArgs {
-    /// Include inactive records when listing is implemented.
+    /// Include inactive records.
     #[arg(long)]
     pub all: bool,
 }
 
 #[derive(Args, Debug)]
-pub struct QueryArgs {
+pub struct SearchArgs {
     /// Search query.
     pub query: String,
+    /// Maximum number of chunks to return.
+    #[arg(long, default_value_t = 20)]
+    pub limit: usize,
+    /// Include candidate, superseded, and archived records.
+    #[arg(long)]
+    pub all: bool,
+    /// Emit a JSON array instead of tab-delimited human output.
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct ContextArgs {
+    /// Search query.
+    pub query: String,
+    /// Maximum whitespace-delimited tokens in the evidence blocks.
+    #[arg(long, default_value_t = 512)]
+    pub budget: usize,
+    /// Maximum number of matching chunks considered.
+    #[arg(long, default_value_t = 20)]
+    pub limit: usize,
+    /// Include candidate, superseded, and archived records.
+    #[arg(long)]
+    pub all: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct WatchArgs {
+    /// Run one reconciliation cycle and exit.
+    #[arg(long)]
+    pub once: bool,
+    /// Poll interval for canonical Markdown changes.
+    #[arg(long, default_value_t = 500)]
+    pub interval_ms: u64,
 }
 
 #[derive(Args, Debug)]

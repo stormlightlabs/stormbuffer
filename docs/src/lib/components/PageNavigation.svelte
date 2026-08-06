@@ -35,7 +35,7 @@
 		gap: 0.25rem;
 		padding: 0.9rem;
 		border: 1px solid var(--line);
-		background: var(--white);
+		background: var(--surface-raised);
 		text-decoration: none;
 	}
 

@@ -119,6 +119,51 @@ stormbuffer restore <id>
 
 These commands print the affected ID and status on stdout.
 
+## Search and compile context
+
+`search` returns active records by default. A project search ranks the current project first, then
+includes accessible records from an initialized global store:
+
+```sh
+stormbuffer --project search deploy
+stormbuffer --project search deploy --json
+```
+
+Human-readable results are tab-delimited. Each result identifies the record, title, kind, scope,
+excerpt, source, canonical path, score, and lexical match reason. `--json` returns the same fields
+as structured data. Add `--all` to include inactive records or `--limit <number>` to bound the
+result count.
+
+`context` selects matching chunks within a word budget and always writes JSON:
+
+```sh
+stormbuffer --project context deploy --budget 400 --limit 10
+```
+
+The response contains the selected blocks and a receipt recording the query, allowed scopes,
+statuses, access classes, budget use, omissions, and index version.
+
+## Maintain and recover the index
+
+Canonical Markdown is the source of truth. SQLite and full-text search data are disposable and
+can be rebuilt:
+
+```sh
+stormbuffer --project sync
+stormbuffer --project reindex
+stormbuffer --project doctor
+```
+
+`sync` reconciles new, edited, moved, invalid, and deleted Markdown files. Repeating it without
+changes skips records whose content hash is unchanged. Run `stormbuffer --project watch` for the
+same reconciliation on an interval. The watcher is optional because `search` and `context`
+synchronize before reading the index.
+
+Use `doctor` to inspect canonical records and the selected projection. Its diagnostics include a
+repair command. If an index is missing, stale, or corrupt, run `reindex`; Stormbuffer builds a fresh
+projection before replacing the old one. If a watch or reindex process is interrupted, the
+canonical Markdown remains authoritative. Run `sync` or `reindex` again to recover.
+
 ## Permanently delete a record
 
 `forget` is the only command that removes a canonical record.

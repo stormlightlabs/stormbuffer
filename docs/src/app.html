@@ -6,6 +6,28 @@
 		<meta name="text-scale" content="scale" />
 		<meta name="theme-color" content="#f7f5ef" />
 		<meta name="description" content="Local-first memory for people and agents, documented." />
+		<script>
+			(() => {
+				const storageKey = 'stormbuffer-theme';
+				let storedTheme = null;
+
+				try {
+					const value = localStorage.getItem(storageKey);
+					if (value === 'light' || value === 'dark') storedTheme = value;
+				} catch {
+					// Storage can be unavailable in privacy-restricted browsers.
+				}
+
+				document.documentElement.classList.add('js');
+				if (storedTheme) document.documentElement.dataset.theme = storedTheme;
+
+				const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+				const theme = storedTheme ?? systemTheme;
+				document
+					.querySelector('meta[name="theme-color"]')
+					?.setAttribute('content', theme === 'dark' ? '#10211d' : '#f7f5ef');
+			})();
+		</script>
 		<script type="module" src="/search.js"></script>
 		%sveltekit.head%
 	</head>

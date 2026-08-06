@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import type { Doc } from '$lib/content/types';
 	import Search from './Search.svelte';
+	import ThemeToggle from './ThemeToggle.svelte';
 
 	let { docs, currentSlug = '' }: { docs: Doc[]; currentSlug?: string } = $props();
 
@@ -22,7 +23,7 @@
 <header class="site-header" data-pagefind-ignore>
 	<div class="header-inner">
 		<a class="brand" href={resolve('/')} aria-label="Stormbuffer documentation home">
-			<span class="brand-mark" aria-hidden="true">S</span>
+			<span class="brand-mark" aria-hidden="true"></span>
 			<span>stormbuffer</span>
 		</a>
 
@@ -34,6 +35,7 @@
 
 		<div class="header-actions">
 			<div class="desktop-search"><Search id="header-search" /></div>
+			<ThemeToggle />
 			<details class="mobile-menu">
 				<summary><span aria-hidden="true">☰</span> Menu</summary>
 				<div class="mobile-menu-panel">
@@ -60,7 +62,7 @@
 		top: 0;
 		z-index: 10;
 		border-bottom: 1px solid var(--line);
-		background: rgb(247 245 239 / 94%);
+		background: var(--header-surface);
 		backdrop-filter: blur(12px);
 	}
 
@@ -87,17 +89,12 @@
 	}
 
 	.brand-mark {
-		display: grid;
-		place-items: center;
 		width: 2rem;
 		height: 2rem;
-		border-radius: 0.35rem;
+		flex: 0 0 auto;
 		background: var(--teal);
-		color: var(--white);
-		font-family: 'IBM Plex Serif', serif;
-		font-size: 1.4rem;
-		font-weight: 600;
-		line-height: 1;
+		-webkit-mask: url('../assets/favicon.svg') center / contain no-repeat;
+		mask: url('../assets/favicon.svg') center / contain no-repeat;
 	}
 
 	.primary-nav {
@@ -166,7 +163,7 @@
 		width: min(20rem, calc(100vw - 2rem));
 		padding: 1rem;
 		border: 1px solid var(--line);
-		background: var(--white);
+		background: var(--surface-raised);
 		box-shadow: var(--shadow);
 	}
 

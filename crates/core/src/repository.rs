@@ -281,14 +281,7 @@ impl RecordRepository {
     }
 
     fn prepare_mutation(&self) -> Result<MutationLock, Error> {
-        if !self.paths.root.join("store.toml").is_file() {
-            return Err(Error::repository(RepositoryError::StoreNotInitialized {
-                root: self.paths.root.clone(),
-            }));
-        }
-        fs::create_dir_all(self.paths.root.join(LOCK_DIRECTORY))
-            .map_err(|source| Error::io("create the store lock directory", source))?;
-        let lock = MutationLock::acquire(&self.lock_path())?;
+        let lock = acquire_store_mutation_lock(&self.paths)?;
         self.recover_supersession()?;
         Ok(lock)
     }
@@ -339,10 +332,6 @@ impl RecordRepository {
 
     fn record_path(&self, id: RecordId) -> PathBuf {
         self.paths.records.join(format!("{id}.md"))
-    }
-
-    fn lock_path(&self) -> PathBuf {
-        self.paths.root.join(LOCK_DIRECTORY).join(MUTATION_LOCK)
     }
 
     fn journal_path(&self) -> PathBuf {
@@ -408,7 +397,7 @@ struct SupersedeJournal {
     new_after: String,
 }
 
-struct MutationLock {
+pub(crate) struct MutationLock {
     file: File,
 }
 
@@ -437,6 +426,17 @@ impl Drop for MutationLock {
     fn drop(&mut self) {
         let _ = FileExt::unlock(&self.file);
     }
+}
+
+pub(crate) fn acquire_store_mutation_lock(paths: &StorePaths) -> Result<MutationLock, Error> {
+    if !paths.root.join("store.toml").is_file() {
+        return Err(Error::repository(RepositoryError::StoreNotInitialized {
+            root: paths.root.clone(),
+        }));
+    }
+    fs::create_dir_all(paths.root.join(LOCK_DIRECTORY))
+        .map_err(|source| Error::io("create the store lock directory", source))?;
+    MutationLock::acquire(&paths.root.join(LOCK_DIRECTORY).join(MUTATION_LOCK))
 }
 
 fn collect_markdown_paths(directory: &Path, paths: &mut Vec<PathBuf>) -> Result<(), Error> {
@@ -555,12 +555,12 @@ impl Drop for TempCleanup {
 }
 
 #[cfg(not(windows))]
-fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
+pub(crate) fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
     fs::rename(from, to)
 }
 
 #[cfg(windows)]
-fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
+pub(crate) fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Storage::FileSystem::{
         MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
