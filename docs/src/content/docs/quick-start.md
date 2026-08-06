@@ -21,7 +21,7 @@ stormbuffer init
 For a project-local store, run the command from the project directory:
 
 ```sh
-stormbuffer --project init
+stormbuffer --project init --shared
 ```
 
 Initialization creates the configured store structure without changing existing metadata.
@@ -71,10 +71,15 @@ Semantic retrieval is local. `init` acquires the pinned fastembed model into the
 cache, and project searches reuse that cache. If acquisition fails, the store remains valid and
 the command reports how to repair the model.
 
-## Keep project data private
+## Choose what to share
 
-Project memory lives under `.sbuf/` and is private by default. Add it to the project’s ignore
-rules before creating records:
+The quick start uses `--shared` to create a store that can travel with the repository. It writes
+an allowlist that keeps indexes, models, locks, temporary files, and other machine-local artifacts
+out of version control. Commit only `.sbuf/store.toml`, `.sbuf/.gitignore`, and the canonical
+Markdown files under `.sbuf/records/`.
+
+For personal project memory, omit `--shared` and add the whole store to the project’s ignore rules
+before creating records:
 
 ```sh
 printf '%s\n' '.sbuf/' >> .gitignore
@@ -82,15 +87,3 @@ printf '%s\n' '.sbuf/' >> .gitignore
 
 If a team shares records, review their source references and repository access policy first.
 Keep secrets, raw transcripts, and generic project documentation out of the memory store.
-
-To create a shared store:
-
-```sh
-stormbuffer --project init --shared
-```
-
-Commit only `.sbuf/store.toml`, `.sbuf/.gitignore`, and the canonical Markdown files under
-`.sbuf/records/`.
-
-The generated allowlist keeps indexes, models, locks, temporary files, and
-other machine-local artifacts out of version control.

@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use stormbuffer_core::{
@@ -11,15 +12,27 @@ struct TempStore {
     root: PathBuf,
 }
 
+static NEXT_TEMP_STORE: AtomicU64 = AtomicU64::new(0);
+
 impl TempStore {
     fn new() -> Self {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("stormbuffer-index-{suffix}"));
-        fs::create_dir_all(&root).expect("create temp store");
-        Self { root }
+        for attempt in 0..100 {
+            let counter = NEXT_TEMP_STORE.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir().join(format!(
+                "stormbuffer-index-{}-{suffix}-{counter}-{attempt}",
+                std::process::id(),
+            ));
+            match fs::create_dir(&root) {
+                Ok(()) => return Self { root },
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("create temporary store root: {error}"),
+            }
+        }
+        panic!("could not find a unique temporary store root")
     }
 
     fn paths(&self) -> StorePaths {
@@ -131,8 +144,12 @@ fn sync_removes_deleted_records_and_reindex_switches_projection() {
             .expect("search empty projection")
             .is_empty()
     );
-    reindex_store(&paths).expect("rebuild projection");
+    let report = reindex_store(&paths).expect("rebuild projection");
     assert!(index_path(&paths).is_file());
+    assert_eq!(
+        report.semantic.as_ref().map(|value| value.status.as_str()),
+        Some("unavailable")
+    );
 }
 
 #[test]

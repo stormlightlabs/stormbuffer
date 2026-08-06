@@ -78,7 +78,9 @@ claim as verification.
 Once the user has explicitly invoked this orchestration skill, use paired review
 when they ask for a review or when a completed delegated change warrants an
 independent review. Start or restart two Pi instances so each review begins with
-fresh context; the review instances remain read-only.
+fresh context; the review instances remain read-only. Run at most one paired
+review for the task. A review may produce fixes, but those fixes do not trigger
+another review cycle.
 
 Prompt both before waiting so they work concurrently:
 
@@ -109,8 +111,8 @@ Ground every finding in inspected code and label downstream effects that were
 not verified.
 
 For changes owned by the current task, the orchestrating agent—not either
-read-only reviewer—fixes confirmed findings and runs one fresh paired pass when
-the fix materially changes behavior.
+read-only reviewer—fixes confirmed findings and verifies them directly. Do not
+dispatch follow-up reviewers to review the review fixes.
 
 For external review, remain read-only. Never publish review feedback or mutate a
 pull request without the user's explicit request.

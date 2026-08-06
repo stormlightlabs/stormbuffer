@@ -181,7 +181,8 @@ BLAKE3 checksums, dimension, and maximum token count. Artifacts live under the p
 Range downloads when possible, and installs files only after checksum verification. It never
 executes a downloaded file. Corrupt or missing files fail before fastembed loads them.
 
-The checked-in retrieval corpus compares FTS-only, vector-only, and hybrid results:
+The checked-in retrieval corpus compares FTS-only, vector-only, and hybrid results using the
+pinned All-MiniLM-L6-v2 FastEmbed pipeline:
 
 ```sh
 stormbuffer evaluate
@@ -189,8 +190,14 @@ stormbuffer evaluate
 
 The JSON report includes recall at 5, mean reciprocal rank, wrong-scope retrieval,
 superseded-memory retrieval, duplicate/conflicting retrieval, and context tokens per useful
-memory. Release thresholds are in the report and the corpus revision is fixed; update expected
-IDs and the revision in `crates/core/tests/fixtures/evaluation/` together in a reviewed change.
+memory. Wrong-scope results are intentionally measured with an unscoped ranking probe instead
+of being hidden by the normal scope filter; the probe is diagnostic while the stable core policy
+still filters returned results. The duplicate/conflicting fixture contains more competing
+memories than the top-five window, so its coverage is not tautologically 100%. Release
+thresholds are in the report and the corpus revision is fixed; update expected IDs and the
+revision in `crates/core/tests/fixtures/evaluation/` together in a reviewed change. If the
+pinned artifacts are missing or offline, the command reports the model cache and the `stormbuffer init`
+repair command.
 
 ## Permanently delete a record
 

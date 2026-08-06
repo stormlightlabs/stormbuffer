@@ -96,10 +96,19 @@ fn documented_cli_examples_stay_executable() {
     );
 
     let root = temporary_directory();
+    let mut current_source = String::new();
+    let mut page_number = 0;
+    let mut page_root = root.clone();
     for (source, parts) in examples {
+        if source != current_source {
+            current_source.clone_from(&source);
+            page_number += 1;
+            page_root = root.join(format!("page-{page_number}"));
+            fs::create_dir_all(&page_root).expect("create documentation page test directory");
+        }
         let name = &parts[0];
         let arguments: Vec<_> = parts[1..].iter().map(String::as_str).collect();
-        let output = run(name, &root, &arguments);
+        let output = run(name, &page_root, &arguments);
         assert!(
             output.status.success(),
             "documented command from {source} failed: {name} {}\n{}",

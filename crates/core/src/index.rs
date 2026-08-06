@@ -588,6 +588,7 @@ pub fn rebuild_vector_index(
 ) -> crate::Result<VectorMetadata> {
     let _lock = acquire_store_mutation_lock(paths)?;
     let mut index = Index::open_at(&index_path(paths))?;
+    index.sync_canonical(paths)?;
     index.rebuild_vectors(paths, embedder)
 }
 

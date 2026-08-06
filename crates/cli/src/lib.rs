@@ -273,11 +273,11 @@ fn run_reindex(scope: StoreScope, output: &Output) -> i32 {
         Ok(report) => {
             output.line(&format!("Reindexed: {}", report.indexed));
             report_invalid_files(&report.invalid_files, output);
-            if let Some(error) = model_error {
+            if let Some(ref error) = model_error {
                 output.error(&format!("semantic index unavailable: {error}"));
             }
             if let Some(semantic) = report.semantic {
-                if semantic.status == "unavailable" {
+                if semantic.status == "unavailable" && model_error.is_none() {
                     output.error(&format!(
                         "semantic index unavailable: {}",
                         semantic

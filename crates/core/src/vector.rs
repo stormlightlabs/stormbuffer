@@ -277,6 +277,9 @@ impl VectorIndex for SqliteVectorIndex<'_> {
             return Ok(Vec::new());
         }
 
+        // sqlite-vec auxiliary columns cannot be constrained in a KNN WHERE clause,
+        // so adaptively over-fetch until the filtered result is complete or all rows
+        // have been examined.
         let mut candidate_count = requested.saturating_mul(4).max(requested).min(total);
         loop {
             let sql = format!(

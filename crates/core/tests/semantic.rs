@@ -1,25 +1,40 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use stormbuffer_core::{
-    Access, DeterministicEmbedder, Embedder, Embedding, Error, RetrievalMode, SearchOptions,
-    StoreInitMode, StorePaths, StoreScope, index_path, initialize_store, rebuild_vector_index,
+    Access, ContextOptions, DeterministicEmbedder, Embedder, Embedding, Error, RetrievalMode,
+    SearchOptions, StoreInitMode, StorePaths, StoreScope, context_stores_with_embedder, index_path,
+    initialize_store, rebuild_vector_index, reindex_store_with_embedder,
     search_stores_with_embedder, sync_store,
 };
 
 struct TempStore {
     root: PathBuf,
 }
+
+static NEXT_TEMP_STORE: AtomicU64 = AtomicU64::new(0);
+
 impl TempStore {
     fn new() -> Self {
         let stamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("stormbuffer-semantic-{stamp}"));
-        fs::create_dir_all(&root).expect("create temp store");
-        Self { root }
+        for attempt in 0..100 {
+            let counter = NEXT_TEMP_STORE.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir().join(format!(
+                "stormbuffer-semantic-{}-{stamp}-{counter}-{attempt}",
+                std::process::id(),
+            ));
+            match fs::create_dir(&root) {
+                Ok(()) => return Self { root },
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("create temporary store root: {error}"),
+            }
+        }
+        panic!("could not find a unique temporary store root")
     }
     fn paths(&self) -> StorePaths {
         StorePaths {
@@ -96,6 +111,7 @@ fn vector_backfill_records_metadata_and_applies_scope_kind_and_active_filters() 
     sync_store(&paths).expect("sync");
     let embedder = DeterministicEmbedder::new("semantic-v1", 24).expect("embedder");
     let first_metadata = rebuild_vector_index(&paths, &embedder).expect("vector backfill");
+    let first_table = first_metadata.table_name.clone();
     let second_metadata = rebuild_vector_index(&paths, &embedder).expect("reuse vector index");
     assert_eq!(first_metadata.index_id, second_metadata.index_id);
 
@@ -120,6 +136,22 @@ fn vector_backfill_records_metadata_and_applies_scope_kind_and_active_filters() 
             .iter()
             .any(|reason| reason.starts_with("vector:"))
     );
+    let mut context_search = options.clone();
+    context_search.allowed_scopes =
+        Some(vec!["project:alpha".to_owned(), "project:beta".to_owned()]);
+    context_search.allowed_kinds = None;
+    context_search.limit = 1;
+    let context = context_stores_with_embedder(
+        &[paths.clone()],
+        "deployment procedure",
+        ContextOptions {
+            budget: 100,
+            search: context_search,
+        },
+        &embedder,
+    )
+    .expect("limited semantic context");
+    assert_eq!(context.blocks.len(), 1);
     options.allowed_access = Some(vec![Access::Agent]);
     assert!(
         search_stores_with_embedder(&[paths.clone()], "deployment procedure", options, &embedder,)
@@ -136,14 +168,45 @@ fn vector_backfill_records_metadata_and_applies_scope_kind_and_active_filters() 
         )
         .expect("vector metadata");
     assert_eq!(metadata, ("semantic-v1".to_owned(), 24));
-    let vector_tables: i64 = connection
+    let vector_indexes: i64 = connection
+        .query_row("SELECT count(*) FROM vector_indexes", [], |row| row.get(0))
+        .expect("vector index count");
+    assert_eq!(vector_indexes, 1);
+
+    let replacement = DeterministicEmbedder::new("semantic-v2", 24).expect("replacement");
+    rebuild_vector_index(&paths, &replacement).expect("replace vector index");
+    let old_table_count: i64 = connection
         .query_row(
-            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name LIKE 'vectors_%'",
-            [],
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [&first_table],
             |row| row.get(0),
         )
-        .expect("vector table count");
-    assert_eq!(vector_tables, 1);
+        .expect("old vector table count");
+    assert_eq!(old_table_count, 0);
+    let vector_indexes: i64 = connection
+        .query_row("SELECT count(*) FROM vector_indexes", [], |row| row.get(0))
+        .expect("vector index count after replacement");
+    assert_eq!(vector_indexes, 1);
+}
+
+#[test]
+fn reindex_reports_and_rebuilds_semantic_state_when_model_is_supplied() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    write_record(
+        &paths,
+        "01989af2-4305-7b19-88b1-e8ae4ea9a206",
+        "global",
+        "fact",
+        "active",
+        "reindex semantic state",
+    );
+    let embedder = DeterministicEmbedder::new("semantic-v1", 24).expect("embedder");
+    let report = reindex_store_with_embedder(&paths, Some(&embedder)).expect("reindex");
+    let semantic = report.semantic.expect("semantic report");
+    assert_eq!(semantic.status, "rebuilt");
+    assert_eq!(semantic.model_version.as_deref(), Some("semantic-v1"));
 }
 
 #[test]
@@ -175,6 +238,96 @@ fn semantic_search_rejects_vectors_when_canonical_content_changes() {
     let error = search_stores_with_embedder(&[paths], "fresh canonical", options, &embedder)
         .expect_err("stale vectors must not escape");
     assert!(error.to_string().contains("semantic index is stale"));
+}
+
+#[test]
+fn rebuilding_vectors_synchronizes_changed_canonical_content() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    write_record(
+        &paths,
+        "01989af2-4305-7b19-88b1-e8ae4ea9a205",
+        "global",
+        "fact",
+        "active",
+        "original canonical content",
+    );
+    sync_store(&paths).expect("sync");
+    let embedder = DeterministicEmbedder::new("semantic-v1", 24).expect("embedder");
+    rebuild_vector_index(&paths, &embedder).expect("vector backfill");
+    let path = paths
+        .records
+        .join("01989af2-4305-7b19-88b1-e8ae4ea9a205.md");
+    let changed = fs::read_to_string(&path)
+        .expect("read record")
+        .replace("original canonical content", "changed canonical content");
+    fs::write(path, changed).expect("change canonical record");
+
+    rebuild_vector_index(&paths, &embedder).expect("rebuild changed canonical content");
+
+    let mut options = SearchOptions::for_store(&paths);
+    options.mode = RetrievalMode::Semantic;
+    let results =
+        search_stores_with_embedder(&[paths], "changed canonical content", options, &embedder)
+            .expect("search rebuilt vectors");
+    assert_eq!(results.len(), 1);
+}
+
+struct FilteredEmbedder;
+impl Embedder for FilteredEmbedder {
+    fn model_version(&self) -> &str {
+        "filtered-v1"
+    }
+
+    fn model_checksum(&self) -> &str {
+        "filtered-checksum"
+    }
+
+    fn dimension(&self) -> usize {
+        1
+    }
+
+    fn embed(&self, text: &str) -> stormbuffer_core::Result<Embedding> {
+        let value = if text.contains("rare-target") {
+            2.0
+        } else {
+            0.0
+        };
+        Embedding::new(vec![value])
+    }
+}
+
+#[test]
+fn filtered_vector_search_adapts_beyond_the_initial_candidate_window() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    for index in 0..=1000 {
+        let id = format!("01989af2-4305-7b19-88b1-e8ae4ea9{index:04x}");
+        write_record(&paths, &id, "global", "fact", "active", "common candidate");
+    }
+    let target_id = "01989af2-4305-7b19-88b1-e8ae4ea9ffff";
+    write_record(
+        &paths,
+        target_id,
+        "global",
+        "procedure",
+        "active",
+        "rare-target",
+    );
+    sync_store(&paths).expect("sync");
+    let embedder = FilteredEmbedder;
+    rebuild_vector_index(&paths, &embedder).expect("vector backfill");
+
+    let mut options = SearchOptions::for_store(&paths);
+    options.mode = RetrievalMode::Semantic;
+    options.limit = 1;
+    options.allowed_kinds = Some(vec!["procedure".to_owned()]);
+    let results = search_stores_with_embedder(&[paths], "common query", options, &embedder)
+        .expect("filtered semantic search");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].record_id, target_id);
 }
 
 struct FailingEmbedder;

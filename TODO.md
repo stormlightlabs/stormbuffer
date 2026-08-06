@@ -45,182 +45,52 @@ the shared Clap command tree.
 
 ### SB-101 — Implement the record model and TOML frontmatter codec
 
-**What to build:** Add typed IDs, enums, source records, timestamps, and a
-loss-conscious Markdown/TOML parser and renderer for the canonical schema.
-
-**Blocked by:** SB-001
-
-**Acceptance criteria:**
-
-- [x] Valid records round-trip without changing the body or losing metadata.
-- [x] Missing, unknown, malformed, and incompatible-version fields produce
-      actionable errors with file context.
-- [x] IDs, scopes, statuses, access values, and lifecycle transitions validate.
-- [x] Fixtures cover all four kinds, multiple sources, Unicode, code blocks,
-      and malformed records.
-- [x] The schema reference and examples match the implemented format.
-
-**Verification:** Run focused core codec and fixture tests.
+Added typed IDs, enums, source records, timestamps, and a loss-conscious
+Markdown/TOML parser and renderer for the canonical schema.
 
 ### SB-102 — Resolve global and project stores safely
 
-**What to build:** Use platform directories for global data/cache locations and
-discover `.sbuf/` project configuration with private defaults.
-
-**Blocked by:** SB-101
-
-**Acceptance criteria:**
-
-- [x] Resolution is deterministic and testable without using a real home
-      directory.
-- [x] Project discovery handles nested working directories and a missing store.
-- [x] New project stores default to local/private memory and explain shared-mode
-      implications before opt-in.
-- [x] `stormbuffer --project init --shared` is the explicit shared-store opt-in;
-      `--shared` is rejected for a global store.
-- [x] Shared mode tracks only store configuration, narrow ignore rules, and
-      canonical Markdown; SQLite, FTS/vector projections, embeddings, models,
-      locks, temporary files, and logs are ignored.
-- [x] `init`, `root`, and `status` use the core resolver instead of CLI-local
-      logic.
-
-**Verification:** Run resolver integration tests in temporary directory trees.
+Used platform directories for global data/cache locations and discover
+`.sbuf/` project configuration with private defaults.
 
 ### SB-103 — Add atomic repository operations and lifecycle commands
 
-**What to build:** Implement locked, atomic creation and updates plus add, edit,
-show, list, supersede, archive, restore, and guarded permanent deletion.
-
-**Blocked by:** SB-101, SB-102
-
-**Acceptance criteria:**
-
-- [x] Writes validate before commit and use a same-filesystem temporary file,
-      `fsync`, atomic rename, and a store mutation lock.
-- [x] `$EDITOR` flows preserve user Markdown and report concurrent changes.
-- [x] Supersession retains history and default listing excludes inactive data.
-- [x] `forget --destroy` requires deliberate confirmation or an explicit
-      non-interactive acknowledgement; no other command permanently deletes.
-- [x] Interrupted/competing write tests never produce a partially written
-      canonical record.
-- [x] User and command reference docs describe the implemented behavior.
-
-**Verification:** Run core repository tests and process-level lifecycle tests.
-
-**Milestone exit:** A person can manage the complete record lifecycle using only
-canonical Markdown and public CLI commands.
+Implemented locked, atomic creation and updates plus add, edit, show,
+list, supersede, archive, restore, and guarded permanent deletion.
 
 ## Milestone 2: Rebuildable lexical index
 
 ### SB-201 — Build the SQLite projection and migrations
 
-**What to build:** Add versioned migrations for scopes, records, chunks, sources,
-index metadata, and contentless-delete FTS5, with SQLite treated only as cache.
-
-**Blocked by:** SB-101, SB-102
-
-**Acceptance criteria:**
-
-- [x] A new database enables foreign keys and appropriate WAL behavior.
-- [x] Schema upgrades are transactional and tested from every supported version.
-- [x] No projected field is the sole copy of user information.
-- [x] Dropping and rebuilding the database preserves canonical data.
-
-**Verification:** Run migration and clean-rebuild integration tests.
+Added versioned migrations for scopes, records, chunks, sources, index metadata,
+and contentless-delete FTS5, with SQLite treated only as cache.
 
 ### SB-202 — Implement deterministic chunking and incremental sync
 
-**What to build:** Scan, validate, hash, chunk, and project changed records in
-per-file transactions while removing stale rows.
-
-**Blocked by:** SB-201
-
-**Acceptance criteria:**
-
-- [x] BLAKE3 hashes skip unchanged files.
-- [x] Heading-aware chunks do not split code blocks or lists and include the
-      record title/heading in retrieval input.
-- [x] A failed projection leaves canonical Markdown intact and recoverable.
-- [x] `sync` reconciles manual edits, moves, invalid files, and deleted files.
-- [x] Repeated sync with no changes performs no record reindex work.
-
-**Verification:** Run sync tests over checked-in filesystem fixtures.
+Scanned, validate, hash, chunk, and project changed records in per-file
+transactions while removing stale rows.
 
 ### SB-203 — Deliver FTS search and lexical context output
 
-**What to build:** Implement scoped FTS5 search with phrase, prefix, and exact
-title/alias behavior, then expose it through `search` and bounded `context`.
-
-**Blocked by:** SB-202
-
-**Acceptance criteria:**
-
-- [x] Results default to active accessible records in current-project then
-      allowed-global scope.
-- [x] Results include ID, title, kind, scope, excerpt, source, path, score, and
-      lexical match reason.
-- [x] Context output respects its budget and includes a machine-readable receipt.
-- [x] Exact filenames, commands, aliases, and Unicode text have regression tests.
-- [x] CLI and docs examples use only the implemented result shape.
-
-**Verification:** Run search/context integration tests and documented examples.
+Implemented scoped FTS5 search with phrase, prefix, and exact title/alias
+behavior, then expose it through `search` and bounded `context`.
 
 ### SB-204 — Add watch, reindex, and doctor recovery flows
 
-**What to build:** Implement convenience watching, explicit full rebuild, and
-diagnostics for canonical/index/model/config inconsistencies.
-
-**Blocked by:** SB-202, SB-203
-
-**Acceptance criteria:**
-
-- [x] Correctness never depends on the watcher running.
-- [x] `reindex` builds a fresh projection and switches safely.
-- [x] `doctor` distinguishes warnings from failures and suggests repair commands.
-- [x] Interrupting watch or reindex leaves the existing store usable.
-- [x] Recovery procedures are documented and tested.
-
-**Verification:** Run recovery tests with invalid files and interrupted rebuilds.
-
-**Milestone exit:** Exact search is useful, manual edits reconcile, and the entire
-index can be discarded and rebuilt safely.
+Implemented convenience watching, explicit full rebuild, and diagnostics
+for canonical/index/model/config inconsistencies.
 
 ## Milestone 3: Semantic and hybrid retrieval
 
 ### SB-301 — Add verified local embedding models
 
-**What to build:** Implement the `Embedder` boundary, model manifest and checksum
-verification, tokenizer/pooling/normalization behavior, and explicit model setup
-for local CPU inference.
-
-**Blocked by:** SB-202
-
-**Acceptance criteria:**
-
-- [x] Model acquisition is documented, resumable or safely retryable, and never
-      executes unverified content.
-- [x] Documents and queries use the intended tokenization, attention-mask mean
-      pooling, and L2 normalization.
-- [x] Offline behavior and a missing/corrupt model produce actionable errors.
-- [x] Deterministic fixtures verify dimensions and numerical tolerances.
-
-**Verification:** Run embedder contract tests with a pinned fixture model.
+Implement the `Embedder` boundary, model manifest and checksum verification,
+tokenizer/pooling/normalization behavior, and explicit model setup for local CPU inference.
 
 ### SB-302 — Add versioned vector indexes
 
-**What to build:** Implement the narrow `VectorIndex` boundary over pinned
-`sqlite-vec`, including filtered search and non-destructive model migrations.
-
-**Blocked by:** SB-201, SB-301
-
-**Acceptance criteria:**
-
-- [x] Embeddings are keyed to chunks and filter by scope, kind, and active state.
-- [x] Model/table/checksum/dimension metadata is recorded.
-- [x] Backfill and validation complete before the active vector table switches.
-- [x] A failed migration leaves the previous index available.
-
-**Verification:** Run vector contract, filter, backfill, and rollback tests.
+Implemented the narrow `VectorIndex` boundary over pinned `sqlite-vec`,
+including filtered search and non-destructive model migrations.
 
 ### SB-303 — Fuse lexical and semantic retrieval
 

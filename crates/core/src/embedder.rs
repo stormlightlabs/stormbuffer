@@ -119,13 +119,7 @@ pub fn model_cache_dir(paths: &StorePaths) -> PathBuf {
 }
 
 pub fn ensure_default_model(paths: &StorePaths) -> Result<()> {
-    let cache = model_cache_dir(paths);
-    default_model_manifest().acquire(&cache).map_err(|error| {
-        model_setup_error(
-            &cache,
-            format!("{error}; repair with `stormbuffer init` when online"),
-        )
-    })
+    default_model_manifest().acquire(&model_cache_dir(paths))
 }
 
 impl ModelManifest {
@@ -210,7 +204,8 @@ impl ModelManifest {
     /// Download missing artifacts into `.part` files and install each file only after
     /// its pinned BLAKE3 checksum matches. Interrupted downloads can be retried safely.
     pub fn acquire(&self, root: &Path) -> Result<()> {
-        self.validate()?;
+        self.validate()
+            .map_err(|error| model_setup_error(root, error.to_string()))?;
         with_model_cache_lock(root, true, || {
             fs::create_dir_all(root)
                 .map_err(|source| Error::io("create the model cache", source))?;
@@ -219,6 +214,7 @@ impl ModelManifest {
             }
             Ok(())
         })
+        .map_err(|error| model_setup_error(root, error.to_string()))
     }
 
     fn required_files(&self, root: &Path) -> Result<ModelFiles> {
@@ -616,5 +612,25 @@ mod tests {
         assert_ne!(original, changed.fingerprint());
         changed.max_tokens += 1;
         assert_ne!(original, changed.fingerprint());
+    }
+
+    #[test]
+    fn missing_model_errors_name_cache_and_repair_command() {
+        let root =
+            std::env::temp_dir().join(format!("stormbuffer-model-error-{}", std::process::id()));
+        let paths = StorePaths {
+            scope: crate::StoreScope::Global,
+            root: root.clone(),
+            records: root.join("records"),
+            cache: root.join("cache"),
+        };
+        let error = match LocalEmbedder::from_default_cache(&paths) {
+            Ok(_) => panic!("model is absent"),
+            Err(error) => error,
+        };
+        let message = error.to_string();
+        assert!(message.contains(&model_cache_dir(&paths).display().to_string()));
+        assert!(message.contains("stormbuffer init"));
+        let _ = fs::remove_dir_all(root);
     }
 }

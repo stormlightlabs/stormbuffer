@@ -7,6 +7,10 @@
     {"id":"01989af2-4305-7b19-88b1-e8ae4ea9a104","title":"Other project release","kind":"procedure","scope":"project:beta","status":"active","body":"The beta project uses a separate release train and checklist."},
     {"id":"01989af2-4305-7b19-88b1-e8ae4ea9a105","title":"Old release command","kind":"procedure","scope":"project:alpha","status":"superseded","body":"The old release procedure ran cargo build only."},
     {"id":"01989af2-4305-7b19-88b1-e8ae4ea9a106","title":"Retention conflict A","kind":"fact","scope":"global","status":"active","body":"Retention is thirty days for disposable projections."},
-    {"id":"01989af2-4305-7b19-88b1-e8ae4ea9a107","title":"Retention conflict B","kind":"fact","scope":"global","status":"active","body":"Retention is ninety days for disposable projections."}
+    {"id":"01989af2-4305-7b19-88b1-e8ae4ea9a107","title":"Retention conflict B","kind":"fact","scope":"global","status":"active","body":"Retention is ninety days for disposable projections."},
+    {"id":"01989af2-4305-7b19-88b1-e8ae4ea9a108","title":"Retention conflict C","kind":"fact","scope":"global","status":"active","body":"Retention is one hundred twenty days for disposable projections."},
+    {"id":"01989af2-4305-7b19-88b1-e8ae4ea9a109","title":"Retention conflict D","kind":"fact","scope":"global","status":"active","body":"Retention is seven days for disposable projections."},
+    {"id":"01989af2-4305-7b19-88b1-e8ae4ea9a10a","title":"Retention conflict E","kind":"fact","scope":"global","status":"active","body":"Retention is fourteen days for disposable projections."},
+    {"id":"01989af2-4305-7b19-88b1-e8ae4ea9a10b","title":"Retention conflict F","kind":"fact","scope":"global","status":"active","body":"Retention is sixty days for disposable projections."}
   ]
 }
