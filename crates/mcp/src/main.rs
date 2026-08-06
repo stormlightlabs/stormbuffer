@@ -16,7 +16,7 @@ fn main() -> ExitCode {
                 return ExitCode::SUCCESS;
             }
             Some("--version" | "-V") => {
-                println!("stormbuffer-mcp 0.1.0");
+                println!("stormbuffer-mcp {}", env!("CARGO_PKG_VERSION"));
                 return ExitCode::SUCCESS;
             }
             Some("--stdio") => stdio = true,

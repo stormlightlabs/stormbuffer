@@ -11,6 +11,13 @@ resolver = "2"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+authors = ["Stormlight Labs"]
+description = "A local-first memory store for facts, decisions, procedures, and checkpoints."
+homepage = "https://github.com/stormlightlabs/stormbuffer"
+repository = "https://github.com/stormlightlabs/stormbuffer"
+keywords = ["memory", "markdown", "cli"]
+categories = ["command-line-utilities"]
+readme = "README.md"
 
 [workspace.dependencies]
 blake3 = "1.8"

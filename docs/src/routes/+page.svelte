@@ -46,8 +46,8 @@ Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildab
 
 	<section class="landing-docs" aria-labelledby="docs-title">
 		<div class="section-heading">
-			<p class="eyebrow">Documentation</p>
-			<h2 id="docs-title">Install & set up the store.</h2>
+			<p class="eyebrow">RTFM</p>
+			<h2 id="docs-title">Documentation</h2>
 		</div>
 
 		<nav class="landing-index" aria-label="Documentation sections">

@@ -3,6 +3,13 @@ name = "stormbuffer"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+authors.workspace = true
+description.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
 build = "build.rs"
 default-run = "stormbuffer"
 autobins = false
@@ -24,7 +31,7 @@ anyhow.workspace = true
 clap.workspace = true
 owo-colors.workspace = true
 serde_json.workspace = true
-stormbuffer-core = { package = "stormbuffer-core", path = "../core" }
+stormbuffer-core = { package = "stormbuffer-core", version = "=0.1.0", path = "../core" }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 

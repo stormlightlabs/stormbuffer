@@ -1,8 +1,4 @@
-# Stormbuffer implementation tickets
-
-These tickets implement `ROADMAP.md`. They are listed in dependency order. Take
-one ticket per focused implementation session when practical, update the docs in
-the same change, and check the acceptance criteria before moving on.
+# To-Dos
 
 ## Milestone 0: Usable shell and living docs
 
@@ -94,215 +90,60 @@ including filtered search and non-destructive model migrations.
 
 ### SB-303 — Fuse lexical and semantic retrieval
 
-**What to build:** Retrieve lexical and vector candidates, combine them with
-reciprocal-rank fusion, collapse chunks, apply documented deterministic boosts,
-and compile bounded context.
-
-**Blocked by:** SB-203, SB-302
-
-**Acceptance criteria:**
-
-- [x] Search receipts explain lexical, vector, and deterministic match reasons.
-- [x] Superseded, archived, inaccessible, and wrong-scope records are excluded.
-- [x] No blanket recency boost applies to facts, decisions, or procedures.
-- [x] Context selection is deterministic for a fixed store/model and stays
-      within budget.
-
-**Verification:** Run hybrid retrieval and context-budget integration tests.
+Retrieved lexical and vector candidates, combine them with reciprocal-rank
+fusion, collapse chunks, apply documented deterministic boosts, and compile bounded context.
 
 ### SB-304 — Establish retrieval evaluations and release thresholds
 
-**What to build:** Check in a representative corpus and query set and compare
-FTS-only, vector-only, and hybrid behavior with reported metrics.
-
-**Blocked by:** SB-303
-
-**Acceptance criteria:**
-
-- [x] The harness reports every metric named in the roadmap.
-- [x] Queries include exact terms, paraphrases, scope collisions, superseded
-      records, duplicates, and conflicts.
-- [x] Initial release thresholds and an intentional update process are documented.
-- [x] Ranking changes cannot update expected results silently.
-
-**Verification:** Run the evaluation command and inspect the checked-in summary.
-
-**Milestone exit:** Hybrid search clears the agreed corpus thresholds and emits
-bounded, attributable context.
+Checked in a representative corpus and query set and compare FTS-only,
+vector-only, and hybrid behavior with reported metrics.
 
 ## Milestone 4: Grounded RAG and agent workflow
 
 ### SB-401 — Define the provider-neutral RAG context contract
 
-**What to build:** Make `context` return bounded, ordered evidence blocks and a
+Made `context` return bounded, ordered evidence blocks and a
 receipt that any host model can consume without giving Stormbuffer responsibility
 for generation or remote model access.
 
-**Blocked by:** SB-303
-
-**Acceptance criteria:**
-
-- [x] Every evidence block carries stable record/chunk IDs, title, scope, status,
-      access, source references, selected text, and ranking reasons.
-- [x] The receipt records the query, filters, index/model versions, budget,
-      truncation, and omitted-result count without leaking inaccessible records.
-- [x] Access, scope, and lifecycle policy runs before context assembly; fixed
-      inputs produce deterministic ordering and truncation.
-- [x] The contract distinguishes host instructions, user input, and untrusted
-      record text and states that record content cannot grant tools or authority.
-- [x] The core neither calls a generator nor transmits records to a remote model.
-- [x] Human, JSON, and MCP presentations derive from the same core result.
-
-**Verification:** Run core context-contract tests for budgets, filtering,
-determinism, hostile record text, and empty or insufficient retrieval.
-
 ### SB-402 — Evaluate grounded answers and citations
 
-**What to build:** Extend the retrieval corpus into a RAG question suite with
+Extended the retrieval corpus into a RAG question suite with
 inspectable supporting records, expected claims or abstention, and a repeatable
 adapter for evaluating a configured host model.
 
-**Blocked by:** SB-304, SB-401
-
-**Acceptance criteria:**
-
-- [x] Fixtures cover answerable, unanswerable, conflicting, wrong-scope,
-      superseded, long-context, and indirect prompt-injection cases.
-- [x] Reports separate retrieval, context-assembly, and generation failures and
-      include context precision/recall, claim support, citation precision/recall,
-      answer relevance, correct abstention, and scope leakage.
-- [x] Every factual expected claim names its supporting or contradicting record
-      IDs; generated citations are checked against those records.
-- [x] Evaluation records the generator, model/version, prompt-contract version,
-      parameters, and corpus revision needed to reproduce a run.
-- [x] Model-assisted judgments remain reviewable and cannot silently replace
-      checked-in expectations or release thresholds.
-
-**Verification:** Run deterministic corpus checks, then one documented configured
-generator evaluation and inspect its claim-level report.
-
 ### SB-403 — Implement candidate review and provenance policy
 
-**What to build:** Add propose, approve, and reject flows with source validation,
+Added propose, approve, and reject flows with source validation,
 duplicate/conflict checks, explicit supersession, and narrowly scoped direct
 activation permissions.
 
-**Blocked by:** SB-103, SB-303
-
-**Acceptance criteria:**
-
-- [x] Agents create candidates by default; human writes can become active.
-- [x] Proposal outcomes use the stable vocabulary in the roadmap.
-- [x] Unsupported inference and missing provenance are rejected clearly.
-- [x] Conflicts retain both claims and require explicit supersession/approval.
-- [x] Policy behavior has adversarial tests and user-facing documentation.
-
-**Verification:** Run proposal/lifecycle integration tests over duplicate,
-conflict, invalid, and approval cases.
-
 ### SB-404 — Publish the versioned JSON invocation protocol
 
-**What to build:** Expose search, context, get, propose, supersede, and archive
+Exposed search, context, get, propose, supersede, and archive
 through `invoke` with stable envelopes and errors.
-
-**Blocked by:** SB-401, SB-403
-
-**Acceptance criteria:**
-
-- [x] stdin/stdout contain only protocol JSON and logs use stderr.
-- [x] Operations are non-interactive, output-bounded, scope-aware, and reject
-      arbitrary filesystem paths.
-- [x] Protocol versioning and stable error codes are documented.
-- [x] Golden/contract tests cover success, malformed input, denial, and internal
-      failure without leaking sensitive paths or backtraces.
-
-**Verification:** Run protocol contract tests and pipe every documented example
-through a JSON parser.
 
 ### SB-405 — Complete portable import, export, and garbage collection
 
-**What to build:** Add lossless export/import with collision handling and safe
-cleanup of disposable cache/model artifacts.
-
-**Blocked by:** SB-103, SB-204
-
-**Acceptance criteria:**
-
-- [x] Export/import round-trips canonical records and provenance.
-- [x] ID, scope, and existing-record collisions require an explicit policy.
-- [x] `gc` never removes canonical records and reports reclaimed disposable data.
-- [x] Backup, move, and recovery workflows are documented.
-
-**Verification:** Run round-trip, collision, and dry-run cleanup tests.
+Added lossless export/import with collision handling and safe cleanup of
+disposable cache/model artifacts.
 
 ### SB-406 — Dogfood Stormbuffer with a shared project store
 
-**What to build:** Initialize this repository as the reference shared-store
+Initialized this repository as the reference shared-store
 example and curate a small memory set that helps agents work on Stormbuffer.
-
-**Blocked by:** SB-103, SB-402, SB-405
-
-**Acceptance criteria:**
-
-- [x] The repository commits `.sbuf/store.toml`, `.sbuf/.gitignore`, and canonical
-      Markdown under `.sbuf/records/`.
-- [x] `.sbuf/` ignores SQLite databases and sidecars, FTS/vector projections,
-      embeddings, downloaded models, locks, temporary files, logs, and other
-      rebuildable runtime artifacts.
-- [x] Records capture sourced project facts, decisions, procedures, and useful
-      checkpoints without copying whole sections of `ROADMAP.md`, `TODO.md`, or
-      `AGENTS.md`.
-- [x] A clean clone can rebuild all projections from the committed files and run
-      documented retrieval and grounded-answer examples against the project.
-- [x] Tests fail if a generated or machine-local artifact under `.sbuf/` becomes
-      trackable or if an example cites a missing record.
-- [x] Contributor docs explain the privacy and merge implications of shared
-      project memory and how to opt out locally without deleting canonical files.
-
-**Verification:** Clone or copy only tracked files into a temporary root, rebuild
-the store, run the checked-in example questions, and audit `.sbuf/` ignore rules.
-
-**Milestone exit:** An unattended agent can retrieve bounded evidence, produce
-cited or correctly abstaining answers, and propose through a stable JSON boundary
-without gaining uncontrolled write or deletion access. This repository provides
-a reproducible shared-store example containing Markdown but no derived index.
 
 ## Milestone 5: MCP and releases
 
 ### SB-501 — Implement the thin MCP adapter
 
-**What to build:** Map the approved resources and tools to core operations over
+Mapped the approved resources and tools to core operations over
 stdio without duplicating storage, ranking, or policy.
-
-**Blocked by:** SB-404
-
-**Acceptance criteria:**
-
-- [x] Resource URIs and tool schemas match the roadmap and docs.
-- [x] CLI JSON and MCP return equivalent core results for shared operations.
-- [x] Write tools are disabled by default or gated by an explicit host grant.
-- [x] Raw SQL, arbitrary files, reindex, and destructive deletion are absent.
-- [x] Protocol tests cover cancellation, malformed requests, and clean shutdown.
-
-**Verification:** Run MCP contract tests against a temporary store.
 
 ### SB-502 — Add the behavioral agent skill
 
-**What to build:** Document when agents should search, compile context, propose
+Documented when agents should search, compile context, propose
 durable memory, report conflicts, and avoid storing unsuitable material.
-
-**Blocked by:** SB-404, SB-501
-
-**Acceptance criteria:**
-
-- [x] The skill delegates all parsing, ranking, and mutation to public interfaces.
-- [x] Examples cite returned record IDs/receipts and prefer project scope.
-- [x] The skill forbids secrets, speculation, generic knowledge, raw transcripts,
-      and duplicate authoritative documentation.
-- [x] Example sessions pass against the current CLI/MCP contracts.
-
-**Verification:** Run skill examples as smoke tests and review the guidance for
-least privilege.
 
 ### SB-503 — Harden packaging and releases
 
@@ -314,11 +155,11 @@ test.
 
 **Acceptance criteria:**
 
-- [ ] Supported platform artifacts prove all three CLI names work.
-- [ ] Package uninstall does not delete canonical user data.
-- [ ] Release checks cover generated artifacts, licenses, checksums, and docs.
-- [ ] A clean offline/online install matrix documents model behavior.
-- [ ] Upgrade and rollback paths preserve canonical records.
+- [x] Supported platform artifacts prove all three CLI names work.
+- [x] Package uninstall does not delete canonical user data.
+- [x] Release checks cover generated artifacts, licenses, checksums, and docs.
+- [x] A clean offline/online install matrix documents model behavior.
+- [x] Upgrade and rollback paths preserve canonical records.
 
 **Verification:** Run the release smoke test in clean supported environments.
 
@@ -413,5 +254,4 @@ service managers without adding a custom daemon supervisor.
 service-manager integration check on a supported platform.
 
 **Milestone exit:** A person can safely run Stormbuffer as a local service, edit
-memory without the CLI, and inspect explicit relationships in an accessible
-graph.
+memory without the CLI, and inspect explicit relationships in an accessible graph.
