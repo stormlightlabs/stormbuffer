@@ -70,19 +70,19 @@ pub enum CliCommand {
     Watch(WatchArgs),
     /// Rebuild the disposable index.
     Reindex,
-    /// Remove disposable cache data (not implemented).
-    Gc,
+    /// Remove disposable cache, projection, lock, and temporary data.
+    Gc(GcArgs),
     /// Diagnose canonical data and projections.
     Doctor,
-    /// Export canonical records (not implemented).
+    /// Export canonical records and provenance as a portable JSON archive.
     Export(PathArgs),
-    /// Import canonical records (not implemented).
-    Import(PathArgs),
+    /// Import a portable canonical-record archive.
+    Import(ImportArgs),
     /// Invoke a versioned, noninteractive JSON operation.
     Invoke(InvokeArgs),
     /// Run the checked-in retrieval evaluation corpus.
     Evaluate,
-    /// Run the MCP adapter over stdio (not implemented).
+    /// Run the MCP adapter over stdio.
     Mcp(McpArgs),
 }
 
@@ -214,8 +214,30 @@ pub struct ForgetArgs {
 
 #[derive(Args, Debug)]
 pub struct PathArgs {
-    /// Import or export path.
+    /// Export path. Omit it or use `-` for stdout.
     pub path: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ImportArgs {
+    /// Import path, or `-` to read stdin.
+    pub path: String,
+    /// Policy for records with an existing ID: fail, skip, overwrite, or remap.
+    #[arg(long, visible_alias = "id-policy")]
+    pub on_id: Option<String>,
+    /// Policy for records outside the selected scope: fail, skip, or remap.
+    #[arg(long, visible_alias = "scope-policy")]
+    pub on_scope: Option<String>,
+    /// Policy for an existing equivalent record: fail, skip, or overwrite.
+    #[arg(long, visible_alias = "existing-policy")]
+    pub on_existing: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct GcArgs {
+    /// Report disposable data without removing it.
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 #[derive(Args, Debug)]
@@ -229,6 +251,10 @@ pub struct McpArgs {
     /// Select the stdio transport.
     #[arg(long)]
     pub stdio: bool,
+
+    /// Explicitly enable MCP write tools.
+    #[arg(long)]
+    pub allow_writes: bool,
 }
 
 pub fn command_name(invoked_name: &str) -> clap::Command {

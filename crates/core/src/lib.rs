@@ -6,14 +6,21 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+mod backup;
 mod codec;
 mod embedder;
 mod evaluation;
 mod index;
+mod invoke;
 mod record;
 mod repository;
 mod vector;
 
+pub use backup::{
+    BackupError, ExistingRecordPolicy, ExportBundle, ExportedRecord, GcEntry, GcOptions, GcReport,
+    IdCollisionPolicy, ImportOptions, ImportReport, MAX_EXPORT_ARCHIVE_BYTES, ScopeCollisionPolicy,
+    decode_export, encode_export, export_store, gc_store, import_store, write_export_archive,
+};
 pub use codec::{parse_markdown, render_markdown};
 pub use embedder::{
     DEFAULT_MODEL_VERSION, DeterministicEmbedder, Embedder, Embedding, LocalEmbedder,
@@ -34,6 +41,11 @@ pub use index::{
     rebuild_vector_index, reindex_store, reindex_store_with_embedder, search_store, search_stores,
     search_stores_with_embedder, sync_store, watch_store,
 };
+pub use invoke::{
+    INVOKE_VERSION, InvokeFailure, MAX_INVOKE_BUDGET, MAX_INVOKE_INPUT, MAX_INVOKE_LIMIT,
+    MAX_INVOKE_OUTPUT, MAX_INVOKE_OUTPUT_BODY, MAX_INVOKE_QUERY, invoke_envelope, invoke_operation,
+    invoke_record, invoke_request, invoke_scope_records, invoke_search_result,
+};
 pub use record::{
     Access, ProposalActor, ProposalOutcome, RECORD_FORMAT_VERSION, Record, RecordId, RecordKind,
     RecordStatus, Scope, Source, SourceKind, Timestamp,
@@ -43,7 +55,6 @@ pub use vector::{SqliteVectorIndex, VectorFilter, VectorHit, VectorIndex, Vector
 
 const STORE_FORMAT_VERSION: u32 = 1;
 const PRIVATE_PROJECT_GITIGNORE: &[u8] = b"*\n!.gitignore\n";
-/// TODO: embed this with include_str! using gitignore.txt
 const SHARED_PROJECT_GITIGNORE: &str = "# Track only configuration, ignore rules, and canonical Markdown records.\n*\n!.gitignore\n!store.toml\n!records/\n!records/**/\n!records/**/*.md\n";
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -147,6 +158,11 @@ pub enum Error {
         operation: &'static str,
         message: String,
     },
+    #[error("backup operation failed: {source}")]
+    Backup {
+        #[source]
+        source: BackupError,
+    },
 }
 
 impl Error {
@@ -193,6 +209,10 @@ impl Error {
             operation,
             message: message.into(),
         }
+    }
+
+    pub(crate) fn backup(source: BackupError) -> Self {
+        Self::Backup { source }
     }
 }
 
@@ -532,19 +552,20 @@ fn ensure_project_gitignore(path: &Path, visibility: StoreVisibility) -> Result<
         if visibility == StoreVisibility::Shared {
             let current =
                 fs::read(path).map_err(|source| Error::io("read project ignore rules", source))?;
-            for required in SHARED_PROJECT_GITIGNORE
+            let current = String::from_utf8_lossy(&current);
+            let actual_rules = current
                 .lines()
-                .filter(|line| !line.is_empty())
-            {
-                if !String::from_utf8_lossy(&current)
-                    .lines()
-                    .any(|line| line == required)
-                {
-                    return Err(Error::invalid_store_at(
-                        path,
-                        StoreConfigError::IncompleteIgnoreRules,
-                    ));
-                }
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with('#'));
+            let expected_rules = SHARED_PROJECT_GITIGNORE
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with('#'));
+            if !actual_rules.eq(expected_rules) {
+                return Err(Error::invalid_store_at(
+                    path,
+                    StoreConfigError::IncompleteIgnoreRules,
+                ));
             }
         }
         return Ok(());
@@ -686,6 +707,21 @@ mod tests {
                 .visibility,
             Some(StoreVisibility::Shared)
         );
+
+        fs::write(
+            shared_paths.root.join(".gitignore"),
+            format!("{SHARED_PROJECT_GITIGNORE}\n!index.sqlite3\n"),
+        )
+        .expect("make generated artifact trackable");
+        let error = initialize_store(&shared_paths, StoreInitMode::Default)
+            .expect_err("unsafe shared ignore rules must fail");
+        assert!(matches!(
+            error,
+            Error::InvalidStoreConfiguration {
+                source: StoreConfigError::IncompleteIgnoreRules,
+                ..
+            }
+        ));
 
         let global_paths =
             resolve_store_with_dirs(StoreScope::Global, &root, &dirs).expect("resolve");

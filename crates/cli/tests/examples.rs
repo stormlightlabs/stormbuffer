@@ -57,6 +57,38 @@ fn markdown_files(directory: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 
+fn shell_parts(line: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut quote = None;
+    let mut escaped = false;
+
+    for character in line.chars() {
+        if escaped {
+            current.push(character);
+            escaped = false;
+            continue;
+        }
+        match (quote, character) {
+            (Some(active), value) if value == active => quote = None,
+            (Some('"'), '\\') | (None, '\\') => escaped = true,
+            (Some(_), value) => current.push(value),
+            (None, '"' | '\'') => quote = Some(character),
+            (None, value) if value.is_whitespace() => {
+                if !current.is_empty() {
+                    parts.push(std::mem::take(&mut current));
+                }
+            }
+            (None, value) => current.push(value),
+        }
+    }
+    assert!(quote.is_none() && !escaped, "invalid shell example: {line}");
+    if !current.is_empty() {
+        parts.push(current);
+    }
+    parts
+}
+
 fn documented_cli_examples() -> Vec<(String, Vec<String>)> {
     let docs_directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/src/content/docs");
     let mut files = Vec::new();
@@ -72,7 +104,17 @@ fn documented_cli_examples() -> Vec<(String, Vec<String>)> {
                 "```sh" => in_shell_block = true,
                 "```" if in_shell_block => in_shell_block = false,
                 _ if in_shell_block => {
-                    let parts: Vec<_> = line.split_whitespace().map(String::from).collect();
+                    if !matches!(
+                        line.split_whitespace().next(),
+                        Some("stormbuffer" | "stormbuf" | "sbuf")
+                    ) {
+                        continue;
+                    }
+                    let parts = shell_parts(line);
+                    // Evaluation requires the separately downloaded, checksum-verified model.
+                    if parts.get(1).map(String::as_str) == Some("evaluate") {
+                        continue;
+                    }
                     if matches!(
                         parts.first().map(String::as_str),
                         Some("stormbuffer" | "stormbuf" | "sbuf")

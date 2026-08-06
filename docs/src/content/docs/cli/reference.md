@@ -76,6 +76,15 @@ Add `--shared` only to `--project init` to opt into tracked project memory.
 
 The command-line help also accepts `--color auto|always|never` for human-facing output.
 
+## Back up and clean a store
+
+`export` writes canonical records and provenance to a portable JSON archive. `import` restores an
+archive and requires an explicit policy whenever IDs, scope, or equivalent records collide. `gc`
+removes only disposable indexes, caches, locks, logs, and temporary files; add `--dry-run` to
+inspect its candidates first.
+
+See [Backup and recovery](/docs/workflows/backup-recovery/) for examples and collision choices.
+
 ## Manage records
 
 After initializing a store, `add` opens a temporary Markdown copy in `$VISUAL`, then `$EDITOR`.

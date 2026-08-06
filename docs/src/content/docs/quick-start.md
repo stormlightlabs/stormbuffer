@@ -1,7 +1,7 @@
 ---
 title: Quick start
 description: >
-  Initialize a private store, inspect its location, and keep project memory out of source control.
+  Initialize a private or shared store, inspect it, and retrieve bounded project memory.
 section: Get started
 group: Get started
 order: 2
@@ -67,9 +67,10 @@ machine-readable selection:
 stormbuffer --project context release --budget 400
 ```
 
-Semantic retrieval is local. `init` acquires the pinned fastembed model into the platform
-cache, and project searches reuse that cache. If acquisition fails, the store remains valid and
-the command reports how to repair the model.
+Semantic retrieval is local. Global `stormbuffer init` acquires the pinned fastembed model into
+the platform cache, and project searches reuse that cache. Project initialization creates only the
+project store. If model acquisition fails, the store remains valid and the command reports how to
+repair it.
 
 ## Choose what to share
 
@@ -78,12 +79,26 @@ an allowlist that keeps indexes, models, locks, temporary files, and other machi
 out of version control. Commit only `.sbuf/store.toml`, `.sbuf/.gitignore`, and the canonical
 Markdown files under `.sbuf/records/`.
 
-For personal project memory, omit `--shared` and add the whole store to the project’s ignore rules
-before creating records:
-
-```sh
-printf '%s\n' '.sbuf/' >> .gitignore
-```
+For personal project memory, omit `--shared` and arrange for `.sbuf/` to be ignored before
+initialization. Do not use that approach to opt out of an existing shared store: its canonical
+files are already tracked. Keep personal memory in the global store or a separate private checkout.
 
 If a team shares records, review their source references and repository access policy first.
 Keep secrets, raw transcripts, and generic project documentation out of the memory store.
+
+## Try this repository's shared example
+
+Stormbuffer itself includes a shared project store with canonical Markdown and no required
+generated index. From a clean checkout, rebuild the disposable projection and retrieve a known
+decision:
+
+```sh
+stormbuffer --project sync
+stormbuffer --project search "canonical records projection failures"
+stormbuffer --project context "What survives an index failure?" --budget 256
+```
+
+The search and context output should cite record
+`019fd5d7-6e0c-7d93-b9fe-54b02f7f11e9`. Its source-backed answer is that canonical Markdown
+survives projection failure and `sync` repairs the disposable index. If that record is absent,
+the checkout does not contain the complete shared-store example.

@@ -9,15 +9,15 @@ use anyhow::{Context, Result as AnyhowResult, bail};
 
 use clap::FromArgMatches;
 use owo_colors::OwoColorize;
-use serde_json::{Map, Value, json};
+use serde_json::Value;
 use stormbuffer_core::{self as core, ProposalActor, StoreInitMode, StoreScope};
 
 mod command;
 
 pub use command::{
-    AddArgs, Cli, CliCommand, ColorMode, ContextArgs, EditArgs, ForgetArgs, IdArgs, InitArgs,
-    InvokeArgs, ListArgs, McpArgs, PathArgs, SearchArgs, StatusArgs, SupersedeArgs, WatchArgs,
-    WriteStubArgs, command_name,
+    AddArgs, Cli, CliCommand, ColorMode, ContextArgs, EditArgs, ForgetArgs, GcArgs, IdArgs,
+    ImportArgs, InitArgs, InvokeArgs, ListArgs, McpArgs, PathArgs, SearchArgs, StatusArgs,
+    SupersedeArgs, WatchArgs, WriteStubArgs, command_name,
 };
 
 pub const FAILURE: i32 = 1;
@@ -84,14 +84,7 @@ fn run_command(cli: Cli, output: Output) -> i32 {
         CliCommand::Restore(arguments) => run_restore(scope, arguments, &output),
         CliCommand::Forget(arguments) => run_forget(scope, arguments, &output),
         CliCommand::Evaluate => run_evaluate(&output),
-        CliCommand::Mcp(arguments) => {
-            if !arguments.stdio {
-                output.error("mcp currently requires --stdio; the adapter is not implemented yet");
-                FAILURE
-            } else {
-                stub("mcp", &output)
-            }
-        }
+        CliCommand::Mcp(arguments) => run_mcp(scope, arguments, &output),
         CliCommand::Invoke(arguments) => run_invoke(scope, arguments, &output),
         CliCommand::Search(arguments) => run_search(scope, arguments, &output),
         CliCommand::Context(arguments) => run_context(scope, arguments, &output),
@@ -102,897 +95,100 @@ fn run_command(cli: Cli, output: Output) -> i32 {
         CliCommand::Propose(arguments) => run_propose(scope, arguments, &output),
         CliCommand::Approve(arguments) => run_approve(scope, arguments, &output),
         CliCommand::Reject(arguments) => run_reject(scope, arguments, &output),
-        CliCommand::Gc | CliCommand::Export(_) | CliCommand::Import(_) => {
-            stub(command_as_str(&cli.command), &output)
-        }
+        CliCommand::Gc(arguments) => run_gc(scope, arguments, &output),
+        CliCommand::Export(arguments) => run_export(scope, arguments, &output),
+        CliCommand::Import(arguments) => run_import(scope, arguments, &output),
     }
 }
 
-const INVOKE_VERSION: u64 = 1;
-const MAX_INVOKE_INPUT: usize = 256 * 1024;
-const MAX_INVOKE_OUTPUT: usize = 256 * 1024;
-const MAX_INVOKE_QUERY: usize = 2048;
-const MAX_INVOKE_OUTPUT_BODY: usize = 64 * 1024;
-const MAX_INVOKE_LIMIT: usize = 100;
-const MAX_INVOKE_BUDGET: usize = 4096;
-
-struct InvokeFailure {
-    code: &'static str,
-    message: String,
-}
-
-impl InvokeFailure {
-    fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
+fn run_mcp(scope: StoreScope, arguments: McpArgs, output: &Output) -> i32 {
+    if !arguments.stdio {
+        output.error("mcp requires --stdio");
+        return FAILURE;
+    }
+    let executable = std::env::var_os("STORMBUFFER_MCP_BIN")
+        .unwrap_or_else(|| OsString::from("stormbuffer-mcp"));
+    let mut command = Command::new(executable);
+    command.arg("--stdio");
+    if scope == StoreScope::Project {
+        command.arg("--project");
+    }
+    if arguments.allow_writes {
+        command.arg("--allow-writes");
+    }
+    match command
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+    {
+        Ok(status) => status.code().unwrap_or(FAILURE),
+        Err(error) => {
+            output.error(&format!("could not start stormbuffer-mcp: {error}"));
+            FAILURE
         }
     }
 }
 
 fn run_invoke(scope: StoreScope, arguments: InvokeArgs, output: &Output) -> i32 {
-    let mut input = Vec::new();
-    let read_result = io::stdin()
-        .take((MAX_INVOKE_INPUT + 1) as u64)
-        .read_to_end(&mut input);
-    let result = match read_result {
-        Ok(_) if input.len() <= MAX_INVOKE_INPUT => {
-            invoke_operation(scope, &arguments.operation, &input)
+    let paths = match resolve(scope) {
+        Ok(paths) => paths,
+        Err(_) => {
+            output.line(
+                &serde_json::to_string(&core::invoke_envelope(
+                    &arguments.operation,
+                    Err(core::InvokeFailure::new(
+                        "internal_error",
+                        "could not resolve the selected store",
+                    )),
+                ))
+                .unwrap_or_else(|_| {
+                    "{\"version\":1,\"operation\":\"invoke\",\"ok\":false}".to_owned()
+                }),
+            );
+            return FAILURE;
         }
-        Ok(_) => Err(InvokeFailure::new(
+    };
+    let mut input = Vec::new();
+    let result = match io::stdin()
+        .take((core::MAX_INVOKE_INPUT + 1) as u64)
+        .read_to_end(&mut input)
+    {
+        Ok(_) if input.len() <= core::MAX_INVOKE_INPUT => {
+            core::invoke_request(&paths, &arguments.operation, &input)
+        }
+        Ok(_) => Err(core::InvokeFailure::new(
             "input_too_large",
             "request exceeds the bounded input limit",
         )),
-        Err(_) => Err(InvokeFailure::new(
+        Err(_) => Err(core::InvokeFailure::new(
             "invalid_request",
             "could not read the JSON request",
         )),
     };
-    let mut response = match result {
-        Ok(value) => json!({
-            "version": INVOKE_VERSION,
-            "operation": arguments.operation,
-            "ok": true,
-            "result": value,
-        }),
-        Err(error) => json!({
-            "version": INVOKE_VERSION,
-            "operation": arguments.operation,
-            "ok": false,
-            "error": {
-                "code": error.code,
-                "message": error.message,
-            },
-        }),
-    };
+    let response = core::invoke_envelope(&arguments.operation, result);
     let mut encoded = serde_json::to_string(&response).unwrap_or_else(|_| {
         r#"{"version":1,"operation":"invoke","ok":false,"error":{"code":"internal_error","message":"could not encode protocol response"}}"#.to_owned()
     });
-    if encoded.len().saturating_add(1) > MAX_INVOKE_OUTPUT {
-        response = json!({
-            "version": INVOKE_VERSION,
-            "operation": arguments.operation,
-            "ok": false,
-            "error": {
-                "code": "output_too_large",
-                "message": "response exceeds the bounded protocol output",
-            },
-        });
-        encoded = serde_json::to_string(&response).unwrap_or_else(|_| {
-            r#"{"version":1,"operation":"invoke","ok":false,"error":{"code":"internal_error","message":"could not encode protocol response"}}"#.to_owned()
-        });
-    }
+    let response = if encoded.len().saturating_add(1) > core::MAX_INVOKE_OUTPUT {
+        let bounded = core::invoke_envelope(
+            &arguments.operation,
+            Err(core::InvokeFailure::new(
+                "output_too_large",
+                "response exceeds the bounded protocol output",
+            )),
+        );
+        encoded = serde_json::to_string(&bounded)
+            .unwrap_or_else(|_| r#"{"version":1,"operation":"invoke","ok":false}"#.to_owned());
+        bounded
+    } else {
+        response
+    };
     output.line(&encoded);
     if response.get("ok") == Some(&Value::Bool(true)) {
         0
     } else {
         FAILURE
-    }
-}
-
-fn invoke_operation(
-    scope: StoreScope,
-    operation: &str,
-    input: &[u8],
-) -> Result<Value, InvokeFailure> {
-    let value: Value = serde_json::from_slice(input)
-        .map_err(|_| InvokeFailure::new("invalid_json", "stdin must contain one JSON object"))?;
-    let map = request_map(&value, operation)?;
-    let paths = resolve(scope).map_err(|_| {
-        InvokeFailure::new("internal_error", "could not resolve the selected store")
-    })?;
-    match operation {
-        "search" => invoke_search(&paths, map),
-        "context" => invoke_context(&paths, map),
-        "get" => invoke_get(&paths, map),
-        "propose" => invoke_propose(&paths, map),
-        "supersede" => invoke_supersede(&paths, map),
-        "archive" => invoke_archive(&paths, map),
-        _ => Err(InvokeFailure::new(
-            "unknown_operation",
-            "operation is not supported by protocol version 1",
-        )),
-    }
-}
-
-fn request_map<'a>(
-    value: &'a Value,
-    operation: &str,
-) -> Result<&'a Map<String, Value>, InvokeFailure> {
-    let map = value
-        .as_object()
-        .ok_or_else(|| InvokeFailure::new("invalid_request", "request must be a JSON object"))?;
-    if let Some(version) = map.get("version").and_then(Value::as_u64) {
-        if version != INVOKE_VERSION {
-            return Err(InvokeFailure::new(
-                "unsupported_version",
-                "request version is not supported",
-            ));
-        }
-    } else {
-        return Err(InvokeFailure::new(
-            "invalid_request",
-            "request must include integer version 1",
-        ));
-    }
-    if let Some(request_operation) = map.get("operation") {
-        if request_operation.as_str() != Some(operation) {
-            return Err(InvokeFailure::new(
-                "invalid_request",
-                "request operation does not match the command operation",
-            ));
-        }
-    }
-    if !matches!(
-        operation,
-        "search" | "context" | "get" | "propose" | "supersede" | "archive"
-    ) {
-        return Err(InvokeFailure::new(
-            "unknown_operation",
-            "operation is not supported by protocol version 1",
-        ));
-    }
-    Ok(map)
-}
-
-fn ensure_keys(map: &Map<String, Value>, allowed: &[&str]) -> Result<(), InvokeFailure> {
-    for key in map.keys() {
-        if key == "version" || key == "operation" || allowed.contains(&key.as_str()) {
-            continue;
-        }
-        if key == "path"
-            || key.ends_with("_path")
-            || key.contains("file")
-            || key == "root"
-            || key == "store"
-        {
-            return Err(InvokeFailure::new(
-                "path_denied",
-                "filesystem paths are not accepted by the invocation protocol",
-            ));
-        }
-        return Err(InvokeFailure::new(
-            "invalid_request",
-            "request contains an unknown field",
-        ));
-    }
-    Ok(())
-}
-
-fn required_string<'a>(map: &'a Map<String, Value>, key: &str) -> Result<&'a str, InvokeFailure> {
-    map.get(key)
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty() && value.len() <= MAX_INVOKE_OUTPUT_BODY)
-        .ok_or_else(|| {
-            InvokeFailure::new(
-                "invalid_request",
-                format!("field `{key}` must be a bounded string"),
-            )
-        })
-}
-
-fn bounded_number(
-    map: &Map<String, Value>,
-    key: &str,
-    default: usize,
-    maximum: usize,
-) -> Result<usize, InvokeFailure> {
-    let Some(value) = map.get(key) else {
-        return Ok(default);
-    };
-    let number = value.as_u64().ok_or_else(|| {
-        InvokeFailure::new(
-            "invalid_request",
-            format!("field `{key}` must be an integer"),
-        )
-    })?;
-    Ok((number as usize).clamp(1, maximum))
-}
-
-fn invocation_access(
-    map: &Map<String, Value>,
-) -> Result<(Vec<core::Access>, core::Access), InvokeFailure> {
-    let caller = map
-        .get("access")
-        .and_then(Value::as_str)
-        .unwrap_or("agent")
-        .parse::<core::Access>()
-        .map_err(|_| InvokeFailure::new("invalid_request", "access must be `agent` or `human`"))?;
-    if caller == core::Access::Human {
-        return Err(InvokeFailure::new(
-            "permission_denied",
-            "the invoke protocol is limited to agent-readable records",
-        ));
-    }
-    Ok((vec![core::Access::Agent], core::Access::Agent))
-}
-
-fn invocation_scope(
-    paths: &core::StorePaths,
-    map: &Map<String, Value>,
-) -> Result<Vec<String>, InvokeFailure> {
-    let defaults = core::SearchOptions::for_store(paths)
-        .allowed_scopes
-        .unwrap_or_default();
-    let requested = match (map.get("scope"), map.get("scopes")) {
-        (Some(_), Some(_)) => {
-            return Err(InvokeFailure::new(
-                "invalid_request",
-                "use either scope or scopes, not both",
-            ));
-        }
-        (Some(value), None) => vec![
-            value
-                .as_str()
-                .ok_or_else(|| InvokeFailure::new("invalid_request", "scope must be a string"))?
-                .to_owned(),
-        ],
-        (None, Some(value)) => value
-            .as_array()
-            .ok_or_else(|| InvokeFailure::new("invalid_request", "scopes must be an array"))?
-            .iter()
-            .map(|value| {
-                value.as_str().map(str::to_owned).ok_or_else(|| {
-                    InvokeFailure::new("invalid_request", "scopes must contain strings")
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-        (None, None) => defaults.clone(),
-    };
-    if requested.is_empty() || requested.len() > 16 {
-        return Err(InvokeFailure::new(
-            "invalid_request",
-            "scope filter is out of bounds",
-        ));
-    }
-    for scope in &requested {
-        if scope.parse::<core::Scope>().is_err() || !defaults.iter().any(|allowed| allowed == scope)
-        {
-            return Err(InvokeFailure::new(
-                "scope_denied",
-                "requested scope is outside the selected store boundary",
-            ));
-        }
-    }
-    Ok(requested)
-}
-
-fn invocation_stores(
-    paths: &core::StorePaths,
-    allowed_scopes: &[String],
-) -> Result<Vec<core::StorePaths>, InvokeFailure> {
-    let mut stores = vec![paths.clone()];
-    if paths.scope == StoreScope::Project {
-        let global = resolve(StoreScope::Global).map_err(|_| {
-            InvokeFailure::new("internal_error", "could not resolve the global store")
-        })?;
-        if global.root.join("store.toml").is_file()
-            && allowed_scopes.iter().any(|scope| scope == "global")
-        {
-            stores.push(global);
-        }
-    }
-    for store in &stores {
-        core::sync_store(store).map_err(|error| map_core_error(&error))?;
-    }
-    Ok(stores)
-}
-
-fn invoke_search(
-    paths: &core::StorePaths,
-    map: &Map<String, Value>,
-) -> Result<Value, InvokeFailure> {
-    ensure_keys(map, &["query", "limit", "scope", "scopes", "access"])?;
-    let query = required_string(map, "query")?;
-    if query.len() > MAX_INVOKE_QUERY {
-        return Err(InvokeFailure::new("invalid_request", "query is too long"));
-    }
-    let limit = bounded_number(map, "limit", 20, MAX_INVOKE_LIMIT)?;
-    let scopes = invocation_scope(paths, map)?;
-    let (access, _) = invocation_access(map)?;
-    let stores = invocation_stores(paths, &scopes)?;
-    let mut options = core::SearchOptions::for_store(paths);
-    options.limit = limit;
-    options.allowed_scopes = Some(scopes);
-    options.allowed_access = Some(access);
-    options.mode = core::RetrievalMode::Lexical;
-    let results =
-        core::search_stores(&stores, query, options).map_err(|error| map_core_error(&error))?;
-    Ok(Value::Array(
-        results.iter().map(invoke_search_result).collect(),
-    ))
-}
-
-fn invoke_context(
-    paths: &core::StorePaths,
-    map: &Map<String, Value>,
-) -> Result<Value, InvokeFailure> {
-    ensure_keys(
-        map,
-        &["query", "limit", "budget", "scope", "scopes", "access"],
-    )?;
-    let query = required_string(map, "query")?;
-    if query.len() > MAX_INVOKE_QUERY {
-        return Err(InvokeFailure::new("invalid_request", "query is too long"));
-    }
-    let limit = bounded_number(map, "limit", 20, MAX_INVOKE_LIMIT)?;
-    let budget = bounded_number(map, "budget", 512, MAX_INVOKE_BUDGET)?;
-    let scopes = invocation_scope(paths, map)?;
-    let (access, _) = invocation_access(map)?;
-    let stores = invocation_stores(paths, &scopes)?;
-    let mut search = core::SearchOptions::for_store(paths);
-    search.limit = limit;
-    search.allowed_scopes = Some(scopes);
-    search.allowed_access = Some(access);
-    search.mode = core::RetrievalMode::Lexical;
-    let result = core::context_stores(&stores, query, core::ContextOptions { budget, search })
-        .map_err(|error| map_core_error(&error))?;
-    serde_json::to_value(result)
-        .map_err(|_| InvokeFailure::new("internal_error", "could not encode context result"))
-}
-
-fn invoke_get(paths: &core::StorePaths, map: &Map<String, Value>) -> Result<Value, InvokeFailure> {
-    ensure_keys(map, &["id", "scope", "scopes", "access"])?;
-    let id = parse_protocol_id(required_string(map, "id")?)?;
-    let scopes = invocation_scope(paths, map)?;
-    let (access, _) = invocation_access(map)?;
-    let stores = invocation_stores(paths, &scopes)?;
-    let mut denied = None;
-    for store in stores {
-        match core::RecordRepository::new(store).find_allowed(id, &scopes, &access) {
-            Ok(stored) => {
-                if stored.record().body.len() > MAX_INVOKE_OUTPUT_BODY {
-                    return Err(InvokeFailure::new(
-                        "output_too_large",
-                        "record exceeds the bounded protocol output",
-                    ));
-                }
-                return Ok(invoke_record(stored.record()));
-            }
-            Err(
-                error @ core::Error::Repository {
-                    source: core::RepositoryError::ScopeDenied { .. },
-                },
-            )
-            | Err(
-                error @ core::Error::Repository {
-                    source: core::RepositoryError::AccessDenied { .. },
-                },
-            ) => {
-                denied = Some(map_core_error(&error));
-            }
-            Err(core::Error::Repository {
-                source: core::RepositoryError::NotFound { .. },
-            }) => {}
-            Err(error) => return Err(map_core_error(&error)),
-        }
-    }
-    denied.map_or_else(
-        || Err(InvokeFailure::new("not_found", "record was not found")),
-        Err,
-    )
-}
-
-fn invoke_propose(
-    paths: &core::StorePaths,
-    map: &Map<String, Value>,
-) -> Result<Value, InvokeFailure> {
-    ensure_keys(
-        map,
-        &[
-            "actor",
-            "approved",
-            "record",
-            "id",
-            "title",
-            "kind",
-            "scope",
-            "status",
-            "access",
-            "created_at",
-            "updated_at",
-            "tags",
-            "aliases",
-            "supersedes",
-            "sources",
-            "body",
-        ],
-    )?;
-    let actor = map
-        .get("actor")
-        .and_then(Value::as_str)
-        .unwrap_or("agent")
-        .parse::<ProposalActor>()
-        .map_err(|_| InvokeFailure::new("invalid_request", "actor must be `agent` or `human`"))?;
-    if actor == ProposalActor::Human || map.contains_key("approved") {
-        return Err(InvokeFailure::new(
-            "permission_denied",
-            "invoke proposals always require explicit human approval",
-        ));
-    }
-    let scope = default_protocol_scope(paths);
-    let record_value = if let Some(value) = map.get("record") {
-        value.clone()
-    } else {
-        Value::Object(
-            map.iter()
-                .filter(|(key, _)| {
-                    !matches!(key.as_str(), "version" | "operation" | "actor" | "approved")
-                })
-                .map(|(key, value)| (key.clone(), value.clone()))
-                .collect(),
-        )
-    };
-    let record = parse_protocol_record(&record_value, None, &scope)?;
-    let result = core::RecordRepository::new(paths.clone())
-        .propose(record, ProposalActor::Agent)
-        .map_err(|error| map_core_error(&error))?;
-    serde_json::to_value(result)
-        .map_err(|_| InvokeFailure::new("internal_error", "could not encode proposal result"))
-}
-
-fn invoke_supersede(
-    paths: &core::StorePaths,
-    map: &Map<String, Value>,
-) -> Result<Value, InvokeFailure> {
-    ensure_keys(
-        map,
-        &[
-            "id",
-            "access",
-            "replacement",
-            "title",
-            "kind",
-            "scope",
-            "status",
-            "created_at",
-            "updated_at",
-            "tags",
-            "aliases",
-            "supersedes",
-            "sources",
-            "body",
-        ],
-    )?;
-    let target_id = parse_protocol_id(required_string(map, "id")?)?;
-    let scopes = invocation_scope(paths, map)?;
-    let (access, _) = invocation_access(map)?;
-    let repository = core::RecordRepository::new(paths.clone());
-    let old = repository
-        .find_allowed(target_id, &scopes, &access)
-        .map_err(|error| map_core_error(&error))?;
-    let default_scope = old.record().scope.to_string();
-    let replacement_value = if let Some(value) = map.get("replacement") {
-        value.clone()
-    } else {
-        Value::Object(
-            map.iter()
-                .filter(|(key, _)| {
-                    !matches!(key.as_str(), "version" | "operation" | "id" | "access")
-                })
-                .map(|(key, value)| (key.clone(), value.clone()))
-                .collect(),
-        )
-    };
-    let mut replacement =
-        parse_protocol_record(&replacement_value, Some(old.record()), &default_scope)?;
-    if replacement.id == target_id {
-        replacement.id = core::RecordId::new_v7();
-    }
-    if !replacement.supersedes.contains(&target_id) {
-        replacement.supersedes.push(target_id);
-    }
-    let stored = repository
-        .supersede(target_id, replacement)
-        .map_err(|error| map_core_error(&error))?;
-    Ok(json!({
-        "outcome": "accepted",
-        "id": stored.record().id.to_string(),
-        "status": stored.record().status.to_string(),
-    }))
-}
-
-fn invoke_archive(
-    paths: &core::StorePaths,
-    map: &Map<String, Value>,
-) -> Result<Value, InvokeFailure> {
-    ensure_keys(map, &["id", "scope", "scopes", "access"])?;
-    let id = parse_protocol_id(required_string(map, "id")?)?;
-    let scopes = invocation_scope(paths, map)?;
-    let (access, _) = invocation_access(map)?;
-    let repository = core::RecordRepository::new(paths.clone());
-    repository
-        .find_allowed(id, &scopes, &access)
-        .map_err(|error| map_core_error(&error))?;
-    let stored = repository
-        .archive(id)
-        .map_err(|error| map_core_error(&error))?;
-    Ok(json!({
-        "outcome": "accepted",
-        "id": stored.record().id.to_string(),
-        "status": stored.record().status.to_string(),
-    }))
-}
-
-fn parse_protocol_id(value: &str) -> Result<core::RecordId, InvokeFailure> {
-    value
-        .parse()
-        .map_err(|_| InvokeFailure::new("invalid_request", "id must be a valid record identifier"))
-}
-
-fn default_protocol_scope(paths: &core::StorePaths) -> String {
-    match paths.scope {
-        StoreScope::Global => "global".to_owned(),
-        StoreScope::Project => format!("project:{}", project_scope_name(paths)),
-    }
-}
-
-const PROTOCOL_RECORD_FIELDS: &[&str] = &[
-    "id",
-    "title",
-    "kind",
-    "scope",
-    "status",
-    "access",
-    "created_at",
-    "updated_at",
-    "tags",
-    "aliases",
-    "supersedes",
-    "sources",
-    "body",
-];
-
-fn parse_protocol_record(
-    value: &Value,
-    base: Option<&core::Record>,
-    default_scope: &str,
-) -> Result<core::Record, InvokeFailure> {
-    let map = value
-        .as_object()
-        .ok_or_else(|| InvokeFailure::new("invalid_request", "record must be a JSON object"))?;
-    ensure_keys(map, PROTOCOL_RECORD_FIELDS)?;
-    let now = core::Timestamp::now_utc();
-    let id = match map.get("id").and_then(Value::as_str) {
-        Some(value) => parse_protocol_id(value)?,
-        None => base
-            .map(|record| record.id)
-            .unwrap_or_else(core::RecordId::new_v7),
-    };
-    let title = protocol_string(map, "title", base.map(|record| record.title.as_str()))?;
-    let kind = protocol_owned_string(map, "kind", base.map(|record| record.kind.to_string()))?
-        .parse()
-        .map_err(|_| InvokeFailure::new("invalid_request", "kind is invalid"))?;
-    let scope = protocol_string(map, "scope", Some(default_scope))?
-        .parse()
-        .map_err(|_| InvokeFailure::new("invalid_request", "scope is invalid"))?;
-    let status = protocol_owned_string(
-        map,
-        "status",
-        base.map(|record| record.status.to_string())
-            .or_else(|| Some("active".to_owned())),
-    )?
-    .parse()
-    .map_err(|_| InvokeFailure::new("invalid_request", "status is invalid"))?;
-    let access =
-        protocol_owned_string(map, "access", base.map(|record| record.access.to_string()))?
-            .parse()
-            .map_err(|_| InvokeFailure::new("invalid_request", "access is invalid"))?;
-    let created_at =
-        protocol_timestamp(map, "created_at", base.map(|record| record.created_at), now)?;
-    let updated_at = protocol_timestamp(
-        map,
-        "updated_at",
-        base.map(|record| record.updated_at),
-        created_at,
-    )?;
-    let tags = protocol_strings(map, "tags", base.map(|record| record.tags.as_slice()))?;
-    let aliases = protocol_strings(map, "aliases", base.map(|record| record.aliases.as_slice()))?;
-    let supersedes = protocol_ids(
-        map,
-        "supersedes",
-        base.map(|record| record.supersedes.as_slice()),
-    )?;
-    let sources = protocol_sources(map, base.map(|record| record.sources.as_slice()))?;
-    let body = protocol_string(map, "body", base.map(|record| record.body.as_str()))?;
-    Ok(core::Record {
-        id,
-        title,
-        kind,
-        scope,
-        status,
-        access,
-        created_at,
-        updated_at,
-        tags,
-        aliases,
-        supersedes,
-        sources,
-        body,
-    })
-}
-
-fn protocol_string(
-    map: &Map<String, Value>,
-    key: &str,
-    default: Option<&str>,
-) -> Result<String, InvokeFailure> {
-    match map.get(key) {
-        Some(value) => value
-            .as_str()
-            .filter(|value| !value.is_empty() && value.len() <= MAX_INVOKE_OUTPUT_BODY)
-            .map(str::to_owned)
-            .ok_or_else(|| {
-                InvokeFailure::new(
-                    "invalid_request",
-                    format!("field `{key}` must be a bounded string"),
-                )
-            }),
-        None => default.map(str::to_owned).ok_or_else(|| {
-            InvokeFailure::new("invalid_request", format!("field `{key}` is required"))
-        }),
-    }
-}
-
-fn protocol_owned_string(
-    map: &Map<String, Value>,
-    key: &str,
-    default: Option<String>,
-) -> Result<String, InvokeFailure> {
-    match map.get(key) {
-        Some(value) => value
-            .as_str()
-            .filter(|value| !value.is_empty() && value.len() <= MAX_INVOKE_OUTPUT_BODY)
-            .map(str::to_owned)
-            .ok_or_else(|| {
-                InvokeFailure::new(
-                    "invalid_request",
-                    format!("field `{key}` must be a bounded string"),
-                )
-            }),
-        None => default.ok_or_else(|| {
-            InvokeFailure::new("invalid_request", format!("field `{key}` is required"))
-        }),
-    }
-}
-
-fn protocol_timestamp(
-    map: &Map<String, Value>,
-    key: &str,
-    default: Option<core::Timestamp>,
-    fallback: core::Timestamp,
-) -> Result<core::Timestamp, InvokeFailure> {
-    match map.get(key) {
-        Some(value) => value
-            .as_str()
-            .ok_or_else(|| {
-                InvokeFailure::new(
-                    "invalid_request",
-                    format!("field `{key}` must be a timestamp"),
-                )
-            })?
-            .parse()
-            .map_err(|_| {
-                InvokeFailure::new("invalid_request", format!("field `{key}` is not RFC 3339"))
-            }),
-        None => Ok(default.unwrap_or(fallback)),
-    }
-}
-
-fn protocol_strings(
-    map: &Map<String, Value>,
-    key: &str,
-    default: Option<&[String]>,
-) -> Result<Vec<String>, InvokeFailure> {
-    let Some(value) = map.get(key) else {
-        return Ok(default.map_or_else(Vec::new, ToOwned::to_owned));
-    };
-    let values = value.as_array().ok_or_else(|| {
-        InvokeFailure::new("invalid_request", format!("field `{key}` must be an array"))
-    })?;
-    if values.len() > 128 {
-        return Err(InvokeFailure::new(
-            "invalid_request",
-            "record collection is too large",
-        ));
-    }
-    values
-        .iter()
-        .map(|value| {
-            value
-                .as_str()
-                .filter(|value| !value.is_empty() && value.len() <= 512)
-                .map(str::to_owned)
-                .ok_or_else(|| {
-                    InvokeFailure::new(
-                        "invalid_request",
-                        "record collection contains an invalid string",
-                    )
-                })
-        })
-        .collect()
-}
-
-fn protocol_ids(
-    map: &Map<String, Value>,
-    key: &str,
-    default: Option<&[core::RecordId]>,
-) -> Result<Vec<core::RecordId>, InvokeFailure> {
-    let Some(value) = map.get(key) else {
-        return Ok(default.map_or_else(Vec::new, ToOwned::to_owned));
-    };
-    let values = value.as_array().ok_or_else(|| {
-        InvokeFailure::new("invalid_request", format!("field `{key}` must be an array"))
-    })?;
-    values
-        .iter()
-        .map(|value| {
-            value
-                .as_str()
-                .ok_or_else(|| {
-                    InvokeFailure::new(
-                        "invalid_request",
-                        "record id collection contains an invalid value",
-                    )
-                })
-                .and_then(parse_protocol_id)
-        })
-        .collect()
-}
-
-fn protocol_sources(
-    map: &Map<String, Value>,
-    default: Option<&[core::Source]>,
-) -> Result<Vec<core::Source>, InvokeFailure> {
-    let Some(value) = map.get("sources") else {
-        return Ok(default.map_or_else(Vec::new, ToOwned::to_owned));
-    };
-    let values = value
-        .as_array()
-        .ok_or_else(|| InvokeFailure::new("invalid_request", "sources must be an array"))?;
-    if values.len() > 32 {
-        return Err(InvokeFailure::new("invalid_request", "too many sources"));
-    }
-    values
-        .iter()
-        .map(|value| {
-            let source = value
-                .as_object()
-                .ok_or_else(|| InvokeFailure::new("invalid_request", "source must be an object"))?;
-            ensure_keys(source, &["kind", "reference", "actor"])?;
-            let kind = source
-                .get("kind")
-                .and_then(Value::as_str)
-                .ok_or_else(|| InvokeFailure::new("invalid_request", "source kind is required"))?
-                .parse()
-                .map_err(|_| InvokeFailure::new("invalid_request", "source kind is invalid"))?;
-            let reference = source
-                .get("reference")
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty() && value.len() <= 2048)
-                .ok_or_else(|| {
-                    InvokeFailure::new("invalid_request", "source reference is invalid")
-                })?;
-            let actor = source
-                .get("actor")
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty() && value.len() <= 256)
-                .ok_or_else(|| InvokeFailure::new("invalid_request", "source actor is invalid"))?;
-            Ok(core::Source {
-                kind,
-                reference: reference.to_owned(),
-                actor: actor.to_owned(),
-            })
-        })
-        .collect()
-}
-
-fn invoke_search_result(result: &core::SearchResult) -> Value {
-    json!({
-        "record_id": result.record_id,
-        "chunk_id": result.chunk_id,
-        "title": result.title,
-        "kind": result.kind,
-        "scope": result.scope,
-        "status": result.status,
-        "access": result.access,
-        "excerpt": result.excerpt,
-        "sources": result.sources,
-        "score": result.score,
-        "lexical_match_reason": result.lexical_match_reason,
-        "match_reasons": result.match_reasons,
-        "vector_distance": result.vector_distance,
-    })
-}
-
-fn invoke_record(record: &core::Record) -> Value {
-    json!({
-        "id": record.id.to_string(),
-        "title": record.title,
-        "kind": record.kind.to_string(),
-        "scope": record.scope.to_string(),
-        "status": record.status.to_string(),
-        "access": record.access.to_string(),
-        "created_at": record.created_at.to_string(),
-        "updated_at": record.updated_at.to_string(),
-        "tags": record.tags,
-        "aliases": record.aliases,
-        "supersedes": record.supersedes.iter().map(ToString::to_string).collect::<Vec<_>>(),
-        "sources": record.sources.iter().map(|source| json!({
-            "kind": source.kind.to_string(),
-            "reference": source.reference,
-            "actor": source.actor,
-        })).collect::<Vec<_>>(),
-        "body": record.body,
-    })
-}
-
-fn map_core_error(error: &core::Error) -> InvokeFailure {
-    match error {
-        core::Error::Repository { source } => match source {
-            core::RepositoryError::StoreNotInitialized { .. } => {
-                InvokeFailure::new("not_initialized", "the selected store is not initialized")
-            }
-            core::RepositoryError::NotFound { .. } => {
-                InvokeFailure::new("not_found", "record was not found")
-            }
-            core::RepositoryError::ScopeDenied { .. } => {
-                InvokeFailure::new("scope_denied", "record is outside the selected scope")
-            }
-            core::RepositoryError::AccessDenied { .. } => InvokeFailure::new(
-                "access_denied",
-                "record is not available to this access class",
-            ),
-            core::RepositoryError::MustBeCandidate { .. }
-            | core::RepositoryError::MustBeActive { .. }
-            | core::RepositoryError::MustBeArchived { .. }
-            | core::RepositoryError::MissingSupersededLink { .. } => InvokeFailure::new(
-                "invalid_state",
-                "record lifecycle state does not permit this operation",
-            ),
-            core::RepositoryError::ConcurrentModification { .. }
-            | core::RepositoryError::MutationBusy { .. }
-            | core::RepositoryError::RecoveryConflict { .. } => InvokeFailure::new(
-                "conflict",
-                "record changed or is busy; retry after inspection",
-            ),
-            _ => InvokeFailure::new("internal_error", "the store operation failed"),
-        },
-        core::Error::InvalidRecord { .. } => {
-            InvokeFailure::new("invalid_record", "record validation failed")
-        }
-        core::Error::InvalidInput { .. } => {
-            InvokeFailure::new("invalid_request", "request input is invalid")
-        }
-        core::Error::Io { .. }
-        | core::Error::InvalidWorkingDirectory
-        | core::Error::MissingHomeDirectory
-        | core::Error::SharedStoreRequiresProject
-        | core::Error::InvalidStoreConfiguration { .. }
-        | core::Error::Index { .. }
-        | core::Error::Embedding { .. } => {
-            InvokeFailure::new("internal_error", "the store operation failed")
-        }
     }
 }
 
@@ -1104,6 +300,163 @@ fn run_context(scope: StoreScope, arguments: ContextArgs, output: &Output) -> i3
         }
         Err(error) => report_error(anyhow::Error::new(error), output),
     }
+}
+
+fn run_export(scope: StoreScope, arguments: PathArgs, output: &Output) -> i32 {
+    let paths = match resolve(scope) {
+        Ok(paths) => paths,
+        Err(error) => return report_error(error, output),
+    };
+    let bundle = match core::export_store(&paths).context("could not export canonical records") {
+        Ok(bundle) => bundle,
+        Err(error) => return report_error(error, output),
+    };
+    let encoded = match core::encode_export(&bundle) {
+        Ok(encoded) => encoded,
+        Err(error) => return report_error(anyhow::Error::new(error), output),
+    };
+    match arguments.path.as_deref() {
+        None | Some("-") => {
+            output.raw(encoded.as_bytes());
+        }
+        Some(path) => match core::write_export_archive(&paths, Path::new(path), encoded.as_bytes())
+        {
+            Ok(()) => output.line(&format!(
+                "Exported {} records to {path}",
+                bundle.records.len()
+            )),
+            Err(error) => {
+                return report_error(
+                    anyhow::Error::new(error).context("could not write export archive"),
+                    output,
+                );
+            }
+        },
+    }
+    0
+}
+
+fn run_import(scope: StoreScope, arguments: ImportArgs, output: &Output) -> i32 {
+    let paths = match resolve(scope) {
+        Ok(paths) => paths,
+        Err(error) => return report_error(error, output),
+    };
+    let contents = if arguments.path == "-" {
+        match read_import_archive(io::stdin()) {
+            Ok(contents) => contents,
+            Err(error) => {
+                return report_error(
+                    error.context("could not read import archive from stdin"),
+                    output,
+                );
+            }
+        }
+    } else {
+        match fs::File::open(&arguments.path)
+            .map_err(anyhow::Error::new)
+            .and_then(read_import_archive)
+        {
+            Ok(contents) => contents,
+            Err(error) => {
+                return report_error(error.context("could not read import archive"), output);
+            }
+        }
+    };
+    let bundle = match core::decode_export(&contents) {
+        Ok(bundle) => bundle,
+        Err(error) => return report_error(anyhow::Error::new(error), output),
+    };
+    let options = match import_options(&arguments) {
+        Ok(options) => options,
+        Err(error) => return report_error(error, output),
+    };
+    match core::import_store(&paths, &bundle, &options)
+        .context("could not import canonical records")
+    {
+        Ok(report) => {
+            output.line(&format!(
+                "Imported: {}\nSkipped: {}\nOverwritten: {}\nRemapped: {}",
+                report.imported, report.skipped, report.overwritten, report.remapped
+            ));
+            0
+        }
+        Err(error) => report_error(error, output),
+    }
+}
+
+fn import_options(arguments: &ImportArgs) -> AnyhowResult<core::ImportOptions> {
+    Ok(core::ImportOptions {
+        id_collision: arguments
+            .on_id
+            .as_deref()
+            .map(str::parse)
+            .transpose()
+            .map_err(anyhow::Error::msg)?,
+        scope_collision: arguments
+            .on_scope
+            .as_deref()
+            .map(str::parse)
+            .transpose()
+            .map_err(anyhow::Error::msg)?,
+        existing_record: arguments
+            .on_existing
+            .as_deref()
+            .map(str::parse)
+            .transpose()
+            .map_err(anyhow::Error::msg)?,
+    })
+}
+
+fn run_gc(scope: StoreScope, arguments: GcArgs, output: &Output) -> i32 {
+    let paths = match resolve(scope) {
+        Ok(paths) => paths,
+        Err(error) => return report_error(error, output),
+    };
+    let report = match core::gc_store(
+        &paths,
+        core::GcOptions {
+            dry_run: arguments.dry_run,
+        },
+    )
+    .context("could not collect disposable data")
+    {
+        Ok(report) => report,
+        Err(error) => return report_error(error, output),
+    };
+    let action = if report.dry_run {
+        "Reclaimable"
+    } else {
+        "Reclaimed"
+    };
+    output.line(&format!(
+        "{action}: {} files, {} bytes",
+        if report.dry_run {
+            report.candidates.len()
+        } else {
+            report.removed
+        },
+        report.reclaimed_bytes
+    ));
+    for entry in report.candidates {
+        output.line(&format!("{}\t{} bytes", entry.path, entry.bytes));
+    }
+    0
+}
+
+fn read_import_archive(reader: impl Read) -> AnyhowResult<String> {
+    let limit = u64::try_from(core::MAX_EXPORT_ARCHIVE_BYTES).expect("archive limit fits in u64");
+    let mut contents = String::new();
+    reader
+        .take(limit + 1)
+        .read_to_string(&mut contents)
+        .context("could not read the archive")?;
+    if contents.len() > core::MAX_EXPORT_ARCHIVE_BYTES {
+        bail!(
+            "import archive exceeds the {} byte limit",
+            core::MAX_EXPORT_ARCHIVE_BYTES
+        );
+    }
+    Ok(contents)
 }
 
 fn run_sync(scope: StoreScope, output: &Output) -> i32 {
@@ -1888,44 +1241,6 @@ fn resolve(scope: StoreScope) -> AnyhowResult<core::StorePaths> {
 fn report_error(error: anyhow::Error, output: &Output) -> i32 {
     output.error(&format!("{error:#}"));
     FAILURE
-}
-
-fn stub(name: &str, output: &Output) -> i32 {
-    output.error(&format!(
-        "{name} is not implemented yet; no data was changed"
-    ));
-    FAILURE
-}
-
-fn command_as_str(command: &CliCommand) -> &'static str {
-    match command {
-        CliCommand::Init(_) => "init",
-        CliCommand::Root => "root",
-        CliCommand::Status(_) => "status",
-        CliCommand::Add(_) => "add",
-        CliCommand::Propose(_) => "propose",
-        CliCommand::Approve(_) => "approve",
-        CliCommand::Reject(_) => "reject",
-        CliCommand::Edit(_) => "edit",
-        CliCommand::Show(_) => "show",
-        CliCommand::List(_) => "list",
-        CliCommand::Search(_) => "search",
-        CliCommand::Context(_) => "context",
-        CliCommand::Supersede(_) => "supersede",
-        CliCommand::Archive(_) => "archive",
-        CliCommand::Restore(_) => "restore",
-        CliCommand::Forget(_) => "forget",
-        CliCommand::Sync => "sync",
-        CliCommand::Watch(_) => "watch",
-        CliCommand::Reindex => "reindex",
-        CliCommand::Gc => "gc",
-        CliCommand::Doctor => "doctor",
-        CliCommand::Export(_) => "export",
-        CliCommand::Import(_) => "import",
-        CliCommand::Invoke(_) => "invoke",
-        CliCommand::Evaluate => "evaluate",
-        CliCommand::Mcp(_) => "mcp",
-    }
 }
 
 fn invoked_name(argument: Option<&OsString>) -> String {

@@ -228,10 +228,10 @@ cleanup of disposable cache/model artifacts.
 
 **Acceptance criteria:**
 
-- [ ] Export/import round-trips canonical records and provenance.
-- [ ] ID, scope, and existing-record collisions require an explicit policy.
-- [ ] `gc` never removes canonical records and reports reclaimed disposable data.
-- [ ] Backup, move, and recovery workflows are documented.
+- [x] Export/import round-trips canonical records and provenance.
+- [x] ID, scope, and existing-record collisions require an explicit policy.
+- [x] `gc` never removes canonical records and reports reclaimed disposable data.
+- [x] Backup, move, and recovery workflows are documented.
 
 **Verification:** Run round-trip, collision, and dry-run cleanup tests.
 
@@ -244,19 +244,19 @@ example and curate a small memory set that helps agents work on Stormbuffer.
 
 **Acceptance criteria:**
 
-- [ ] The repository commits `.sbuf/store.toml`, `.sbuf/.gitignore`, and canonical
+- [x] The repository commits `.sbuf/store.toml`, `.sbuf/.gitignore`, and canonical
       Markdown under `.sbuf/records/`.
-- [ ] `.sbuf/` ignores SQLite databases and sidecars, FTS/vector projections,
+- [x] `.sbuf/` ignores SQLite databases and sidecars, FTS/vector projections,
       embeddings, downloaded models, locks, temporary files, logs, and other
       rebuildable runtime artifacts.
-- [ ] Records capture sourced project facts, decisions, procedures, and useful
+- [x] Records capture sourced project facts, decisions, procedures, and useful
       checkpoints without copying whole sections of `ROADMAP.md`, `TODO.md`, or
       `AGENTS.md`.
-- [ ] A clean clone can rebuild all projections from the committed files and run
+- [x] A clean clone can rebuild all projections from the committed files and run
       documented retrieval and grounded-answer examples against the project.
-- [ ] Tests fail if a generated or machine-local artifact under `.sbuf/` becomes
+- [x] Tests fail if a generated or machine-local artifact under `.sbuf/` becomes
       trackable or if an example cites a missing record.
-- [ ] Contributor docs explain the privacy and merge implications of shared
+- [x] Contributor docs explain the privacy and merge implications of shared
       project memory and how to opt out locally without deleting canonical files.
 
 **Verification:** Clone or copy only tracked files into a temporary root, rebuild
@@ -278,11 +278,11 @@ stdio without duplicating storage, ranking, or policy.
 
 **Acceptance criteria:**
 
-- [ ] Resource URIs and tool schemas match the roadmap and docs.
-- [ ] CLI JSON and MCP return equivalent core results for shared operations.
-- [ ] Write tools are disabled by default or gated by an explicit host grant.
-- [ ] Raw SQL, arbitrary files, reindex, and destructive deletion are absent.
-- [ ] Protocol tests cover cancellation, malformed requests, and clean shutdown.
+- [x] Resource URIs and tool schemas match the roadmap and docs.
+- [x] CLI JSON and MCP return equivalent core results for shared operations.
+- [x] Write tools are disabled by default or gated by an explicit host grant.
+- [x] Raw SQL, arbitrary files, reindex, and destructive deletion are absent.
+- [x] Protocol tests cover cancellation, malformed requests, and clean shutdown.
 
 **Verification:** Run MCP contract tests against a temporary store.
 
@@ -295,11 +295,11 @@ durable memory, report conflicts, and avoid storing unsuitable material.
 
 **Acceptance criteria:**
 
-- [ ] The skill delegates all parsing, ranking, and mutation to public interfaces.
-- [ ] Examples cite returned record IDs/receipts and prefer project scope.
-- [ ] The skill forbids secrets, speculation, generic knowledge, raw transcripts,
+- [x] The skill delegates all parsing, ranking, and mutation to public interfaces.
+- [x] Examples cite returned record IDs/receipts and prefer project scope.
+- [x] The skill forbids secrets, speculation, generic knowledge, raw transcripts,
       and duplicate authoritative documentation.
-- [ ] Example sessions pass against the current CLI/MCP contracts.
+- [x] Example sessions pass against the current CLI/MCP contracts.
 
 **Verification:** Run skill examples as smoke tests and review the guidance for
 least privilege.

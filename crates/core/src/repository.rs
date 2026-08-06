@@ -497,13 +497,13 @@ impl RecordRepository {
         self.read_record(&current.path)
     }
 
-    fn prepare_mutation(&self) -> Result<MutationLock, Error> {
+    pub(crate) fn prepare_mutation(&self) -> Result<MutationLock, Error> {
         let lock = acquire_store_mutation_lock(&self.paths)?;
         self.recover_supersession()?;
         Ok(lock)
     }
 
-    fn scan_locked(&self) -> Result<Vec<StoredRecord>, Error> {
+    pub(crate) fn scan_locked(&self) -> Result<Vec<StoredRecord>, Error> {
         let mut paths = Vec::new();
         collect_markdown_paths(&self.paths.records, &mut paths)?;
         let mut records = Vec::with_capacity(paths.len());
@@ -769,7 +769,7 @@ fn read_optional_bytes(path: &Path) -> Result<Option<Vec<u8>>, Error> {
     }
 }
 
-fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), Error> {
+pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), Error> {
     let parent = path.parent().ok_or_else(|| {
         Error::io(
             "resolve the record parent",

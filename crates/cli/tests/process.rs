@@ -469,6 +469,7 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
     for request in [
         r#"{"version":1,"access":"human","query":"protocol memory"}"#,
         r#"{"version":1,"actor":"human","approved":true,"title":"Impersonated memory","kind":"fact","access":"agent","body":"Must remain a candidate.","sources":[{"kind":"document","reference":"ROADMAP.md","actor":"human"}]}"#,
+        r#"{"version":1,"title":"Hidden agent memory","kind":"fact","access":"human","body":"Agents must not create human-only records.","sources":[{"kind":"document","reference":"ROADMAP.md","actor":"human"}]}"#,
     ] {
         let operation = if request.contains("query") {
             "search"
@@ -486,6 +487,19 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
             serde_json::from_slice(&denied.stdout).expect("permission denial envelope");
         assert_eq!(envelope["error"]["code"], "permission_denied");
     }
+
+    let denied_supersede = run_json(
+        "stormbuffer",
+        &root,
+        ["--project", "invoke", "supersede"],
+        &format!(
+            r#"{{"version":1,"id":"{id}","title":"Hidden replacement","kind":"fact","access":"human","body":"Agents must not hide replacements.","sources":[{{"kind":"document","reference":"ROADMAP.md","actor":"human"}}]}}"#
+        ),
+    );
+    assert_eq!(denied_supersede.status.code(), Some(1));
+    let denied_supersede: serde_json::Value =
+        serde_json::from_slice(&denied_supersede.stdout).expect("supersede denial envelope");
+    assert_eq!(denied_supersede["error"]["code"], "permission_denied");
 
     let get = run_json(
         "stormbuffer",
