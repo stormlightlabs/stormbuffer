@@ -3,6 +3,8 @@ use std::io::{self, Read};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
+use fs2::FileExt;
+
 use fastembed::{
     InitOptionsUserDefined, Pooling, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel,
 };
@@ -117,7 +119,13 @@ pub fn model_cache_dir(paths: &StorePaths) -> PathBuf {
 }
 
 pub fn ensure_default_model(paths: &StorePaths) -> Result<()> {
-    default_model_manifest().acquire(&model_cache_dir(paths))
+    let cache = model_cache_dir(paths);
+    default_model_manifest().acquire(&cache).map_err(|error| {
+        model_setup_error(
+            &cache,
+            format!("{error}; repair with `stormbuffer init` when online"),
+        )
+    })
 }
 
 impl ModelManifest {
@@ -203,11 +211,14 @@ impl ModelManifest {
     /// its pinned BLAKE3 checksum matches. Interrupted downloads can be retried safely.
     pub fn acquire(&self, root: &Path) -> Result<()> {
         self.validate()?;
-        fs::create_dir_all(root).map_err(|source| Error::io("create the model cache", source))?;
-        for artifact in &self.artifacts {
-            acquire_file(root.join(&artifact.path), &artifact.url, &artifact.blake3)?;
-        }
-        Ok(())
+        with_model_cache_lock(root, true, || {
+            fs::create_dir_all(root)
+                .map_err(|source| Error::io("create the model cache", source))?;
+            for artifact in &self.artifacts {
+                acquire_file(root.join(&artifact.path), &artifact.url, &artifact.blake3)?;
+            }
+            Ok(())
+        })
     }
 
     fn required_files(&self, root: &Path) -> Result<ModelFiles> {
@@ -231,15 +242,22 @@ pub struct LocalEmbedder {
 impl LocalEmbedder {
     pub fn from_default_cache(paths: &StorePaths) -> Result<Self> {
         let manifest = default_model_manifest();
-        let files = manifest.verify_files(&model_cache_dir(paths))?;
-        Self::from_verified_files(manifest, files)
+        let cache = model_cache_dir(paths);
+        with_model_cache_lock(&cache, false, || {
+            let files = manifest.verify_files(&cache)?;
+            Self::from_verified_files(manifest, files)
+        })
+        .map_err(|error| model_setup_error(&cache, error.to_string()))
     }
 
     pub fn from_manifest(path: &Path) -> Result<Self> {
         let manifest = ModelManifest::load(path)?;
         let root = path.parent().unwrap_or_else(|| Path::new("."));
-        let files = manifest.verify_files(root)?;
-        Self::from_verified_files(manifest, files)
+        with_model_cache_lock(root, false, || {
+            let files = manifest.verify_files(root)?;
+            Self::from_verified_files(manifest, files)
+        })
+        .map_err(|error| model_setup_error(root, error.to_string()))
     }
 
     fn from_verified_files(manifest: ModelManifest, files: ModelFiles) -> Result<Self> {
@@ -360,6 +378,7 @@ fn manifest_fingerprint(manifest: &ModelManifest) -> String {
     let mut hasher = blake3::Hasher::new();
     hasher.update(b"stormbuffer-fastembed-preprocessing-v1");
     hasher.update(manifest.model_version.as_bytes());
+    hasher.update(manifest.dimension.to_string().as_bytes());
     hasher.update(manifest.max_tokens.to_string().as_bytes());
     hasher.update(b"pooling=mean;normalize=l2");
     for artifact in &manifest.artifacts {
@@ -389,6 +408,49 @@ pub fn l2_normalize(mut values: Vec<f32>) -> Result<Vec<f32>> {
 
 fn read_model_file(path: &Path) -> Result<Vec<u8>> {
     fs::read(path).map_err(|source| Error::io("read a verified model artifact", source))
+}
+
+fn model_setup_error(cache: &Path, details: impl Into<String>) -> Error {
+    Error::embedding(
+        "prepare the local embedding model",
+        format!(
+            "{}; model cache: {}; repair with `stormbuffer init`",
+            details.into(),
+            cache.display()
+        ),
+    )
+}
+
+fn with_model_cache_lock<T>(
+    root: &Path,
+    exclusive: bool,
+    operation: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    fs::create_dir_all(root).map_err(|source| Error::io("create the model cache", source))?;
+    let lock_path = root.join(".lock");
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(&lock_path)
+        .map_err(|source| Error::io("open the model cache lock", source))?;
+    if exclusive {
+        FileExt::lock_exclusive(&lock)
+            .map_err(|source| Error::io("lock the model cache", source))?;
+    } else {
+        FileExt::lock_shared(&lock).map_err(|source| Error::io("lock the model cache", source))?;
+    }
+    let result = operation();
+    let unlock_result =
+        FileExt::unlock(&lock).map_err(|source| Error::io("unlock the model cache", source));
+    match result {
+        Ok(value) => unlock_result.map(|()| value),
+        Err(error) => {
+            let _ = unlock_result;
+            Err(error)
+        }
+    }
 }
 
 fn validate_checksum(value: &str) -> Result<()> {
@@ -466,9 +528,12 @@ fn acquire_file(path: PathBuf, url: &str, expected: &str) -> Result<()> {
     if existing > 0 {
         request = request.header("Range", &format!("bytes={existing}-"));
     }
-    let response = request
-        .call()
-        .map_err(|error| Error::embedding("download model artifact", format!("{url}: {error}")))?;
+    let response = request.call().map_err(|error| {
+        Error::embedding(
+            "download model artifact",
+            format!("the pinned artifact request failed: {error}"),
+        )
+    })?;
     let append = existing > 0 && response.status().as_u16() == 206;
     let mut file = if append {
         OpenOptions::new().create(true).append(true).open(&partial)
@@ -523,6 +588,16 @@ mod tests {
         assert_eq!(first.dimension(), 12);
         let norm = first.values.iter().map(|value| value * value).sum::<f32>();
         assert!((norm - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn manifest_fingerprint_includes_embedding_dimension() {
+        let manifest = default_model_manifest();
+        let original = manifest_fingerprint(&manifest);
+        let mut changed = manifest;
+        changed.dimension += 1;
+
+        assert_ne!(original, manifest_fingerprint(&changed));
     }
 
     #[test]

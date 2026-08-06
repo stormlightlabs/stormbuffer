@@ -6,10 +6,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ContextOptions, DeterministicEmbedder, Embedder, Record, RecordKind, RecordStatus, Scope,
-    SearchOptions, Source, SourceKind, StoreInitMode, StorePaths, StoreScope, Timestamp,
-    context_stores, context_stores_with_embedder, initialize_store, rebuild_vector_index,
-    render_markdown, search_stores,
+    ContextOptions, DeterministicEmbedder, Embedder, LocalEmbedder, PlatformDirs, Record,
+    RecordKind, RecordStatus, Scope, SearchOptions, Source, SourceKind, StoreInitMode, StorePaths,
+    StoreScope, Timestamp, context_stores, context_stores_with_embedder, ensure_default_model,
+    initialize_store, rebuild_vector_index, render_markdown, search_stores,
 };
 
 const CORPUS_JSON: &str = include_str!("../tests/fixtures/evaluation/corpus.json");
@@ -72,6 +72,29 @@ pub struct EvaluationReport {
 }
 
 pub fn run_evaluation() -> crate::Result<EvaluationReport> {
+    let dirs = PlatformDirs::from_environment()?;
+    let model_paths = StorePaths {
+        scope: StoreScope::Global,
+        root: dirs.data_root().join("stormbuffer"),
+        records: dirs.data_root().join("stormbuffer").join("records"),
+        cache: dirs.cache_root().join("stormbuffer"),
+    };
+    ensure_default_model(&model_paths)?;
+    let embedder = LocalEmbedder::from_default_cache(&model_paths)?;
+    run_evaluation_with_embedder(&embedder, true)
+}
+
+/// Run the deterministic fixture evaluation without installing or loading a model.
+/// This is for regression tests; the `evaluate` command uses `run_evaluation`.
+pub fn run_synthetic_evaluation() -> crate::Result<EvaluationReport> {
+    let embedder = DeterministicEmbedder::new("fixture-m3-v1", 32)?;
+    run_evaluation_with_embedder(&embedder, false)
+}
+
+fn run_evaluation_with_embedder(
+    embedder: &dyn Embedder,
+    verify_summary: bool,
+) -> crate::Result<EvaluationReport> {
     let corpus: CorpusFile = serde_json::from_str(CORPUS_JSON).map_err(|error| {
         crate::Error::invalid_input(format!("invalid evaluation corpus: {error}"))
     })?;
@@ -94,20 +117,25 @@ pub fn run_evaluation() -> crate::Result<EvaluationReport> {
                 .map_err(|source| crate::Error::io("write evaluation record", source))?;
         }
         crate::sync_store(&paths)?;
-        let embedder = DeterministicEmbedder::new("fixture-m3-v1", 32)?;
-        rebuild_vector_index(&paths, &embedder)?;
+        rebuild_vector_index(&paths, embedder)?;
+        let allowed_scopes = corpus
+            .records
+            .iter()
+            .map(|record| record.scope.clone())
+            .collect::<HashSet<_>>();
 
         let mut metrics = BTreeMap::new();
         metrics.insert(
             "fts-only".to_owned(),
-            evaluate_mode(&paths, &queries.queries, None)?,
+            evaluate_mode(&paths, &queries.queries, None, &allowed_scopes)?,
         );
         metrics.insert(
             "vector-only".to_owned(),
             evaluate_mode(
                 &paths,
                 &queries.queries,
-                Some((&embedder, crate::RetrievalMode::Semantic)),
+                Some((embedder, crate::RetrievalMode::Semantic)),
+                &allowed_scopes,
             )?,
         );
         metrics.insert(
@@ -115,10 +143,13 @@ pub fn run_evaluation() -> crate::Result<EvaluationReport> {
             evaluate_mode(
                 &paths,
                 &queries.queries,
-                Some((&embedder, crate::RetrievalMode::Hybrid)),
+                Some((embedder, crate::RetrievalMode::Hybrid)),
+                &allowed_scopes,
             )?,
         );
-        verify_checked_summary(&corpus.revision, &metrics)?;
+        if verify_summary {
+            verify_checked_summary(&corpus.revision, &metrics)?;
+        }
         let thresholds = thresholds();
         let passed = metrics
             .values()
@@ -139,7 +170,8 @@ pub fn run_evaluation() -> crate::Result<EvaluationReport> {
 fn evaluate_mode(
     paths: &StorePaths,
     queries: &[EvaluationQuery],
-    semantic: Option<(&DeterministicEmbedder, crate::RetrievalMode)>,
+    semantic: Option<(&dyn Embedder, crate::RetrievalMode)>,
+    allowed_scopes: &HashSet<String>,
 ) -> crate::Result<EvaluationModeReport> {
     let mut recall = 0.0;
     let mut reciprocal_rank = 0.0;
@@ -151,7 +183,9 @@ fn evaluate_mode(
     let mut useful_memories = 0.0;
     for query in queries {
         let mut options = SearchOptions::for_store(paths);
-        options.allowed_scopes = Some(vec![query.scope.clone()]);
+        // Deliberately search every fixture scope so cross-scope leakage is measured
+        // instead of being hidden by the normal store policy filter.
+        options.allowed_scopes = Some(allowed_scopes.iter().cloned().collect());
         options.current_scope = Some(query.scope.clone());
         options.limit = 5;
         let results = match semantic {
@@ -167,6 +201,9 @@ fn evaluate_mode(
             None => search_stores(&[paths.clone()], &query.query, options.clone())?,
         };
         let expected: HashSet<_> = query.expected_record_ids.iter().collect();
+        if results.iter().any(|result| result.scope != query.scope) {
+            wrong_scope += 1.0;
+        }
         if !expected.is_empty() {
             if results
                 .iter()
@@ -179,9 +216,6 @@ fn evaluate_mode(
                 .position(|result| expected.contains(&result.record_id))
             {
                 reciprocal_rank += 1.0 / (position as f64 + 1.0);
-            }
-            if results.iter().any(|result| result.scope != query.scope) {
-                wrong_scope += 1.0;
             }
         }
         if results.iter().any(|result| result.status == "superseded") {
@@ -361,9 +395,11 @@ mod tests {
 
     #[test]
     fn evaluation_reports_all_release_metrics_without_silent_expectation_updates() {
-        let report = run_evaluation().expect("evaluation");
+        let report = run_synthetic_evaluation().expect("evaluation");
         assert_eq!(report.corpus_revision, "m3-fixture-1");
         assert_eq!(report.query_count, 5);
+        assert!(report.metrics["fts-only"].wrong_scope_retrieval_rate > 0.0);
+        assert!(report.metrics["vector-only"].wrong_scope_retrieval_rate > 0.0);
         for mode in ["fts-only", "vector-only", "hybrid"] {
             let metrics = &report.metrics[mode];
             assert!(metrics.recall_at_5.is_finite());

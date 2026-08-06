@@ -265,10 +265,29 @@ fn run_reindex(scope: StoreScope, output: &Output) -> i32 {
         Ok(paths) => paths,
         Err(error) => return report_error(error, output),
     };
-    match core::reindex_store(&paths) {
+    let (embedder, model_error) = match configured_embedder() {
+        Ok(embedder) => (embedder, None),
+        Err(error) => (None, Some(error)),
+    };
+    match core::reindex_store_with_embedder(&paths, embedder.as_deref()) {
         Ok(report) => {
             output.line(&format!("Reindexed: {}", report.indexed));
             report_invalid_files(&report.invalid_files, output);
+            if let Some(error) = model_error {
+                output.error(&format!("semantic index unavailable: {error}"));
+            }
+            if let Some(semantic) = report.semantic {
+                if semantic.status == "unavailable" {
+                    output.error(&format!(
+                        "semantic index unavailable: {}",
+                        semantic
+                            .message
+                            .unwrap_or_else(|| "configure a verified model".to_owned())
+                    ));
+                } else if let Some(version) = semantic.model_version {
+                    output.line(&format!("Semantic index: {} ({version})", semantic.status));
+                }
+            }
             0
         }
         Err(error) => report_error(anyhow::Error::new(error), output),

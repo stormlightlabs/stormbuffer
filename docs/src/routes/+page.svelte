@@ -8,10 +8,7 @@
 
 <svelte:head>
 	<title>Stormbuffer documentation</title>
-	<meta
-		name="description"
-		content="Documentation for Stormbuffer, a local-first memory store for people and agents."
-	/>
+	<meta name="description" content="Documentation for Stormbuffer, a local-first memory store for people and agents." />
 </svelte:head>
 
 <SiteHeader {docs} />
@@ -21,8 +18,8 @@
 		<p class="eyebrow">stormbuffer · documentation</p>
 		<h1 id="landing-title">Inspectable Memory.</h1>
 		<p class="landing-lede">
-			Stormbuffer stores durable facts, decisions, procedures, and project checkpoints as readable,
-			indexed Markdown—then finds the right context when you need it.
+			Stormbuffer stores durable facts, decisions, procedures, and project checkpoints as readable, indexed
+			Markdown—then finds the right context when you need it.
 		</p>
 		<div class="landing-actions">
 			<a class="button-link" href={resolve('/docs/installation/')}>Get started</a>
@@ -34,17 +31,16 @@
 		<figure class="terminal" aria-labelledby="terminal-caption">
 			<figcaption id="terminal-caption">
 				<span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-				<span>~/projects/stormbuffer</span>
+				<span>Example session · output abridged</span>
 			</figcaption>
 			<pre><code
-					><span class="prompt">$</span> sbuf --project init
-Initialized private project store at .sbuf
+					><span class="prompt">$</span> sbuf --project init --shared
+Initialized shared project store at .sbuf
 
-<span class="prompt">$</span> sbuf search "why is the index disposable?"
-<span class="result">decision · The core owns canonical writes</span>
-Markdown records are authoritative. SQLite can be rebuilt.
-<span class="meta">project · 0.94 · architecture</span></code
-				></pre>
+<span class="prompt">$</span> sbuf --project search "canonical records" --limit 1
+<span class="result">Canonical records survive projection failures</span>
+Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildable.
+<span class="meta">decision · project:agent-memory · prefix</span></code></pre>
 		</figure>
 	</section>
 

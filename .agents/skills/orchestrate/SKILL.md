@@ -39,8 +39,10 @@ opaque values; never infer them from layout or examples.
 Start each instance with Luna xhigh through Pi's ChatGPT provider:
 
 ```sh
-herdr agent start <first-name> --kind pi --pane <root-pane-id> -- --provider openai-codex --model gpt-5.6-luna --thinking xhigh
-herdr agent start <second-name> --kind pi --pane <split-pane-id> -- --provider openai-codex --model gpt-5.6-luna --thinking xhigh
+herdr agent start <first-name> --kind pi --pane <root-pane-id> -- \
+    --provider openai-codex --model gpt-5.6-luna --thinking xhigh
+herdr agent start <second-name> --kind pi --pane <split-pane-id> -- \
+    --provider openai-codex --model gpt-5.6-luna --thinking xhigh
 ```
 
 Use short unique names matching `[a-z][a-z0-9_-]{0,31}`. Omit the second
@@ -73,9 +75,10 @@ claim as verification.
 
 ## Paired review mode
 
-When the user asks for a review, or a completed delegated change warrants an
-independent review, reuse the two Pi instances (with fresh context) as complementary
-read-only, reviewers.
+Once the user has explicitly invoked this orchestration skill, use paired review
+when they ask for a review or when a completed delegated change warrants an
+independent review. Start or restart two Pi instances so each review begins with
+fresh context; the review instances remain read-only.
 
 Prompt both before waiting so they work concurrently:
 
@@ -86,13 +89,16 @@ Prompt both before waiting so they work concurrently:
   assumptions. Prefer a small number of consequential findings over nits.
 
 Give both reviewers the same target, intent, changed-file list, and relevant
-constraints. Require findings in this form:
+constraints. Use only `blocker`, `high`, `medium`, or `low` severity and require
+findings in this form:
 
 ```text
-severity · path:line — problem → impact → fix direction
+- [severity: blocker|high|medium|low] path:line — evidence; recommendation
 ```
 
-Wait until both reviewers finish before acting on either report. Merge rather
+Wait until both reviewers finish before acting on either report. If one instance
+times out or blocks, inspect it, send one focused follow-up, and disclose the
+missing half if it still cannot report. Merge rather
 than concatenate:
 
 - deduplicate the same root cause
@@ -102,8 +108,9 @@ than concatenate:
 Ground every finding in inspected code and label downstream effects that were
 not verified.
 
-For changes owned by the current task, fix confirmed findings and run one fresh
-paired pass when the fix materially changes behavior.
+For changes owned by the current task, the orchestrating agent—not either
+read-only reviewer—fixes confirmed findings and runs one fresh paired pass when
+the fix materially changes behavior.
 
 For external review, remain read-only. Never publish review feedback or mutate a
 pull request without the user's explicit request.

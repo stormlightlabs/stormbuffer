@@ -1,11 +1,10 @@
 use std::sync::Once;
 
-use rusqlite::{Connection, params};
+use rusqlite::types::Value;
+use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use serde::Serialize;
 
 use crate::{Embedder, Embedding, Error, Result};
-
-const MAX_VECTOR_CANDIDATES: usize = 1000;
 
 #[derive(Clone, Debug, Default)]
 pub struct VectorFilter {
@@ -33,6 +32,8 @@ pub struct VectorMetadata {
     pub model_checksum: String,
     pub dimension: usize,
     pub table_name: String,
+    pub canonical_fingerprint: String,
+    pub projection_fingerprint: String,
 }
 
 pub trait VectorIndex {
@@ -55,7 +56,7 @@ impl<'a> SqliteVectorIndex<'a> {
         register_sqlite_vec();
         let row = connection
             .query_row(
-                "SELECT index_id, model_version, model_checksum, dimension, table_name FROM vector_indexes WHERE active = 1 ORDER BY index_id DESC LIMIT 1",
+                "SELECT index_id, model_version, model_checksum, dimension, table_name, canonical_fingerprint, projection_fingerprint FROM vector_indexes WHERE active = 1 ORDER BY index_id DESC LIMIT 1",
                 [],
                 |row| {
                     Ok(VectorMetadata {
@@ -64,6 +65,8 @@ impl<'a> SqliteVectorIndex<'a> {
                         model_checksum: row.get(2)?,
                         dimension: row.get::<_, i64>(3)? as usize,
                         table_name: row.get(4)?,
+                        canonical_fingerprint: row.get(5)?,
+                        projection_fingerprint: row.get(6)?,
                     })
                 },
             )
@@ -83,6 +86,8 @@ impl<'a> SqliteVectorIndex<'a> {
         connection: &mut Connection,
         embedder: &dyn Embedder,
         documents: &[VectorDocument],
+        canonical_fingerprint: String,
+        projection_fingerprint: String,
     ) -> Result<VectorMetadata> {
         register_sqlite_vec();
         let dimension = embedder.dimension();
@@ -121,6 +126,8 @@ impl<'a> SqliteVectorIndex<'a> {
             model_checksum: embedder.model_checksum().to_owned(),
             dimension,
             table_name: table_name.clone(),
+            canonical_fingerprint,
+            projection_fingerprint,
         };
         let quoted = quote_identifier(&table_name)?;
         let result = (|| {
@@ -132,8 +139,16 @@ impl<'a> SqliteVectorIndex<'a> {
                 .map_err(|source| db_error("create vector table", source))?;
             connection
                 .execute(
-                    "INSERT INTO vector_indexes(index_id, model_version, model_checksum, dimension, table_name, active) VALUES (?1, ?2, ?3, ?4, ?5, 0)",
-                    params![metadata.index_id, metadata.model_version, metadata.model_checksum, metadata.dimension as i64, metadata.table_name],
+                    "INSERT INTO vector_indexes(index_id, model_version, model_checksum, dimension, table_name, canonical_fingerprint, projection_fingerprint, active) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)",
+                    params![
+                        metadata.index_id,
+                        metadata.model_version,
+                        metadata.model_checksum,
+                        metadata.dimension as i64,
+                        metadata.table_name,
+                        metadata.canonical_fingerprint,
+                        metadata.projection_fingerprint,
+                    ],
                 )
                 .map_err(|source| db_error("record vector metadata", source))?;
             for (document, embedding) in documents.iter().zip(embeddings.iter()) {
@@ -192,6 +207,34 @@ impl<'a> SqliteVectorIndex<'a> {
         }
         result.map(|()| metadata)
     }
+
+    pub(crate) fn cleanup_obsolete(connection: &Connection, active_index_id: i64) -> Result<()> {
+        let mut statement = connection
+            .prepare("SELECT index_id, table_name FROM vector_indexes WHERE index_id != ?1")
+            .map_err(|source| db_error("find obsolete vector indexes", source))?;
+        let obsolete = statement
+            .query_map(params![active_index_id], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|source| db_error("read obsolete vector indexes", source))?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|source| db_error("read obsolete vector indexes", source))?;
+        drop(statement);
+
+        for (_, table_name) in &obsolete {
+            let quoted = quote_identifier(table_name)?;
+            connection
+                .execute(&format!("DROP TABLE IF EXISTS {quoted}"), [])
+                .map_err(|source| db_error("remove obsolete vector table", source))?;
+        }
+        connection
+            .execute(
+                "DELETE FROM vector_indexes WHERE index_id != ?1",
+                params![active_index_id],
+            )
+            .map_err(|source| db_error("remove obsolete vector metadata", source))?;
+        Ok(())
+    }
 }
 
 impl VectorIndex for SqliteVectorIndex<'_> {
@@ -215,15 +258,40 @@ impl VectorIndex for SqliteVectorIndex<'_> {
                 ),
             ));
         }
+        let requested = limit.max(1);
+        if filter.scopes.as_ref().is_some_and(Vec::is_empty)
+            || filter.kinds.as_ref().is_some_and(Vec::is_empty)
+            || filter.statuses.as_ref().is_some_and(Vec::is_empty)
+            || filter.accesses.as_ref().is_some_and(Vec::is_empty)
+        {
+            return Ok(Vec::new());
+        }
         let quoted = quote_identifier(&self.metadata.table_name)?;
-        let mut statement = self
+        let total: usize = self
             .connection
-            .prepare(&format!("SELECT record_id, chunk_id, scope, kind, status, access, distance FROM {quoted} WHERE embedding MATCH ?1 AND k = ?2"))
-            .map_err(|source| db_error("prepare vector search", source))?;
-        let rows = statement
-            .query_map(
-                params![vector_blob(&embedding.values), MAX_VECTOR_CANDIDATES as i64],
-                |row| {
+            .query_row(&format!("SELECT count(*) FROM {quoted}"), [], |row| {
+                row.get::<_, i64>(0).map(|count| count.max(0) as usize)
+            })
+            .map_err(|source| db_error("count vector candidates", source))?;
+        if total == 0 {
+            return Ok(Vec::new());
+        }
+
+        let mut candidate_count = requested.saturating_mul(4).max(requested).min(total);
+        loop {
+            let sql = format!(
+                "SELECT record_id, chunk_id, scope, kind, status, access, distance FROM {quoted} WHERE embedding MATCH ?1 AND k = ?2"
+            );
+            let values = [
+                Value::Blob(vector_blob(&embedding.values)),
+                Value::Integer(candidate_count as i64),
+            ];
+            let mut statement = self
+                .connection
+                .prepare(&sql)
+                .map_err(|source| db_error("prepare vector search", source))?;
+            let rows = statement
+                .query_map(params_from_iter(values.iter()), |row| {
                     Ok(VectorHit {
                         record_id: row.get(0)?,
                         chunk_id: row.get(1)?,
@@ -233,20 +301,23 @@ impl VectorIndex for SqliteVectorIndex<'_> {
                         access: row.get(5)?,
                         distance: row.get(6)?,
                     })
-                },
-            )
-            .map_err(|source| db_error("run vector search", source))?;
-        let mut hits = Vec::new();
-        for row in rows {
-            let hit = row.map_err(|source| db_error("read vector search result", source))?;
-            if matches_filter(&hit, filter) {
-                hits.push(hit);
-                if hits.len() >= limit.clamp(1, MAX_VECTOR_CANDIDATES) {
-                    break;
+                })
+                .map_err(|source| db_error("run vector search", source))?;
+            let mut hits = Vec::new();
+            for row in rows {
+                let hit = row.map_err(|source| db_error("read vector search result", source))?;
+                if matches_filter(&hit, filter) {
+                    hits.push(hit);
+                    if hits.len() >= requested {
+                        break;
+                    }
                 }
             }
+            if hits.len() >= requested || candidate_count == total {
+                return Ok(hits);
+            }
+            candidate_count = candidate_count.saturating_mul(2).min(total);
         }
-        Ok(hits)
     }
 }
 
@@ -325,5 +396,3 @@ fn quote_identifier(name: &str) -> Result<String> {
 fn db_error(operation: &'static str, source: rusqlite::Error) -> Error {
     Error::Index { operation, source }
 }
-
-use rusqlite::OptionalExtension;

@@ -18,7 +18,7 @@ use crate::vector::{
 };
 use crate::{Error, Record, StorePaths, StoreScope};
 
-pub const INDEX_SCHEMA_VERSION: u32 = 3;
+pub const INDEX_SCHEMA_VERSION: u32 = 4;
 const MAX_CHUNK_WORDS: usize = 160;
 const DEFAULT_SEARCH_LIMIT: usize = 20;
 const MAX_SEARCH_LIMIT: usize = 100;
@@ -167,6 +167,14 @@ pub struct SyncReport {
     pub skipped: usize,
     pub removed: usize,
     pub invalid_files: Vec<SyncInvalidFile>,
+    pub semantic: Option<SemanticIndexReport>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SemanticIndexReport {
+    pub status: String,
+    pub model_version: Option<String>,
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -456,6 +464,13 @@ pub fn sync_store(paths: &StorePaths) -> crate::Result<SyncReport> {
 }
 
 pub fn reindex_store(paths: &StorePaths) -> crate::Result<SyncReport> {
+    reindex_store_with_embedder(paths, None)
+}
+
+pub fn reindex_store_with_embedder(
+    paths: &StorePaths,
+    embedder: Option<&dyn Embedder>,
+) -> crate::Result<SyncReport> {
     let _lock = acquire_store_mutation_lock(paths)?;
     let destination = index_path(paths);
     let parent = destination.parent().ok_or_else(|| {
@@ -478,7 +493,24 @@ pub fn reindex_store(paths: &StorePaths) -> crate::Result<SyncReport> {
 
     let result = (|| {
         let mut fresh = Index::open_at(&temporary)?;
-        let report = fresh.sync_canonical(paths)?;
+        let mut report = fresh.sync_canonical(paths)?;
+        report.semantic = Some(match embedder {
+            Some(embedder) => {
+                fresh.rebuild_vectors(paths, embedder)?;
+                SemanticIndexReport {
+                    status: "rebuilt".to_owned(),
+                    model_version: Some(embedder.model_version().to_owned()),
+                    message: None,
+                }
+            }
+            None => SemanticIndexReport {
+                status: "unavailable".to_owned(),
+                model_version: None,
+                message: Some(
+                    "no verified embedding model was supplied; run `stormbuffer init` when online, then `stormbuffer reindex`".to_owned(),
+                ),
+            },
+        });
         fresh.checkpoint()?;
         drop(fresh);
 
@@ -556,7 +588,7 @@ pub fn rebuild_vector_index(
 ) -> crate::Result<VectorMetadata> {
     let _lock = acquire_store_mutation_lock(paths)?;
     let mut index = Index::open_at(&index_path(paths))?;
-    index.rebuild_vectors(embedder)
+    index.rebuild_vectors(paths, embedder)
 }
 
 pub fn context_store(
@@ -696,6 +728,11 @@ fn context_from_hits(
     hits: Vec<SearchHit>,
     embedding_version: Option<String>,
 ) -> crate::Result<ContextResult> {
+    let omitted_by_limit = hits.len().saturating_sub(options.search.bounded_limit());
+    let hits: Vec<_> = hits
+        .into_iter()
+        .take(options.search.bounded_limit())
+        .collect();
     let budget = options.budget;
     let mut used_tokens = 0;
     let mut truncated = false;
@@ -755,7 +792,7 @@ fn context_from_hits(
             budget,
             used_tokens,
             truncated,
-            omitted_results: hits.len().saturating_sub(blocks.len()),
+            omitted_results: omitted_by_limit + hits.len().saturating_sub(blocks.len()),
             index_version: INDEX_SCHEMA_VERSION,
             embedding_version,
             retrieval_mode: retrieval_mode_name(options.search.mode).to_owned(),
@@ -934,7 +971,26 @@ impl Index {
             .map_err(|source| db_error("checkpoint the index", source))
     }
 
-    fn rebuild_vectors(&mut self, embedder: &dyn Embedder) -> crate::Result<VectorMetadata> {
+    fn rebuild_vectors(
+        &mut self,
+        paths: &StorePaths,
+        embedder: &dyn Embedder,
+    ) -> crate::Result<VectorMetadata> {
+        let canonical_fingerprint = canonical_fingerprint(paths)?;
+        let projection_fingerprint = self.projection_fingerprint()?;
+        if let Some(active) = SqliteVectorIndex::active(&self.connection)?
+            && active.metadata().model_version == embedder.model_version()
+            && active.metadata().model_checksum == embedder.model_checksum()
+            && active.metadata().dimension == embedder.dimension()
+            && active.metadata().canonical_fingerprint == canonical_fingerprint
+            && active.metadata().projection_fingerprint == projection_fingerprint
+        {
+            let metadata = active.metadata().clone();
+            drop(active);
+            SqliteVectorIndex::cleanup_obsolete(&self.connection, metadata.index_id)?;
+            return Ok(metadata);
+        }
+
         let mut statement = self.connection.prepare(
             "SELECT r.record_id, c.chunk_id, s.name, r.kind, r.status, r.access, c.retrieval_text FROM chunks c JOIN records r ON r.record_id = c.record_id JOIN scopes s ON s.scope_id = r.scope_id ORDER BY r.record_id, c.ordinal",
         ).map_err(|source| db_error("prepare vector backfill", source))?;
@@ -954,7 +1010,83 @@ impl Index {
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(|source| db_error("read vector backfill", source))?;
         drop(statement);
-        SqliteVectorIndex::rebuild(&mut self.connection, embedder, &documents)
+        let metadata = SqliteVectorIndex::rebuild(
+            &mut self.connection,
+            embedder,
+            &documents,
+            canonical_fingerprint,
+            projection_fingerprint,
+        )?;
+        SqliteVectorIndex::cleanup_obsolete(&self.connection, metadata.index_id)?;
+        Ok(metadata)
+    }
+
+    fn projection_fingerprint(&self) -> crate::Result<String> {
+        let mut hasher = blake3::Hasher::new();
+        let mut records = self
+            .connection
+            .prepare(
+                "SELECT r.record_id, r.path, r.content_hash, r.kind, r.status, r.access, s.name FROM records r JOIN scopes s ON s.scope_id = r.scope_id ORDER BY r.path",
+            )
+            .map_err(|source| db_error("prepare projection fingerprint", source))?;
+        let rows = records
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                ))
+            })
+            .map_err(|source| db_error("read projection fingerprint", source))?;
+        for row in rows {
+            let (record_id, path, content_hash, kind, status, access, scope) =
+                row.map_err(|source| db_error("read projection fingerprint", source))?;
+            for value in [
+                record_id.as_str(),
+                path.as_str(),
+                content_hash.as_str(),
+                kind.as_str(),
+                status.as_str(),
+                access.as_str(),
+                scope.as_str(),
+            ] {
+                fingerprint_value(&mut hasher, value);
+            }
+            let mut chunks = self
+                .connection
+                .prepare(
+                    "SELECT chunk_id, retrieval_text, text, token_count FROM chunks WHERE record_id = ?1 ORDER BY ordinal",
+                )
+                .map_err(|source| db_error("prepare chunk fingerprint", source))?;
+            let chunk_rows = chunks
+                .query_map(params![record_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, i64>(3)?,
+                    ))
+                })
+                .map_err(|source| db_error("read chunk fingerprint", source))?;
+            for chunk in chunk_rows {
+                let (chunk_id, retrieval_text, text, token_count) =
+                    chunk.map_err(|source| db_error("read chunk fingerprint", source))?;
+                let token_count = token_count.to_string();
+                for value in [
+                    chunk_id.as_str(),
+                    retrieval_text.as_str(),
+                    text.as_str(),
+                    token_count.as_str(),
+                ] {
+                    fingerprint_value(&mut hasher, value);
+                }
+            }
+        }
+        Ok(hasher.finalize().to_hex().to_string())
     }
 
     fn vector_hits(
@@ -967,13 +1099,17 @@ impl Index {
         let Some(vector) = SqliteVectorIndex::active(&self.connection)? else {
             return Ok(Vec::new());
         };
+        let canonical_fingerprint = canonical_fingerprint(paths)?;
+        let projection_fingerprint = self.projection_fingerprint()?;
         if vector.metadata().model_version != embedder.model_version()
             || vector.metadata().model_checksum != embedder.model_checksum()
             || vector.metadata().dimension != embedder.dimension()
+            || vector.metadata().canonical_fingerprint != canonical_fingerprint
+            || vector.metadata().projection_fingerprint != projection_fingerprint
         {
             return Err(Error::embedding(
                 "search vector index",
-                "active vector index uses a different model; run semantic reindex",
+                "active semantic index is stale for the canonical or lexical projection; run `stormbuffer sync` followed by `stormbuffer reindex`",
             ));
         }
         let scopes = options.allowed_scopes.clone().unwrap_or_else(|| {
@@ -1004,23 +1140,44 @@ impl Index {
         let mut hits = Vec::with_capacity(vector_hits.len());
         for vector_hit in vector_hits {
             let row = self.connection.query_row(
-                "SELECT c.text, r.title, r.path FROM chunks c JOIN records r ON r.record_id = c.record_id WHERE c.chunk_id = ?1",
-                params![vector_hit.chunk_id],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)),
+                "SELECT c.text, r.record_id, r.title, r.kind, s.name, r.status, r.access, r.path FROM chunks c JOIN records r ON r.record_id = c.record_id JOIN scopes s ON s.scope_id = r.scope_id WHERE c.chunk_id = ?1 AND r.record_id = ?2",
+                params![vector_hit.chunk_id, vector_hit.record_id],
+                |row| Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                )),
             ).optional().map_err(|source| db_error("read vector result", source))?;
-            let Some((text, title, path)) = row else {
+            let Some((text, record_id, title, kind, scope, status, access, path)) = row else {
                 continue;
             };
+            let current = crate::vector::VectorHit {
+                record_id: record_id.clone(),
+                chunk_id: vector_hit.chunk_id.clone(),
+                scope: scope.clone(),
+                kind: kind.clone(),
+                status: status.clone(),
+                access: access.clone(),
+                distance: vector_hit.distance,
+            };
+            if !vector_hit_matches_filter(&current, &filter) {
+                continue;
+            }
             hits.push(SearchHit {
-                record_id: vector_hit.record_id.clone(),
+                record_id,
                 chunk_id: vector_hit.chunk_id,
                 title,
-                kind: vector_hit.kind,
-                scope: vector_hit.scope,
-                status: vector_hit.status,
-                access: vector_hit.access,
+                kind,
+                scope,
+                status,
+                access,
                 text,
-                sources: self.sources_for(&vector_hit.record_id)?,
+                sources: self.sources_for(&current.record_id)?,
                 path,
                 score: 1.0 / (1.0 + vector_hit.distance.abs()),
                 lexical_match_reason: "vector".to_owned(),
@@ -1554,6 +1711,13 @@ fn migrate(connection: &Connection) -> crate::Result<()> {
             )
             .map_err(|source| db_error("apply index migration 3", source))?;
     }
+    if version < 4 {
+        transaction
+            .execute_batch(
+                "ALTER TABLE vector_indexes ADD COLUMN canonical_fingerprint TEXT NOT NULL DEFAULT '';\n                 ALTER TABLE vector_indexes ADD COLUMN projection_fingerprint TEXT NOT NULL DEFAULT '';\n                 INSERT INTO index_metadata(key, value) VALUES ('vector_schema_version', '2') ON CONFLICT(key) DO UPDATE SET value=excluded.value;\n                 PRAGMA user_version = 4;",
+            )
+            .map_err(|source| db_error("apply index migration 4", source))?;
+    }
     transaction
         .commit()
         .map_err(|source| db_error("commit index migration", source))
@@ -1611,6 +1775,27 @@ fn collect_markdown_paths_inner(directory: &Path, paths: &mut Vec<PathBuf>) -> c
     Ok(())
 }
 
+fn canonical_fingerprint(paths: &StorePaths) -> crate::Result<String> {
+    let mut hasher = blake3::Hasher::new();
+    for path in collect_markdown_paths(&paths.records)? {
+        let markdown = fs::read(&path)
+            .map_err(|source| Error::io("read canonical record for semantic freshness", source))?;
+        fingerprint_value(&mut hasher, &path.display().to_string());
+        fingerprint_value(
+            &mut hasher,
+            &content_hash(std::str::from_utf8(&markdown).map_err(|_| {
+                Error::invalid_input(format!("{} is not valid UTF-8", path.display()))
+            })?),
+        );
+    }
+    Ok(hasher.finalize().to_hex().to_string())
+}
+
+fn fingerprint_value(hasher: &mut blake3::Hasher, value: &str) {
+    hasher.update(&(value.len() as u64).to_le_bytes());
+    hasher.update(value.as_bytes());
+}
+
 fn current_scope(paths: &StorePaths) -> Option<String> {
     match paths.scope {
         StoreScope::Global => Some("global".to_owned()),
@@ -1643,6 +1828,25 @@ fn scope_rank(scope: &str, current: Option<&str>) -> u8 {
     } else {
         0
     }
+}
+
+fn vector_hit_matches_filter(hit: &crate::vector::VectorHit, filter: &VectorFilter) -> bool {
+    filter
+        .scopes
+        .as_ref()
+        .is_none_or(|values| values.iter().any(|value| value == &hit.scope))
+        && filter
+            .kinds
+            .as_ref()
+            .is_none_or(|values| values.iter().any(|value| value == &hit.kind))
+        && filter
+            .statuses
+            .as_ref()
+            .is_none_or(|values| values.iter().any(|value| value == &hit.status))
+        && filter
+            .accesses
+            .as_ref()
+            .is_none_or(|values| values.iter().any(|value| value == &hit.access))
 }
 
 fn sort_hits(hits: &mut [SearchHit], current: Option<&str>) {
@@ -1684,10 +1888,13 @@ fn fuse_hits(
         let reason = hit.match_reasons.clone();
         match entries.get_mut(&key) {
             Some(entry) => {
-                if entry.lexical_rank.is_none() || hit.score > entry.hit.score {
+                let rank = rank + 1;
+                let better_rank = entry.lexical_rank.is_none_or(|current| rank < current);
+                entry.lexical_rank =
+                    Some(entry.lexical_rank.map_or(rank, |current| current.min(rank)));
+                if better_rank && (entry.semantic_rank.is_none() || hit.score > entry.hit.score) {
                     entry.hit = hit;
                 }
-                entry.lexical_rank = Some(rank + 1);
                 entry.reasons.extend(reason);
             }
             None => {
@@ -1709,13 +1916,19 @@ fn fuse_hits(
         let reason = hit.match_reasons.clone();
         match entries.get_mut(&key) {
             Some(entry) => {
-                if (entry.semantic_rank.is_none() || hit.score > entry.hit.score)
-                    && (entry.lexical_rank.is_none() || hit.score >= entry.hit.score)
-                {
+                let rank = rank + 1;
+                let better_rank = entry.semantic_rank.is_none_or(|current| rank < current);
+                entry.semantic_rank = Some(
+                    entry
+                        .semantic_rank
+                        .map_or(rank, |current| current.min(rank)),
+                );
+                if better_rank && (entry.lexical_rank.is_none() || hit.score >= entry.hit.score) {
                     entry.hit = hit.clone();
                 }
-                entry.semantic_rank = Some(rank + 1);
-                entry.vector_distance = hit.vector_distance;
+                if better_rank {
+                    entry.vector_distance = hit.vector_distance;
+                }
                 entry.reasons.extend(reason);
             }
             None => {

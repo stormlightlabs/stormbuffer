@@ -20,13 +20,17 @@ pub use embedder::{
     MODEL_MANIFEST_VERSION, ModelArtifact, ModelManifest, default_model_manifest,
     ensure_default_model, l2_normalize, model_cache_dir, platform_model_cache_dir,
 };
-pub use evaluation::{EvaluationModeReport, EvaluationQuery, EvaluationReport, run_evaluation};
+pub use evaluation::{
+    EvaluationModeReport, EvaluationQuery, EvaluationReport, run_evaluation,
+    run_synthetic_evaluation,
+};
 pub use index::{
     ContextBlock, ContextOptions, ContextReceipt, ContextResult, DoctorIssue, DoctorReport,
-    RetrievalMode, SearchOptions, SearchResult, SourceReceipt, SyncInvalidFile, SyncReport,
-    WatchOptions, WatchReport, chunk_record, content_hash, context_store, context_stores,
-    context_stores_with_embedder, doctor_store, index_path, rebuild_vector_index, reindex_store,
-    search_store, search_stores, search_stores_with_embedder, sync_store, watch_store,
+    RetrievalMode, SearchOptions, SearchResult, SemanticIndexReport, SourceReceipt,
+    SyncInvalidFile, SyncReport, WatchOptions, WatchReport, chunk_record, content_hash,
+    context_store, context_stores, context_stores_with_embedder, doctor_store, index_path,
+    rebuild_vector_index, reindex_store, reindex_store_with_embedder, search_store, search_stores,
+    search_stores_with_embedder, sync_store, watch_store,
 };
 pub use record::{
     Access, RECORD_FORMAT_VERSION, Record, RecordId, RecordKind, RecordStatus, Scope, Source,
@@ -38,7 +42,7 @@ pub use vector::{SqliteVectorIndex, VectorFilter, VectorHit, VectorIndex, Vector
 const STORE_FORMAT_VERSION: u32 = 1;
 const PRIVATE_PROJECT_GITIGNORE: &[u8] = b"*\n!.gitignore\n";
 /// TODO: embed this with include_str! using gitignore.txt
-const SHARED_PROJECT_GITIGNORE: &str = "# Keep only configuration, ignore rules, and canonical Markdown tracked.\n/cache/\n/index/\n/projection/\n/projections/\n/fts/\n/vectors/\n/embeddings/\n/models/\n/locks/\n/tmp/\n/logs/\n**/*.db*\n**/*.sqlite*\n**/*.wal\n**/*.shm\n**/*.fts*\n**/*.vec*\n**/*.lock\n**/*.tmp\n**/*.log\n";
+const SHARED_PROJECT_GITIGNORE: &str = "# Track only configuration, ignore rules, and canonical Markdown records.\n*\n!.gitignore\n!store.toml\n!records/\n!records/**/\n!records/**/*.md\n";
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -662,13 +666,12 @@ mod tests {
         let ignore = fs::read_to_string(shared_paths.root.join(".gitignore"))
             .expect("read shared ignore rules");
         for pattern in [
-            "/cache/",
-            "/models/",
-            "/locks/",
-            "**/*.db*",
-            "**/*.sqlite*",
-            "**/*.tmp",
-            "**/*.log",
+            "*",
+            "!.gitignore",
+            "!store.toml",
+            "!records/",
+            "!records/**/",
+            "!records/**/*.md",
         ] {
             assert!(
                 ignore.lines().any(|line| line == pattern),

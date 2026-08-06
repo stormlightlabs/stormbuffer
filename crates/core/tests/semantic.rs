@@ -95,7 +95,9 @@ fn vector_backfill_records_metadata_and_applies_scope_kind_and_active_filters() 
     );
     sync_store(&paths).expect("sync");
     let embedder = DeterministicEmbedder::new("semantic-v1", 24).expect("embedder");
-    rebuild_vector_index(&paths, &embedder).expect("vector backfill");
+    let first_metadata = rebuild_vector_index(&paths, &embedder).expect("vector backfill");
+    let second_metadata = rebuild_vector_index(&paths, &embedder).expect("reuse vector index");
+    assert_eq!(first_metadata.index_id, second_metadata.index_id);
 
     let mut options = SearchOptions::for_store(&paths);
     options.mode = RetrievalMode::Semantic;
@@ -134,6 +136,45 @@ fn vector_backfill_records_metadata_and_applies_scope_kind_and_active_filters() 
         )
         .expect("vector metadata");
     assert_eq!(metadata, ("semantic-v1".to_owned(), 24));
+    let vector_tables: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name LIKE 'vectors_%'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("vector table count");
+    assert_eq!(vector_tables, 1);
+}
+
+#[test]
+fn semantic_search_rejects_vectors_when_canonical_content_changes() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    write_record(
+        &paths,
+        "01989af2-4305-7b19-88b1-e8ae4ea9a205",
+        "global",
+        "fact",
+        "active",
+        "fresh canonical content",
+    );
+    sync_store(&paths).expect("sync");
+    let embedder = DeterministicEmbedder::new("semantic-v1", 24).expect("embedder");
+    rebuild_vector_index(&paths, &embedder).expect("vector backfill");
+    let path = paths
+        .records
+        .join("01989af2-4305-7b19-88b1-e8ae4ea9a205.md");
+    let changed = fs::read_to_string(&path)
+        .expect("read record")
+        .replace("fresh canonical content", "changed canonical content");
+    fs::write(path, changed).expect("change canonical record");
+
+    let mut options = SearchOptions::for_store(&paths);
+    options.mode = RetrievalMode::Semantic;
+    let error = search_stores_with_embedder(&[paths], "fresh canonical", options, &embedder)
+        .expect_err("stale vectors must not escape");
+    assert!(error.to_string().contains("semantic index is stale"));
 }
 
 struct FailingEmbedder;

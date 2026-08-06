@@ -82,3 +82,15 @@ printf '%s\n' '.sbuf/' >> .gitignore
 
 If a team shares records, review their source references and repository access policy first.
 Keep secrets, raw transcripts, and generic project documentation out of the memory store.
+
+To create a shared store:
+
+```sh
+stormbuffer --project init --shared
+```
+
+Commit only `.sbuf/store.toml`, `.sbuf/.gitignore`, and the canonical Markdown files under
+`.sbuf/records/`.
+
+The generated allowlist keeps indexes, models, locks, temporary files, and
+other machine-local artifacts out of version control.
