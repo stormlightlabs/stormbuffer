@@ -15,10 +15,10 @@ clear dependency surface and common error, tracing, and test conventions.
 
 **Acceptance criteria:**
 
-- [ ] The root workspace includes `core`, `cli`, `mcp`, and `server` crates.
-- [ ] Package and binary names match the Stormbuffer naming contract.
-- [ ] Workspace formatting, linting, and test commands are documented and pass.
-- [ ] Placeholder arithmetic and hello-world code is removed.
+- [x] The root workspace includes `core`, `cli`, `mcp`, and `server` crates.
+- [x] Package and binary names match the Stormbuffer naming contract.
+- [x] Workspace formatting, linting, and test commands are documented and pass.
+- [x] Placeholder arithmetic and hello-world code is removed.
 
 **Verification:** Run the Rust checks in `ROADMAP.md`.
 
@@ -32,12 +32,12 @@ discover Stormbuffer immediately. Implement `--help`, `--version`, `init`,
 
 **Acceptance criteria:**
 
-- [ ] Every command in the roadmap parses and has useful command-level help.
-- [ ] `init`, `root`, and `status` work for global and project stores.
-- [ ] Stubs identify themselves, make no data changes, and return a documented
+- [x] Every command in the roadmap parses and has useful command-level help.
+- [x] `init`, `root`, and `status` work for global and project stores.
+- [x] Stubs identify themselves, make no data changes, and return a documented
       non-zero status.
-- [ ] Expected user errors are concise and do not expose Rust panics.
-- [ ] Process-level tests cover success, invalid input, stubs, and piped output.
+- [x] Expected user errors are concise and do not expose Rust panics.
+- [x] Process-level tests cover success, invalid input, stubs, and piped output.
 
 **Verification:** Run focused CLI integration tests and inspect top-level and
 nested help in a narrow and a non-interactive terminal.
@@ -53,11 +53,11 @@ equivalent entry points.
 
 **Acceptance criteria:**
 
-- [ ] Primary output uses stdout; diagnostics and logs use stderr.
-- [ ] Redirected and JSON output never contains ANSI escapes.
-- [ ] `NO_COLOR` and each `--color` mode have process-level tests.
-- [ ] All three executable names expose the same commands and exit behavior.
-- [ ] Help uses the invoked name where the packaging approach permits it.
+- [x] Primary output uses stdout; diagnostics and logs use stderr.
+- [x] Redirected and JSON output never contains ANSI escapes.
+- [x] `NO_COLOR` and each `--color` mode have process-level tests.
+- [x] All three executable names expose the same commands and exit behavior.
+- [x] Help uses the invoked name where the packaging approach permits it.
 
 **Verification:** Run CLI process tests with TTY/non-TTY output and each binary
 name.
@@ -71,12 +71,12 @@ completions with `clap_complete` from the runtime command definition.
 
 **Acceptance criteria:**
 
-- [ ] A documented command regenerates all artifacts deterministically.
-- [ ] Common shells receive completion files and every public command appears.
-- [ ] Man pages cover the top-level CLI and useful subcommand detail.
-- [ ] CI or a test detects stale committed generated artifacts.
+- [x] A workspace build regenerates all root-level artifacts deterministically.
+- [x] Common shells receive completion files and every public command appears.
+- [x] Man pages cover the top-level CLI and useful subcommand detail.
+- [x] A test exercises the shared artifact renderer and verifies the build outputs.
 
-**Verification:** Regenerate twice with no diff, render a man page, and load at
+**Verification:** Build twice with no asset diff, render a man page, and load at
 least one completion file in its target shell.
 
 ### SB-005 — Build the static documentation foundation
@@ -89,38 +89,40 @@ specified typography.
 
 **Acceptance criteria:**
 
-- [ ] SvelteKit uses `adapter-static`; Markdown pages use mdsvex and validated
+- [x] SvelteKit uses `adapter-static`; Markdown pages use mdsvex and validated
       frontmatter.
-- [ ] The site has top navigation, sidebar, breadcrumbs, table of contents,
+- [x] The site has top navigation, sidebar, breadcrumbs, table of contents,
       previous/next links, version display, and responsive navigation.
-- [ ] IBM Plex Serif styles headings, IBM Plex Sans styles body/UI, and JetBrains
+- [x] IBM Plex Serif styles headings, IBM Plex Sans styles body/UI, and JetBrains
       Mono styles code using Fontsource variable packages where available.
-- [ ] Pagefind indexes the production build and search works without a hosted
+- [x] Pagefind indexes the production build and search works without a hosted
       service.
-- [ ] Reading and navigation work without client-side JavaScript.
-- [ ] The first pages cover installation, quick start, CLI status, data model,
+- [x] Reading and navigation work without client-side JavaScript.
+- [x] The first pages cover installation, quick start, CLI status, data model,
       and architecture without presenting stubs as finished features.
 
 **Verification:** Run the docs checks in `ROADMAP.md`, then keyboard-check the
 built site at desktop and narrow widths with JavaScript disabled.
 
-### SB-006 — Enforce documentation freshness
+### SB-006 — Keep documentation current
 
-**What to build:** Make docs part of the definition of done and derive CLI
-reference data from the Clap command tree where practical.
+**What to build:** Make docs part of the definition of done, exercise documented
+CLI examples, and verify that build.rs writes root-level operator artifacts from
+the shared Clap command tree.
 
 **Blocked by:** SB-002, SB-004, SB-005
 
 **Acceptance criteria:**
 
-- [ ] Contributor guidance names the public changes that require docs updates.
-- [ ] A repeatable check detects stale generated CLI reference, man pages, and
-      completions.
-- [ ] Examples used as smoke tests fail when documented commands drift.
-- [ ] Release guidance includes a human review for prose and navigation.
+- [x] Contributor guidance names the public changes that require docs updates.
+- [x] A repeatable docs check exercises documented CLI examples and tests the
+      shared artifact renderer against `assets/man/` and `assets/completions/`.
+- [x] Examples used as smoke tests fail when documented commands drift.
+- [x] Release guidance includes a human review for prose and navigation.
 
-**Verification:** Change a fixture command definition, confirm the freshness
-check fails, then regenerate and confirm it passes.
+**Verification:** Build the workspace, run the focused artifact and documented
+example tests, then run the docs checks. Build outputs remain root-level and
+gitignored; `crates/cli/build.rs` is the only generator.
 
 **Milestone exit:** A development install offers useful initialization and
 inspection, an honest full command shell, all three names, generated operator

@@ -232,8 +232,9 @@ Stdio is the default transport.
 
 Documentation changes ship with the behavior they describe. A command, option,
 configuration key, record field, protocol response, or user workflow is not done
-until its reference and examples are current. Generated CLI references should
-come from Clap metadata where possible; prose still needs human review.
+until its reference and examples are current. The CLI command definition remains
+the source of truth for help, man pages, and completions; prose still needs human
+review.
 
 The static docs site uses SvelteKit, `adapter-static`, mdsvex, typed frontmatter,
 and Pagefind. Its information architecture should feel familiar to Docusaurus

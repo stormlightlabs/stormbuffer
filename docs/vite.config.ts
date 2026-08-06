@@ -1,7 +1,9 @@
+import rehypeSlug from 'rehype-slug';
 import { mdsvex } from 'mdsvex';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-static';
+import { extractTableOfContents } from './src/lib/content/table-of-contents.ts';
 import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
@@ -9,11 +11,10 @@ export default defineConfig({
 		sveltekit({
 			compilerOptions: {
 				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
-				runes: ({ filename }) =>
-					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
+				runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 			},
 			adapter: adapter(),
-			preprocess: [mdsvex({ extensions: ['.svx', '.md'] })],
+			preprocess: [mdsvex({ extensions: ['.svx', '.md'], rehypePlugins: [rehypeSlug, extractTableOfContents] })],
 			extensions: ['.svelte', '.svx', '.md']
 		})
 	],
@@ -24,11 +25,7 @@ export default defineConfig({
 				extends: './vite.config.ts',
 				test: {
 					name: 'client',
-					browser: {
-						enabled: true,
-						provider: playwright(),
-						instances: [{ browser: 'chromium', headless: true }]
-					},
+					browser: { enabled: true, provider: playwright(), instances: [{ browser: 'chromium', headless: true }] },
 					include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
 					exclude: ['src/lib/server/**']
 				}

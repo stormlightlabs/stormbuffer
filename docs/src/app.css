@@ -1,0 +1,136 @@
+@import '@fontsource-variable/ibm-plex-sans';
+@import '@fontsource/ibm-plex-serif/400.css';
+@import '@fontsource/ibm-plex-serif/600.css';
+@import '@fontsource-variable/jetbrains-mono';
+
+:root {
+	font-family: 'IBM Plex Sans Variable', 'IBM Plex Sans', sans-serif;
+	color: #17332d;
+	background: #f7f5ef;
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+	--ink: #17332d;
+	--muted: #5f706a;
+	--line: #d7ded8;
+	--paper: #f7f5ef;
+	--paper-deep: #eceee7;
+	--white: #fffdf8;
+	--teal: #0b6b5e;
+	--teal-dark: #075044;
+	--coral: #d56f4d;
+	--yellow: #f1c96b;
+	--shadow: 0 12px 30px rgb(23 51 45 / 8%);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html {
+	scroll-behavior: smooth;
+	background: var(--paper);
+}
+
+body {
+	min-width: 320px;
+	margin: 0;
+	background: var(--paper);
+	color: var(--ink);
+	font-size: 1rem;
+	line-height: 1.65;
+}
+
+body,
+button,
+input {
+	font-family: inherit;
+}
+
+button,
+input {
+	font-size: inherit;
+}
+
+a {
+	color: var(--teal-dark);
+	text-decoration-thickness: 0.08em;
+	text-underline-offset: 0.16em;
+}
+
+a:hover {
+	color: var(--coral);
+}
+
+h1,
+h2,
+h3 {
+	font-family: 'IBM Plex Serif', Georgia, serif;
+	font-weight: 600;
+	letter-spacing: -0.025em;
+}
+
+:focus-visible {
+	outline: 3px solid var(--coral);
+	outline-offset: 3px;
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+.skip-link {
+	position: absolute;
+	top: 0.75rem;
+	left: 1rem;
+	z-index: 20;
+	padding: 0.5rem 0.75rem;
+	background: var(--yellow);
+	color: var(--ink);
+	transform: translateY(-180%);
+}
+
+.skip-link:focus {
+	transform: translateY(0);
+}
+
+.eyebrow {
+	margin: 0 0 0.85rem;
+	color: var(--coral);
+	font-family: 'IBM Plex Mono Variable', 'JetBrains Mono Variable', monospace;
+	font-size: 0.7rem;
+	font-weight: 650;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.button-link {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 2.75rem;
+	padding: 0.55rem 0.9rem;
+	border: 1px solid var(--teal);
+	background: var(--teal);
+	color: var(--white);
+	font-weight: 650;
+	text-decoration: none;
+}
+
+.button-link:hover {
+	background: var(--teal-dark);
+	color: var(--white);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	html {
+		scroll-behavior: auto;
+	}
+}
