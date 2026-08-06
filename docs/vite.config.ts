@@ -1,6 +1,10 @@
+import { icons as bootstrapIcons } from '@iconify-json/bi';
+import { icons as remixIcons } from '@iconify-json/ri';
+import presetIcons from '@unocss/preset-icons';
 import rehypeSlug from 'rehype-slug';
 import { escapeSvelte, mdsvex } from 'mdsvex';
 import { createHighlighter } from 'shiki';
+import UnoCSS from 'unocss/vite';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-static';
@@ -27,6 +31,7 @@ function documentationLanguage(language: string): 'shellscript' | 'text' | 'toml
 
 export default defineConfig({
 	plugins: [
+		UnoCSS({ presets: [presetIcons({ collections: { bi: () => bootstrapIcons, ri: () => remixIcons } })] }),
 		sveltekit({
 			// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
 			compilerOptions: {

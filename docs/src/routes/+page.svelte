@@ -24,7 +24,7 @@
 		<div class="landing-actions">
 			<a class="button-link" href={resolve('/docs/installation/')}>Get started</a>
 			<a class="text-link" href={resolve('/docs/concepts/architecture/')}>
-				Learn More <span aria-hidden="true">→</span>
+				Learn More <span class="i-ri-arrow-right-line" aria-hidden="true"></span>
 			</a>
 		</div>
 
@@ -55,7 +55,7 @@ Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildab
 				<a href={resolve(`/docs/${doc.slug}/`)}>
 					<span class="doc-number">{String(index + 1).padStart(2, '0')}</span>
 					<span class="doc-label"><small>{doc.section}</small><strong>{doc.title}</strong></span>
-					<span class="doc-arrow" aria-hidden="true">→</span>
+					<span class="doc-arrow i-ri-arrow-right-line" aria-hidden="true"></span>
 				</a>
 			{/each}
 		</nav>
@@ -127,7 +127,7 @@ Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildab
 		padding: 0 0.9rem;
 		border-bottom: 1px solid var(--code-line);
 		color: color-mix(in srgb, var(--code-ink) 62%, transparent);
-		font-family: 'JetBrains Mono Variable', monospace;
+		font-family: 'Google Sans Code Variable', 'Google Sans Code', monospace;
 		font-size: 0.72rem;
 		text-align: center;
 	}
@@ -157,7 +157,8 @@ Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildab
 		padding: clamp(1.25rem, 4vw, 2rem);
 		overflow-x: auto;
 		font:
-			0.86rem/1.75 'JetBrains Mono Variable',
+			0.86rem/1.75 'Google Sans Code Variable',
+			'Google Sans Code',
 			monospace;
 	}
 
@@ -180,7 +181,7 @@ Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildab
 	}
 
 	.section-heading h2 {
-		max-width: 25ch;
+		max-width: 32ch;
 		margin: 0 0 2.5rem;
 		font-size: clamp(2rem, 5vw, 3rem);
 		line-height: 1.08;
@@ -208,7 +209,7 @@ Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildab
 	.doc-number,
 	.doc-arrow {
 		color: var(--coral);
-		font-family: 'JetBrains Mono Variable', monospace;
+		font-family: 'Google Sans Code Variable', 'Google Sans Code', monospace;
 		font-size: 0.72rem;
 	}
 
@@ -225,7 +226,7 @@ Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildab
 	}
 
 	.doc-label strong {
-		font-family: 'IBM Plex Serif', Georgia, serif;
+		font-family: 'Google Sans Variable', 'Google Sans', sans-serif;
 		font-size: 1.15rem;
 	}
 

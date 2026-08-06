@@ -10,7 +10,7 @@ Stormbuffer treats canonical Markdown as the backup boundary. An export contains
 record Markdown, including source references and lifecycle metadata. SQLite, full-text and vector
 projections, model downloads, locks, logs, and temporary files are disposable.
 
-## Export and move a store
+## Exporting and Moving
 
 Initialize a project store before exporting it:
 
@@ -35,7 +35,7 @@ stormbuffer --project import stormbuffer-memory.json --on-scope remap
 A scope remap changes `project:<name>` to the selected project's scope. It is explicit because it
 changes record metadata. Imports preserve IDs and Markdown when no policy requires a change.
 
-## Collision policies
+## Collisions
 
 Stormbuffer stops instead of guessing when an import meets existing data. Use these options only
 after reviewing the archive:
@@ -48,7 +48,7 @@ There is no automatic merge. `overwrite` replaces the selected canonical record;
 alone. `remap` assigns a new ID and updates supersession links inside the imported set. Keep a copy
 of the canonical files before using overwrite.
 
-## Recovery and garbage collection
+## Recovery
 
 Restore `.sbuf/store.toml`, `.sbuf/.gitignore`, and `.sbuf/records/` (or import an export archive),
 then rebuild projections:
@@ -57,6 +57,8 @@ then rebuild projections:
 stormbuffer --project sync
 stormbuffer --project reindex
 ```
+
+## Garbage Collection
 
 Inspect disposable data before removing it:
 
@@ -68,7 +70,7 @@ stormbuffer --project gc
 `gc` only considers known indexes, model-cache files, locks, logs, and temporary files. It never
 removes `store.toml`, `.gitignore`, or Markdown records. A dry run does not change anything.
 
-## Privacy and merge choices
+## Privacy and Merging
 
 Global stores are private user memory. Project stores are private by default; initialize with
 `stormbuffer --project init --shared` only when the repository should carry a curated memory set.

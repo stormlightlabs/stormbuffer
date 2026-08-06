@@ -7,7 +7,7 @@
 	let { docs, currentSlug = '' }: { docs: Doc[]; currentSlug?: string } = $props();
 
 	const primaryLinks = [
-		{ label: 'Get started', href: '/docs/installation/', slug: 'installation' },
+		{ label: 'Intro', href: '/docs/installation/', slug: 'installation' },
 		{ label: 'CLI', href: '/docs/cli/reference/', slug: 'cli/reference' },
 		{ label: 'Concepts', href: '/docs/concepts/architecture/', slug: 'concepts/architecture' }
 	] as const;
@@ -37,7 +37,7 @@
 			<div class="desktop-search"><Search id="header-search" /></div>
 			<ThemeToggle />
 			<details class="mobile-menu">
-				<summary><span aria-hidden="true">☰</span> Menu</summary>
+				<summary><span class="i-ri-menu-line" aria-hidden="true"></span><span>Menu</span></summary>
 				<div class="mobile-menu-panel">
 					<Search id="mobile-search" />
 					<nav aria-label="Mobile navigation">
@@ -58,6 +58,7 @@
 
 <style>
 	.site-header {
+		font-family: 'Google Sans Variable';
 		position: sticky;
 		top: 0;
 		z-index: 10;
@@ -140,6 +141,9 @@
 	}
 
 	.mobile-menu summary {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
 		padding: 0.45rem 0.65rem;
 		border: 1px solid var(--line);
 		border-radius: 0.35rem;

@@ -82,12 +82,12 @@
 		gap: 0.55rem;
 		margin-bottom: 0.8rem;
 		color: var(--teal);
-		font-family: 'IBM Plex Mono Variable', 'JetBrains Mono Variable', monospace;
+		font-family: 'Google Sans Code Variable', 'Google Sans Code', monospace;
 		font-size: 0.76rem;
 	}
 
 	.doc-heading h1 {
-		max-width: 14ch;
+		max-width: 20ch;
 		margin: 0;
 		color: var(--ink);
 		font-size: clamp(2.4rem, 5vw, 4.5rem);
@@ -162,7 +162,7 @@
 		border: 1px solid var(--line);
 		border-radius: 0.2rem;
 		background: var(--paper-deep);
-		font-family: 'JetBrains Mono Variable', 'JetBrains Mono', monospace;
+		font-family: 'Google Sans Code Variable', 'Google Sans Code', monospace;
 		font-size: 0.86em;
 	}
 
@@ -185,6 +185,9 @@
 
 	.doc-content :global(.copy-code) {
 		position: absolute;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 		top: 0.55rem;
 		right: 0.55rem;
 		min-height: 2.75rem;

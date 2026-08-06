@@ -18,13 +18,15 @@
 </script>
 
 <a class="copy-markdown" href={resolve('/docs/[...slug].md', { slug })} onclick={copy} aria-live="polite">
-	{label}
+	<span class="i-ri-file-copy-line" aria-hidden="true"></span>
+	<span>{label}</span>
 </a>
 
 <style>
 	.copy-markdown {
 		display: inline-flex;
 		align-items: center;
+		gap: 0.4rem;
 		min-height: 2.5rem;
 		padding: 0.45rem 0.75rem;
 		border: 1px solid var(--line);

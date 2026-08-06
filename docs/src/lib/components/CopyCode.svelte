@@ -10,21 +10,27 @@
 			const button = document.createElement('button');
 			button.type = 'button';
 			button.className = 'copy-code';
-			button.textContent = 'Copy';
 			button.setAttribute('aria-label', 'Copy code');
 			button.setAttribute('aria-live', 'polite');
+
+			const icon = document.createElement('span');
+			icon.className = 'i-ri-file-copy-line';
+			icon.setAttribute('aria-hidden', 'true');
+			const label = document.createElement('span');
+			label.textContent = 'Copy';
+			button.append(icon, label);
 
 			async function copy(): Promise<void> {
 				try {
 					await navigator.clipboard.writeText(codeElement.textContent ?? '');
-					button.textContent = 'Copied';
+					label.textContent = 'Copied';
 					button.setAttribute('aria-label', 'Code copied');
 				} catch {
-					button.textContent = 'Copy failed';
+					label.textContent = 'Copy failed';
 					button.setAttribute('aria-label', 'Code copy failed');
 				}
 				window.setTimeout(() => {
-					button.textContent = 'Copy';
+					label.textContent = 'Copy';
 					button.setAttribute('aria-label', 'Copy code');
 				}, 1600);
 			}

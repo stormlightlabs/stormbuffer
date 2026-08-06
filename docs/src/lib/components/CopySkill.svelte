@@ -16,9 +16,18 @@
 </script>
 
 <div class="skill-actions">
-	<button type="button" onclick={copy} aria-live="polite">{label}</button>
-	<a href={resolve('/stormbuffer-memory-skill.md')}>View raw skill</a>
-	<a href={resolve('/stormbuffer-memory-skill.md')} download="SKILL.md">Download SKILL.md</a>
+	<button type="button" onclick={copy} aria-live="polite">
+		<span class="i-ri-file-copy-line" aria-hidden="true"></span>
+		<span>{label}</span>
+	</button>
+	<a href={resolve('/stormbuffer-memory-skill.md')}>
+		<span class="i-ri-external-link-line" aria-hidden="true"></span>
+		<span>View raw skill</span>
+	</a>
+	<a href={resolve('/stormbuffer-memory-skill.md')} download="SKILL.md">
+		<span class="i-ri-download-line" aria-hidden="true"></span>
+		<span>Download SKILL.md</span>
+	</a>
 </div>
 
 <style>
@@ -33,6 +42,7 @@
 	a {
 		display: inline-flex;
 		align-items: center;
+		gap: 0.4rem;
 		min-height: 2.5rem;
 		padding: 0.45rem 0.75rem;
 		border: 1px solid var(--line);

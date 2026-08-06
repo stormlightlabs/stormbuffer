@@ -28,7 +28,7 @@
 	.toc-title {
 		margin: 0 0 0.85rem;
 		color: var(--coral);
-		font-family: 'IBM Plex Mono Variable', 'JetBrains Mono Variable', monospace;
+		font-family: 'Google Sans Code Variable', 'Google Sans Code', monospace;
 		font-size: 0.7rem;
 		font-weight: 650;
 		letter-spacing: 0.06em;
