@@ -10,19 +10,19 @@ Build Stormbuffer from a source checkout, then use the CLI to initialize and ins
 
 ## Build from a checkout
 
-Install Rust, then build the workspace from its root:
+Install Rust, then install the CLI from the workspace root:
 
 ```sh
-cargo build --workspace
+cargo install --path crates/cli --locked
 ```
 
 ## Confirm the installation
 
-Run the CLI version and help commands from the repository root:
+Run the CLI version and help commands:
 
 ```sh
-cargo run -p stormbuffer -- --version
-cargo run -p stormbuffer -- --help
+stormbuffer --version
+stormbuffer --help
 ```
 
 The installed command names are `stormbuffer`, `stormbuf`, and `sbuf`.
@@ -36,8 +36,8 @@ Stormbuffer uses a global store by default.
 Add `--project` to use the nearest `.sbuf/` directory instead:
 
 ```sh
-cargo run -p stormbuffer -- --project init
-cargo run -p stormbuffer -- --project status
+stormbuffer --project init
+stormbuffer --project status
 ```
 
 Project stores are private by default. Add `.sbuf/` to the project’s ignore rules before

@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import Breadcrumbs from './Breadcrumbs.svelte';
+	import CopyCode from './CopyCode.svelte';
+	import CopyMarkdown from './CopyMarkdown.svelte';
 	import PageNavigation from './PageNavigation.svelte';
 	import Sidebar from './Sidebar.svelte';
 	import SiteHeader from './SiteHeader.svelte';
@@ -33,10 +35,14 @@
 				</div>
 				<h1>{doc.title}</h1>
 				<p class="doc-description">{doc.description}</p>
+				<CopyMarkdown markdown={doc.markdown} slug={doc.slug} />
 			</header>
 			<div class="doc-content">
 				{@render content()}
 			</div>
+			{#key doc.slug}
+				<CopyCode />
+			{/key}
 		</article>
 		<PageNavigation previous={adjacent.previous} next={adjacent.next} />
 	</main>
@@ -94,6 +100,10 @@
 		color: var(--muted);
 		font-size: 1.12rem;
 		line-height: 1.55;
+	}
+
+	.doc-heading :global(.copy-markdown) {
+		margin-top: 1rem;
 	}
 
 	.doc-content {
@@ -157,15 +167,50 @@
 	}
 
 	.doc-content :global(pre) {
+		position: relative;
 		max-width: 52rem;
 		margin: 1.5rem 0;
-		padding: 1.15rem 1.25rem;
+		padding: 1.15rem 5rem 1.15rem 1.25rem;
 		overflow-x: auto;
 		border: 1px solid var(--code-line);
 		border-radius: 0.35rem;
 		background: var(--code-surface);
 		color: var(--code-ink);
 		box-shadow: 0.35rem 0.35rem 0 var(--yellow);
+	}
+
+	.doc-content :global(pre.shiki span) {
+		color: var(--shiki-light);
+	}
+
+	.doc-content :global(.copy-code) {
+		position: absolute;
+		top: 0.55rem;
+		right: 0.55rem;
+		min-height: 2.75rem;
+		padding: 0.35rem 0.6rem;
+		border: 1px solid var(--code-line);
+		border-radius: 0.25rem;
+		background: var(--code-surface);
+		color: var(--code-ink);
+		font:
+			650 0.72rem/1 'IBM Plex Sans Variable',
+			sans-serif;
+		cursor: pointer;
+	}
+
+	.doc-content :global(.copy-code:hover) {
+		border-color: var(--yellow);
+	}
+
+	:global(:root[data-theme='dark']) .doc-content :global(pre.shiki span) {
+		color: var(--shiki-dark);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:global(:root:not([data-theme='light'])) .doc-content :global(pre.shiki span) {
+			color: var(--shiki-dark);
+		}
 	}
 
 	.doc-content :global(pre code) {

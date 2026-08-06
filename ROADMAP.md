@@ -386,6 +386,37 @@ Exit: a person can operate the supported memory lifecycle and inspect an
 accessible, useful graph without the CLI, and both interfaces observe identical
 validation and policy.
 
+## v0.2 product priorities
+
+Version 0.2 should make the existing memory loop easy to adopt before it adds
+new retrieval machinery. Stormbuffer's useful boundary is durable project
+memory that remains readable, sourced, repairable, and under human control. It
+is not a hosted user-profile service or an autonomous knowledge graph.
+
+Work in this order:
+
+1. Deliver a five-minute first success: install Stormbuffer, initialize a
+   project store, connect one supported agent, propose a sourced memory, approve
+   it, and retrieve it with a citation. `doctor` must diagnose failures in that
+   path and point to a concrete remedy.
+2. Make agent setup copyable and verifiable. Ship one-command skill installation
+   and concise MCP examples for supported clients, with an end-to-end smoke test
+   that proves the agent is using the intended project store.
+3. Reduce capture effort without weakening review. Let agents turn session or
+   repository evidence into candidate memories, but keep activation and
+   destructive lifecycle changes explicitly human-controlled.
+4. Explain retrieval decisions. Show the selected memory's scope, lifecycle,
+   sources, and receipt so a person can understand why it appeared and correct
+   the underlying record or policy.
+5. Measure adoption before expanding the architecture. Test the first-success
+   flow with people unfamiliar with the project and track time to first cited
+   retrieval, setup failures, abandoned steps, and rejected proposals alongside
+   the retrieval evaluation corpus.
+
+Do not prioritize inferred knowledge graphs, broad connector catalogs, hosted
+profiles, or additional ranking stages unless first-use observations or checked-
+in retrieval evaluations demonstrate that they solve a measured failure.
+
 ## Cross-cutting completion rules
 
 Every milestone must keep the following checks green once their configuration

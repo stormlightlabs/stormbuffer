@@ -5,6 +5,11 @@ import { docSections } from './types';
 type MarkdownModule = { default: Component; metadata?: unknown };
 
 const markdownModules = import.meta.glob<MarkdownModule>('/src/content/docs/**/*.md', { eager: true });
+const markdownSources = import.meta.glob<string>('/src/content/docs/**/*.md', {
+	eager: true,
+	query: '?raw',
+	import: 'default'
+});
 
 const sectionSet = new Set<string>(docSections);
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/;
@@ -89,7 +94,8 @@ export const docs: Doc[] = Object.entries(markdownModules)
 	.map(([source, module]) => ({
 		...validateFrontmatter(module.metadata, source),
 		slug: sourceToSlug(source),
-		component: module.default
+		component: module.default,
+		markdown: markdownSources[source]
 	}))
 	.sort((left, right) => left.order - right.order);
 

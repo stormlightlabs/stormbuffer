@@ -1,5 +1,5 @@
 ---
-title: MCP reference
+title: MCP
 description: Run the bounded Stormbuffer MCP adapter over JSON-RPC stdio with the exact resource and tool surface.
 section: Reference
 group: Agents

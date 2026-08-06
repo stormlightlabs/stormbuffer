@@ -1,10 +1,29 @@
 import rehypeSlug from 'rehype-slug';
-import { mdsvex } from 'mdsvex';
+import { escapeSvelte, mdsvex } from 'mdsvex';
+import { createHighlighter } from 'shiki';
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-static';
 import { extractTableOfContents } from './src/lib/content/table-of-contents.ts';
 import { sveltekit } from '@sveltejs/kit/vite';
+
+const highlighter = await createHighlighter({
+	themes: ['github-light', 'github-dark'],
+	langs: ['shellscript', 'text', 'toml', 'json']
+});
+
+function documentationLanguage(language: string): 'shellscript' | 'text' | 'toml' | 'json' {
+	switch (language) {
+		case 'sh':
+			return 'shellscript';
+		case 'toml':
+		case 'json':
+		case 'text':
+			return language;
+		default:
+			return 'text';
+	}
+}
 
 export default defineConfig({
 	plugins: [
@@ -15,7 +34,22 @@ export default defineConfig({
 			},
 			adapter: adapter(),
 			preprocess: [
-				mdsvex({ extensions: ['.svx', '.md'], rehypePlugins: [rehypeSlug, extractTableOfContents] }),
+				mdsvex({
+					extensions: ['.svx', '.md'],
+					highlight: {
+						highlighter: (code, language) =>
+							escapeSvelte(
+								highlighter
+									.codeToHtml(code, {
+										lang: documentationLanguage(language ?? 'text'),
+										themes: { light: 'github-light', dark: 'github-dark' },
+										defaultColor: false
+									})
+									.replace(' tabindex="0"', '')
+							)
+					},
+					rehypePlugins: [rehypeSlug, extractTableOfContents]
+				}),
 				{
 					name: 'mdsvex-script-module-fix',
 					markup: ({ content, filename }) => {

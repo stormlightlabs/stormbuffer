@@ -14,4 +14,4 @@ export type DocFrontmatter = {
 	toc: DocHeading[];
 };
 
-export type Doc = DocFrontmatter & { slug: string; component: Component };
+export type Doc = DocFrontmatter & { slug: string; component: Component; markdown: string };

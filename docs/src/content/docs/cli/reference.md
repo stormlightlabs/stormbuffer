@@ -1,5 +1,5 @@
 ---
-title: CLI reference
+title: CLI
 description: >
   Initialize a store, locate it, and inspect its state from the Stormbuffer command line.
 section: Reference

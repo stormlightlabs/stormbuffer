@@ -1,5 +1,5 @@
 ---
-title: Backup, recovery, and shared stores
+title: Backup & Recovery
 description: Export canonical memory, rebuild disposable data, and choose what a project shares.
 section: Reference
 group: Workflows
