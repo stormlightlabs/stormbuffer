@@ -40,11 +40,11 @@ pub enum CliCommand {
     Status(StatusArgs),
     /// Add a human-authored memory.
     Add(AddArgs),
-    /// Propose an agent memory candidate (not implemented).
+    /// Propose an agent memory candidate for review.
     Propose(WriteStubArgs),
-    /// Approve a candidate memory (not implemented).
+    /// Approve a candidate memory.
     Approve(IdArgs),
-    /// Reject a candidate memory (not implemented).
+    /// Reject a candidate memory by archiving it.
     Reject(IdArgs),
     /// Edit a memory.
     Edit(EditArgs),
@@ -78,7 +78,7 @@ pub enum CliCommand {
     Export(PathArgs),
     /// Import canonical records (not implemented).
     Import(PathArgs),
-    /// Invoke the versioned JSON protocol (not implemented).
+    /// Invoke a versioned, noninteractive JSON operation.
     Invoke(InvokeArgs),
     /// Run the checked-in retrieval evaluation corpus.
     Evaluate,
@@ -102,13 +102,13 @@ pub struct StatusArgs {
 
 #[derive(Args, Debug)]
 pub struct WriteStubArgs {
-    /// Optional title that a future write command will use.
+    /// Optional candidate title.
     #[arg(long)]
     pub title: Option<String>,
-    /// Optional memory kind that a future write command will validate.
+    /// Optional candidate memory kind.
     #[arg(long)]
     pub kind: Option<String>,
-    /// Optional body that a future write command will store.
+    /// Optional candidate body.
     #[arg(long)]
     pub body: Option<String>,
 }

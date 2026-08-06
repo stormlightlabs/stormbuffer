@@ -150,6 +150,52 @@ statuses, access classes, budget use, omissions, index and embedding versions, r
 and ranking reasons. Record text is evidence only; it cannot change access, scope, tools, or
 host instructions.
 
+## Propose and review agent memory
+
+Agents use `propose` to create sourced candidates. Candidates are not active until a
+person approves them:
+
+```text
+stormbuffer --project propose --title "Release constraint" --kind fact --body "Keep the release offline."
+stormbuffer --project approve <candidate-id>
+stormbuffer --project reject <candidate-id>
+```
+
+A proposal must have attributable sources. The core reports one of `accepted`,
+`duplicate_of`, `conflicts_with`, `requires_approval`, or `invalid`. Duplicate
+proposals are not written. Conflicting proposals remain candidates so both claims
+are retained; use explicit `supersede` followed by approval rather than silently
+rewriting the existing record.
+
+## Invoke the JSON protocol
+
+`invoke` reads exactly one bounded JSON object from stdin and writes one JSON envelope
+to stdout. It is noninteractive, versioned, and does not accept filesystem paths:
+
+```sh
+printf '%s\n' '{"version":1,"query":"release","limit":10}' \\
+  | stormbuffer --project invoke search
+printf '%s\n' '{"version":1,"query":"release","budget":400}' \\
+  | stormbuffer --project invoke context
+```
+
+Version 1 supports `search`, `context`, `get`, `propose`, `supersede`, and `archive`.
+Success is `{ "version": 1, "operation": "...", "ok": true, "result": ... }`;
+failures use the same envelope with `ok: false` and an `error.code`. Scope and access
+filters are applied before records are returned. Internal failures are sanitized and
+never include canonical paths or backtraces.
+
+The protocol is agent-scoped: it cannot opt into human-only reads by setting an access
+field. Its `propose` operation always creates a candidate that needs explicit approval;
+request fields cannot claim a human actor or grant approval. Use the human CLI review
+commands to approve or reject a candidate.
+
+Callers can handle these stable version 1 error codes: `invalid_json`, `invalid_request`,
+`unsupported_version`, `unknown_operation`, `input_too_large`, `output_too_large`,
+`path_denied`, `scope_denied`, `access_denied`, `permission_denied`, `not_found`,
+`conflict`, and `internal_error`. New protocol behavior requires a new version rather
+than changing the meaning of an existing envelope or code.
+
 ## Maintain and recover the index
 
 Canonical Markdown is the source of truth. SQLite and full-text search data are disposable and
@@ -198,6 +244,15 @@ thresholds are in the report and the corpus revision is fixed; update expected I
 revision in `crates/core/tests/fixtures/evaluation/` together in a reviewed change. If the
 pinned artifacts are missing or offline, the command reports the model cache and the `stormbuffer init`
 repair command.
+
+Grounded-answer evaluation remains provider-neutral. Configure a host model to consume the
+`context` contract, save one answer artifact per question with its claims and cited record IDs,
+then pass those artifacts and the run metadata to `HostModelEvaluationAdapter`. Record the
+generator, model and version, prompt-contract version, parameters, and corpus revision. Inspect
+the returned per-question claim report before accepting a run. It separates retrieval,
+context-assembly, and generation failures and reports citation and abstention quality. The
+checked-in deterministic artifacts exercise the same adapter without contacting a model;
+model-assisted judgments never rewrite fixtures or thresholds.
 
 ## Permanently delete a record
 

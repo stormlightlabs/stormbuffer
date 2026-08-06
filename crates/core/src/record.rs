@@ -1,6 +1,7 @@
 use std::fmt;
 use std::str::FromStr;
 
+use serde::Serialize;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 use uuid::Uuid;
@@ -87,7 +88,7 @@ impl RecordStatus {
     pub fn can_transition_to(self, next: Self) -> bool {
         matches!(
             (self, next),
-            (Self::Candidate, Self::Active)
+            (Self::Candidate, Self::Active | Self::Archived)
                 | (Self::Active, Self::Superseded | Self::Archived)
                 | (Self::Archived, Self::Active)
         ) || self == next
@@ -116,6 +117,55 @@ impl FromStr for RecordStatus {
             "archived" => Ok(Self::Archived),
             _ => Err("must be one of candidate, active, superseded, or archived".to_owned()),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProposalActor {
+    Human,
+    Agent,
+}
+
+impl fmt::Display for ProposalActor {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Human => "human",
+            Self::Agent => "agent",
+        })
+    }
+}
+
+impl FromStr for ProposalActor {
+    type Err = String;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        match value {
+            "human" => Ok(Self::Human),
+            "agent" => Ok(Self::Agent),
+            _ => Err("must be one of human or agent".to_owned()),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProposalOutcome {
+    Accepted,
+    DuplicateOf,
+    ConflictsWith,
+    RequiresApproval,
+    Invalid,
+}
+
+impl fmt::Display for ProposalOutcome {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Accepted => "accepted",
+            Self::DuplicateOf => "duplicate_of",
+            Self::ConflictsWith => "conflicts_with",
+            Self::RequiresApproval => "requires_approval",
+            Self::Invalid => "invalid",
+        })
     }
 }
 
@@ -217,6 +267,26 @@ impl Record {
             ));
         }
 
+        Ok(())
+    }
+
+    pub fn validate_provenance(&self) -> Result<()> {
+        if self.sources.is_empty() {
+            return Err(Error::invalid_record(
+                "sources",
+                "must contain at least one attributable source",
+            ));
+        }
+        if self.sources.iter().any(|source| {
+            source.actor.eq_ignore_ascii_case("inference")
+                || source.reference.starts_with("inference:")
+                || source.reference.starts_with("inference://")
+        }) {
+            return Err(Error::invalid_record(
+                "sources",
+                "unsupported inference cannot be used as provenance",
+            ));
+        }
         Ok(())
     }
 

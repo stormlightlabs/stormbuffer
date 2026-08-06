@@ -10,8 +10,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use fs2::FileExt;
 use serde::Serialize;
 use stormbuffer_core::{
-    DestructionAcknowledgement, Error, RecordId, RecordRepository, RecordStatus, StoreInitMode,
-    StorePaths, StoreScope, Timestamp, initialize_store, parse_markdown, render_markdown,
+    DestructionAcknowledgement, Error, ProposalActor, ProposalOutcome, RecordId, RecordRepository,
+    RecordStatus, StoreInitMode, StorePaths, StoreScope, Timestamp, initialize_store,
+    parse_markdown, render_markdown,
 };
 
 struct TempStore {
@@ -260,4 +261,110 @@ fn forgetting_requires_a_typed_acknowledgement() {
         .forget(id, DestructionAcknowledgement::deliberate())
         .expect("forget with acknowledgement");
     assert!(repository.find(id).is_err());
+}
+
+#[test]
+fn agent_proposals_require_approval_and_rejection_archives_candidates() {
+    let store = TempStore::new();
+    let repository = store.repository();
+    let mut candidate = fixture_record();
+    candidate.id = RecordId::new_v7();
+    candidate.status = RecordStatus::Candidate;
+    candidate.title = "A sourced proposal".to_owned();
+    candidate.body = "A distinct proposal body".to_owned();
+
+    let proposal = repository
+        .propose(candidate, ProposalActor::Agent)
+        .expect("propose candidate");
+    assert_eq!(proposal.outcome, ProposalOutcome::RequiresApproval);
+    let id = proposal.record_id.parse().expect("proposal id");
+    assert_eq!(
+        repository.find(id).expect("find candidate").record().status,
+        RecordStatus::Candidate
+    );
+
+    let approved = repository.approve(id).expect("approve candidate");
+    assert_eq!(approved.outcome, ProposalOutcome::Accepted);
+    assert_eq!(
+        repository.find(id).expect("find approved").record().status,
+        RecordStatus::Active
+    );
+
+    let mut rejected = fixture_record();
+    rejected.id = RecordId::new_v7();
+    rejected.title = "Another sourced proposal".to_owned();
+    rejected.body = "Another distinct proposal body".to_owned();
+    let rejected = repository
+        .propose(rejected, ProposalActor::Agent)
+        .expect("propose second candidate");
+    let rejected_id = rejected.record_id.parse().expect("rejected id");
+    let result = repository.reject(rejected_id).expect("reject candidate");
+    assert_eq!(result.outcome, ProposalOutcome::Accepted);
+    assert_eq!(result.status.as_deref(), Some("archived"));
+}
+
+#[test]
+fn approval_revalidates_user_edited_candidate_provenance() {
+    let store = TempStore::new();
+    let repository = store.repository();
+    let mut candidate = fixture_record();
+    candidate.id = RecordId::new_v7();
+    candidate.status = RecordStatus::Candidate;
+    candidate.title = "Candidate edited after proposal".to_owned();
+    candidate.body = "A distinct candidate body".to_owned();
+
+    let proposal = repository
+        .propose(candidate, ProposalActor::Agent)
+        .expect("propose candidate");
+    let id = proposal.record_id.parse().expect("proposal id");
+    let stored = repository.find(id).expect("find candidate");
+    let mut edited = stored.record().clone();
+    edited.sources[0].actor = "inference".to_owned();
+    fs::write(
+        stored.path(),
+        render_markdown(&edited).expect("render edited candidate"),
+    )
+    .expect("edit candidate markdown");
+
+    let error = repository
+        .approve(id)
+        .expect_err("reject invalid provenance");
+    assert!(error.to_string().contains("inference"));
+    assert_eq!(
+        repository
+            .find(id)
+            .expect("candidate remains")
+            .record()
+            .status,
+        RecordStatus::Candidate
+    );
+}
+
+#[test]
+fn missing_provenance_is_invalid_and_conflicting_human_proposals_stay_candidates() {
+    let store = TempStore::new();
+    let repository = store.repository();
+    let existing = repository.add(fixture_record()).expect("add fixture");
+
+    let mut missing_source = existing.record().clone();
+    missing_source.id = RecordId::new_v7();
+    missing_source.sources.clear();
+    let invalid = repository
+        .propose(missing_source, ProposalActor::Agent)
+        .expect("invalid proposal result");
+    assert_eq!(invalid.outcome, ProposalOutcome::Invalid);
+    assert_eq!(repository.list(true).expect("list records").len(), 1);
+
+    let mut conflict = existing.record().clone();
+    conflict.id = RecordId::new_v7();
+    conflict.body = "A conflicting claim with the same title".to_owned();
+    let result = repository
+        .propose(conflict, ProposalActor::Human)
+        .expect("conflicting proposal result");
+    assert_eq!(result.outcome, ProposalOutcome::ConflictsWith);
+    let id = result.record_id.parse().expect("conflict id");
+    assert_eq!(
+        repository.find(id).expect("find conflict").record().status,
+        RecordStatus::Candidate
+    );
 }

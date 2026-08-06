@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error as ThisError;
 
 use super::{
-    DestructionAcknowledgement, Error, Record, RecordError, RecordId, RecordStatus, StorePaths,
-    Timestamp, parse_markdown, render_markdown,
+    DestructionAcknowledgement, Error, ProposalActor, ProposalOutcome, Record, RecordError,
+    RecordId, RecordStatus, StorePaths, Timestamp, parse_markdown, render_markdown,
 };
 
 const LOCK_DIRECTORY: &str = "locks";
@@ -40,6 +40,12 @@ pub enum RepositoryError {
     MustBeActive { id: RecordId, status: RecordStatus },
     #[error("record {id} must be archived, not {status}")]
     MustBeArchived { id: RecordId, status: RecordStatus },
+    #[error("record {id} is outside the selected scope")]
+    ScopeDenied { id: RecordId },
+    #[error("record {id} is not available to this access class")]
+    AccessDenied { id: RecordId },
+    #[error("record {id} must be a candidate, not {status}")]
+    MustBeCandidate { id: RecordId, status: RecordStatus },
     #[error("replacement {replacement} does not supersede {old}")]
     MissingSupersededLink {
         replacement: RecordId,
@@ -74,6 +80,37 @@ impl StoredRecord {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ProposalResult {
+    pub outcome: ProposalOutcome,
+    pub record_id: String,
+    pub related_id: Option<String>,
+    pub status: Option<String>,
+    pub message: Option<String>,
+}
+
+impl ProposalResult {
+    fn new(
+        outcome: ProposalOutcome,
+        record_id: RecordId,
+        related_id: Option<RecordId>,
+        status: Option<RecordStatus>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            outcome,
+            record_id: record_id.to_string(),
+            related_id: related_id.map(|id| id.to_string()),
+            status: status.map(|value| value.to_string()),
+            message: Some(message.into()),
+        }
+    }
+
+    fn invalid(record_id: RecordId, message: impl Into<String>) -> Self {
+        Self::new(ProposalOutcome::Invalid, record_id, None, None, message)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct RecordRepository {
     paths: StorePaths,
@@ -90,6 +127,7 @@ impl RecordRepository {
 
     pub fn add(&self, record: Record) -> Result<StoredRecord, Error> {
         record.validate()?;
+        self.validate_store_scope(&record)?;
         if record.status != RecordStatus::Active {
             return Err(Error::repository(RepositoryError::MustBeActive {
                 id: record.id,
@@ -117,9 +155,181 @@ impl RecordRepository {
         self.read_record(&path)
     }
 
+    pub fn propose(
+        &self,
+        mut record: Record,
+        actor: ProposalActor,
+    ) -> Result<ProposalResult, Error> {
+        let record_id = record.id;
+        if let Err(error) = record.validate().and_then(|_| record.validate_provenance()) {
+            return Ok(ProposalResult::invalid(record_id, error.to_string()));
+        }
+        self.validate_store_scope(&record)?;
+
+        let _lock = self.prepare_mutation()?;
+        let records = self.scan_locked()?;
+        if let Some(existing) = records.iter().find(|stored| stored.record.id == record.id) {
+            return Err(Error::repository(RepositoryError::DuplicateId {
+                id: record.id,
+                first: existing.path.clone(),
+                second: self.record_path(record.id),
+            }));
+        }
+        if let Some(existing) = matching_record(&records, &record, MatchKind::Duplicate) {
+            return Ok(ProposalResult::new(
+                ProposalOutcome::DuplicateOf,
+                record.id,
+                Some(existing.record.id),
+                Some(existing.record.status),
+                "proposal matches an existing memory",
+            ));
+        }
+
+        let conflict = matching_record(&records, &record, MatchKind::Conflict);
+        record.status = if conflict.is_some() {
+            RecordStatus::Candidate
+        } else {
+            match actor {
+                ProposalActor::Human => RecordStatus::Active,
+                ProposalActor::Agent => RecordStatus::Candidate,
+            }
+        };
+        record.updated_at = later_timestamp(record.created_at);
+        let markdown = render_markdown(&record)?;
+        let path = self.record_path(record.id);
+        write_atomic(&path, markdown.as_bytes())?;
+
+        if let Some(existing) = conflict {
+            return Ok(ProposalResult::new(
+                ProposalOutcome::ConflictsWith,
+                record.id,
+                Some(existing.record.id),
+                Some(record.status),
+                "proposal conflicts with an existing active or candidate memory; explicit supersession is required",
+            ));
+        }
+
+        let outcome = match actor {
+            ProposalActor::Human => ProposalOutcome::Accepted,
+            ProposalActor::Agent => ProposalOutcome::RequiresApproval,
+        };
+        Ok(ProposalResult::new(
+            outcome,
+            record.id,
+            None,
+            Some(record.status),
+            match outcome {
+                ProposalOutcome::Accepted => "human proposal was activated",
+                ProposalOutcome::RequiresApproval => "candidate awaits explicit approval",
+                _ => "proposal stored",
+            },
+        ))
+    }
+
+    pub fn approve(&self, id: RecordId) -> Result<ProposalResult, Error> {
+        let _lock = self.prepare_mutation()?;
+        let records = self.scan_locked()?;
+        let current = records
+            .iter()
+            .find(|stored| stored.record.id == id)
+            .cloned()
+            .ok_or_else(|| Error::repository(RepositoryError::NotFound { id }))?;
+        if current.record.status != RecordStatus::Candidate {
+            return Err(Error::repository(RepositoryError::MustBeCandidate {
+                id,
+                status: current.record.status,
+            }));
+        }
+        // A candidate is ordinary, user-editable Markdown. Revalidate the bytes
+        // read under the mutation lock instead of trusting checks performed when
+        // the proposal was first written.
+        current.record.validate()?;
+        current.record.validate_provenance()?;
+        self.validate_store_scope(&current.record)?;
+        if let Some(existing) =
+            matching_record_excluding(&records, &current.record, MatchKind::Duplicate, id)
+        {
+            return Ok(ProposalResult::new(
+                ProposalOutcome::DuplicateOf,
+                id,
+                Some(existing.record.id),
+                Some(RecordStatus::Candidate),
+                "candidate duplicates an existing memory",
+            ));
+        }
+        if let Some(existing) =
+            matching_record_excluding(&records, &current.record, MatchKind::Conflict, id)
+        {
+            return Ok(ProposalResult::new(
+                ProposalOutcome::ConflictsWith,
+                id,
+                Some(existing.record.id),
+                Some(RecordStatus::Candidate),
+                "candidate conflicts with an existing memory; supersede it explicitly before approval",
+            ));
+        }
+
+        let mut replacement = current.record.clone();
+        replacement.transition_to(RecordStatus::Active)?;
+        replacement.updated_at = later_timestamp(replacement.created_at);
+        let markdown = render_markdown(&replacement)?;
+        write_atomic(&current.path, markdown.as_bytes())?;
+        Ok(ProposalResult::new(
+            ProposalOutcome::Accepted,
+            id,
+            None,
+            Some(RecordStatus::Active),
+            "candidate approved",
+        ))
+    }
+
+    pub fn reject(&self, id: RecordId) -> Result<ProposalResult, Error> {
+        let _lock = self.prepare_mutation()?;
+        let current = self.find_locked(id)?;
+        if current.record.status != RecordStatus::Candidate {
+            return Err(Error::repository(RepositoryError::MustBeCandidate {
+                id,
+                status: current.record.status,
+            }));
+        }
+        let mut replacement = current.record.clone();
+        replacement.transition_to(RecordStatus::Archived)?;
+        replacement.updated_at = later_timestamp(replacement.created_at);
+        let markdown = render_markdown(&replacement)?;
+        write_atomic(&current.path, markdown.as_bytes())?;
+        Ok(ProposalResult::new(
+            ProposalOutcome::Accepted,
+            id,
+            None,
+            Some(RecordStatus::Archived),
+            "candidate rejected and archived",
+        ))
+    }
+
     pub fn find(&self, id: RecordId) -> Result<StoredRecord, Error> {
         let _lock = self.prepare_mutation()?;
         self.find_locked(id)
+    }
+
+    pub fn find_allowed(
+        &self,
+        id: RecordId,
+        allowed_scopes: &[String],
+        allowed_access: &[super::Access],
+    ) -> Result<StoredRecord, Error> {
+        let _lock = self.prepare_mutation()?;
+        let stored = self.find_locked(id)?;
+        if !allowed_scopes.is_empty()
+            && !allowed_scopes
+                .iter()
+                .any(|scope| scope == stored.record.scope.as_str())
+        {
+            return Err(Error::repository(RepositoryError::ScopeDenied { id }));
+        }
+        if !allowed_access.is_empty() && !allowed_access.contains(&stored.record.access) {
+            return Err(Error::repository(RepositoryError::AccessDenied { id }));
+        }
+        Ok(stored)
     }
 
     pub fn list(&self, include_inactive: bool) -> Result<Vec<StoredRecord>, Error> {
@@ -181,6 +391,8 @@ impl RecordRepository {
         mut replacement: Record,
     ) -> Result<StoredRecord, Error> {
         replacement.validate()?;
+        replacement.validate_provenance()?;
+        self.validate_store_scope(&replacement)?;
         let _lock = self.prepare_mutation()?;
         let records = self.scan_locked()?;
         let old = records
@@ -196,6 +408,11 @@ impl RecordRepository {
         }
         if replacement.id == old_id {
             return Err(Error::repository(RepositoryError::ImmutableId));
+        }
+        if replacement.scope != old.record.scope {
+            return Err(Error::repository(RepositoryError::ScopeDenied {
+                id: replacement.id,
+            }));
         }
         if !replacement.supersedes.contains(&old_id) {
             return Err(Error::repository(RepositoryError::MissingSupersededLink {
@@ -334,6 +551,44 @@ impl RecordRepository {
         self.paths.records.join(format!("{id}.md"))
     }
 
+    fn validate_store_scope(&self, record: &Record) -> Result<(), Error> {
+        let allowed = match self.paths.scope {
+            super::StoreScope::Global => record.scope.as_str() == "global",
+            super::StoreScope::Project => {
+                let expected = self
+                    .paths
+                    .root
+                    .parent()
+                    .and_then(Path::file_name)
+                    .and_then(|name| name.to_str())
+                    .map(|name| {
+                        let sanitized: String = name
+                            .chars()
+                            .map(|character| {
+                                if character.is_whitespace()
+                                    || character == ':'
+                                    || character.is_control()
+                                {
+                                    '-'
+                                } else {
+                                    character
+                                }
+                            })
+                            .collect();
+                        format!("project:{sanitized}")
+                    });
+                expected.as_deref() == Some(record.scope.as_str())
+            }
+        };
+        if allowed {
+            Ok(())
+        } else {
+            Err(Error::repository(RepositoryError::ScopeDenied {
+                id: record.id,
+            }))
+        }
+    }
+
     fn journal_path(&self) -> PathBuf {
         self.paths.root.join(LOCK_DIRECTORY).join(SUPERSEDE_JOURNAL)
     }
@@ -386,6 +641,56 @@ impl RecordRepository {
         remove_file_sync(&path)?;
         Ok(())
     }
+}
+
+#[derive(Clone, Copy)]
+enum MatchKind {
+    Duplicate,
+    Conflict,
+}
+
+fn matching_record<'a>(
+    records: &'a [StoredRecord],
+    record: &Record,
+    kind: MatchKind,
+) -> Option<&'a StoredRecord> {
+    matching_record_excluding(records, record, kind, record.id)
+}
+
+fn matching_record_excluding<'a>(
+    records: &'a [StoredRecord],
+    record: &Record,
+    kind: MatchKind,
+    excluded_id: RecordId,
+) -> Option<&'a StoredRecord> {
+    records.iter().find(|stored| {
+        let existing = &stored.record;
+        existing.id != excluded_id
+            && matches!(
+                existing.status,
+                RecordStatus::Candidate | RecordStatus::Active
+            )
+            && existing.scope == record.scope
+            && existing.kind == record.kind
+            && normalize(&existing.title) == normalize(&record.title)
+            && match kind {
+                MatchKind::Duplicate => normalize(&existing.body) == normalize(&record.body),
+                MatchKind::Conflict => normalize(&existing.body) != normalize(&record.body),
+            }
+    })
+}
+
+fn normalize(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
+}
+
+fn later_timestamp(created_at: Timestamp) -> Timestamp {
+    let now = Timestamp::now_utc();
+    if now < created_at { created_at } else { now }
 }
 
 #[derive(Debug, Deserialize, Serialize)]

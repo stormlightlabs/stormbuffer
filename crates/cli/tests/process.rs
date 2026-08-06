@@ -1,8 +1,9 @@
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // TODO: use the tempdir crate
@@ -58,6 +59,40 @@ where
         .env("STORMBUFFER_TEST_MODE", "1")
         .output()
         .expect("run CLI process")
+}
+
+fn run_json<I, S>(name: &str, directory: &Path, arguments: I, input: &str) -> Output
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let home = directory.join("home");
+    let data = directory.join("data");
+    let cache = directory.join("cache");
+    let mut command = Command::new(binary(name));
+    command
+        .current_dir(directory)
+        .args(arguments)
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("LOCALAPPDATA", &data)
+        .env("APPDATA", &data)
+        .env("XDG_DATA_HOME", &data)
+        .env("XDG_CACHE_HOME", &cache)
+        .env("STORMBUFFER_TEST_MODE", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().expect("run CLI JSON protocol");
+    child
+        .stdin
+        .take()
+        .expect("open JSON stdin")
+        .write_all(input.as_bytes())
+        .expect("write JSON request");
+    child
+        .wait_with_output()
+        .expect("collect JSON protocol output")
 }
 
 fn run_with_editor<I, S>(name: &str, directory: &Path, arguments: I) -> Output
@@ -179,11 +214,16 @@ fn shared_project_init_is_explicit_and_global_shared_is_rejected() {
     assert!(project.join(".sbuf/store.toml").is_file());
     let ignore =
         fs::read_to_string(project.join(".sbuf/.gitignore")).expect("read shared ignore rules");
-    assert!(ignore.contains("/models/"));
-    assert!(ignore.contains("**/*.sqlite*"));
-    assert!(ignore.contains("**/*.lock"));
-    assert!(ignore.contains("**/*.tmp"));
-    assert!(ignore.contains("**/*.log"));
+    for pattern in [
+        "*",
+        "!.gitignore",
+        "!store.toml",
+        "!records/",
+        "!records/**/",
+        "!records/**/*.md",
+    ] {
+        assert!(ignore.lines().any(|line| line == pattern));
+    }
 
     let status = run("stormbuffer", &project, ["--project", "status"]);
     assert_eq!(status.status.code(), Some(0));
@@ -386,6 +426,238 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
     assert_eq!(results.len(), 2);
     assert_eq!(results[0]["scope"], "project:demo");
     assert_eq!(results[1]["scope"], "global");
+
+    fs::remove_dir_all(root).expect("remove test directory");
+}
+
+#[test]
+fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
+    let root = temporary_directory("invoke-contract");
+    let init = run("stormbuffer", &root, ["--project", "init"]);
+    assert_eq!(init.status.code(), Some(0));
+
+    let proposal = run_json(
+        "stormbuffer",
+        &root,
+        ["--project", "invoke", "propose"],
+        r#"{"version":1,"title":"Protocol memory","kind":"fact","access":"agent","body":"A sourced protocol memory.","sources":[{"kind":"document","reference":"ROADMAP.md#agent-writes","actor":"human"}]}"#,
+    );
+    assert_eq!(
+        proposal.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&proposal.stderr)
+    );
+    assert!(proposal.stderr.is_empty());
+    let envelope: serde_json::Value =
+        serde_json::from_slice(&proposal.stdout).expect("proposal envelope");
+    assert_eq!(envelope["version"], 1);
+    assert_eq!(envelope["operation"], "propose");
+    assert_eq!(envelope["result"]["outcome"], "requires_approval");
+    let id = envelope["result"]["record_id"]
+        .as_str()
+        .expect("candidate id");
+
+    let approve = run("stormbuffer", &root, ["--project", "approve", id]);
+    assert_eq!(
+        approve.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&approve.stderr)
+    );
+
+    for request in [
+        r#"{"version":1,"access":"human","query":"protocol memory"}"#,
+        r#"{"version":1,"actor":"human","approved":true,"title":"Impersonated memory","kind":"fact","access":"agent","body":"Must remain a candidate.","sources":[{"kind":"document","reference":"ROADMAP.md","actor":"human"}]}"#,
+    ] {
+        let operation = if request.contains("query") {
+            "search"
+        } else {
+            "propose"
+        };
+        let denied = run_json(
+            "stormbuffer",
+            &root,
+            ["--project", "invoke", operation],
+            request,
+        );
+        assert_eq!(denied.status.code(), Some(1));
+        let envelope: serde_json::Value =
+            serde_json::from_slice(&denied.stdout).expect("permission denial envelope");
+        assert_eq!(envelope["error"]["code"], "permission_denied");
+    }
+
+    let get = run_json(
+        "stormbuffer",
+        &root,
+        ["--project", "invoke", "get"],
+        &format!(r#"{{"version":1,"id":"{id}"}}"#),
+    );
+    assert_eq!(
+        get.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&get.stderr)
+    );
+    let get_envelope: serde_json::Value =
+        serde_json::from_slice(&get.stdout).expect("get envelope");
+    assert_eq!(get_envelope["result"]["id"], id);
+    assert!(get_envelope["result"].get("path").is_none());
+
+    for (operation, request) in [
+        ("search", r#"{"version":1,"query":"protocol memory"}"#),
+        (
+            "context",
+            r#"{"version":1,"query":"protocol memory","budget":128}"#,
+        ),
+    ] {
+        let output = run_json(
+            "stormbuffer",
+            &root,
+            ["--project", "invoke", operation],
+            request,
+        );
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("operation envelope");
+        assert_eq!(response["operation"], operation);
+        assert_eq!(response["ok"], true);
+    }
+
+    let supersede = run_json(
+        "stormbuffer",
+        &root,
+        ["--project", "invoke", "supersede"],
+        &format!(
+            r#"{{"version":1,"id":"{id}","title":"Updated protocol memory","kind":"fact","access":"agent","body":"An updated sourced protocol memory.","sources":[{{"kind":"document","reference":"ROADMAP.md#agent-writes","actor":"human"}}]}}"#
+        ),
+    );
+    assert_eq!(
+        supersede.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&supersede.stderr)
+    );
+    let supersede_envelope: serde_json::Value =
+        serde_json::from_slice(&supersede.stdout).expect("supersede envelope");
+    let replacement_id = supersede_envelope["result"]["id"]
+        .as_str()
+        .expect("replacement id");
+
+    let archive = run_json(
+        "stormbuffer",
+        &root,
+        ["--project", "invoke", "archive"],
+        &format!(r#"{{"version":1,"id":"{replacement_id}"}}"#),
+    );
+    assert_eq!(archive.status.code(), Some(0));
+    let archive_envelope: serde_json::Value =
+        serde_json::from_slice(&archive.stdout).expect("archive envelope");
+    assert_eq!(archive_envelope["result"]["status"], "archived");
+
+    let malformed = run_json(
+        "stormbuffer",
+        &root,
+        ["--project", "invoke", "search"],
+        "{not-json",
+    );
+    assert_eq!(malformed.status.code(), Some(1));
+    let malformed_envelope: serde_json::Value =
+        serde_json::from_slice(&malformed.stdout).expect("malformed envelope");
+    assert_eq!(malformed_envelope["error"]["code"], "invalid_json");
+
+    let denied = run_json(
+        "stormbuffer",
+        &root,
+        ["--project", "invoke", "search"],
+        r#"{"version":1,"query":"protocol","path":"/private/record.md"}"#,
+    );
+    assert_eq!(denied.status.code(), Some(1));
+    assert!(denied.stderr.is_empty());
+    let denied_envelope: serde_json::Value =
+        serde_json::from_slice(&denied.stdout).expect("denial envelope");
+    assert_eq!(denied_envelope["ok"], false);
+    assert_eq!(denied_envelope["error"]["code"], "path_denied");
+    assert!(!String::from_utf8_lossy(&denied.stdout).contains("private/record"));
+
+    let index = root.join(".sbuf/index.sqlite3");
+    fs::remove_file(&index).expect("remove fixture index");
+    fs::create_dir(&index).expect("block fixture index");
+    let internal = run_json(
+        "stormbuffer",
+        &root,
+        ["--project", "invoke", "search"],
+        r#"{"version":1,"query":"protocol"}"#,
+    );
+    assert_eq!(internal.status.code(), Some(1));
+    assert!(internal.stderr.is_empty());
+    let internal_text = String::from_utf8_lossy(&internal.stdout);
+    let internal_envelope: serde_json::Value =
+        serde_json::from_slice(&internal.stdout).expect("internal error envelope");
+    assert_eq!(internal_envelope["error"]["code"], "internal_error");
+    assert!(!internal_text.contains(root.to_string_lossy().as_ref()));
+    assert!(!internal_text.contains("backtrace"));
+
+    fs::remove_dir_all(root).expect("remove test directory");
+}
+
+#[test]
+fn invoke_protocol_bounds_the_complete_serialized_response() {
+    let root = temporary_directory("invoke-output-bound");
+    let init = run("stormbuffer", &root, ["--project", "init"]);
+    assert_eq!(init.status.code(), Some(0));
+
+    for index in 0..5 {
+        let body = format!("bounded{}", "x".repeat(65_536 - "bounded".len()));
+        let request = serde_json::json!({
+            "version": 1,
+            "title": format!("Bounded response {index}"),
+            "kind": "fact",
+            "access": "agent",
+            "body": body,
+            "sources": [{
+                "kind": "document",
+                "reference": "ROADMAP.md#cli-contract",
+                "actor": "human"
+            }]
+        });
+        let proposal = run_json(
+            "stormbuffer",
+            &root,
+            ["--project", "invoke", "propose"],
+            &request.to_string(),
+        );
+        assert_eq!(
+            proposal.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&proposal.stderr)
+        );
+        let envelope: serde_json::Value =
+            serde_json::from_slice(&proposal.stdout).expect("proposal envelope");
+        let id = envelope["result"]["record_id"]
+            .as_str()
+            .expect("candidate id");
+        let approve = run("stormbuffer", &root, ["--project", "approve", id]);
+        assert_eq!(approve.status.code(), Some(0));
+    }
+
+    let output = run_json(
+        "stormbuffer",
+        &root,
+        ["--project", "invoke", "context"],
+        r#"{"version":1,"query":"bounded response","limit":5,"budget":10}"#,
+    );
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.len() < 1024);
+    let envelope: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("bounded error envelope");
+    assert_eq!(envelope["error"]["code"], "output_too_large");
 
     fs::remove_dir_all(root).expect("remove test directory");
 }

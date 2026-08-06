@@ -142,16 +142,16 @@ for generation or remote model access.
 
 **Acceptance criteria:**
 
-- [ ] Every evidence block carries stable record/chunk IDs, title, scope, status,
+- [x] Every evidence block carries stable record/chunk IDs, title, scope, status,
       access, source references, selected text, and ranking reasons.
-- [ ] The receipt records the query, filters, index/model versions, budget,
+- [x] The receipt records the query, filters, index/model versions, budget,
       truncation, and omitted-result count without leaking inaccessible records.
-- [ ] Access, scope, and lifecycle policy runs before context assembly; fixed
+- [x] Access, scope, and lifecycle policy runs before context assembly; fixed
       inputs produce deterministic ordering and truncation.
-- [ ] The contract distinguishes host instructions, user input, and untrusted
+- [x] The contract distinguishes host instructions, user input, and untrusted
       record text and states that record content cannot grant tools or authority.
-- [ ] The core neither calls a generator nor transmits records to a remote model.
-- [ ] Human, JSON, and MCP presentations derive from the same core result.
+- [x] The core neither calls a generator nor transmits records to a remote model.
+- [x] Human, JSON, and MCP presentations derive from the same core result.
 
 **Verification:** Run core context-contract tests for budgets, filtering,
 determinism, hostile record text, and empty or insufficient retrieval.
@@ -166,16 +166,16 @@ adapter for evaluating a configured host model.
 
 **Acceptance criteria:**
 
-- [ ] Fixtures cover answerable, unanswerable, conflicting, wrong-scope,
+- [x] Fixtures cover answerable, unanswerable, conflicting, wrong-scope,
       superseded, long-context, and indirect prompt-injection cases.
-- [ ] Reports separate retrieval, context-assembly, and generation failures and
+- [x] Reports separate retrieval, context-assembly, and generation failures and
       include context precision/recall, claim support, citation precision/recall,
       answer relevance, correct abstention, and scope leakage.
-- [ ] Every factual expected claim names its supporting or contradicting record
+- [x] Every factual expected claim names its supporting or contradicting record
       IDs; generated citations are checked against those records.
-- [ ] Evaluation records the generator, model/version, prompt-contract version,
+- [x] Evaluation records the generator, model/version, prompt-contract version,
       parameters, and corpus revision needed to reproduce a run.
-- [ ] Model-assisted judgments remain reviewable and cannot silently replace
+- [x] Model-assisted judgments remain reviewable and cannot silently replace
       checked-in expectations or release thresholds.
 
 **Verification:** Run deterministic corpus checks, then one documented configured
@@ -191,11 +191,11 @@ activation permissions.
 
 **Acceptance criteria:**
 
-- [ ] Agents create candidates by default; human writes can become active.
-- [ ] Proposal outcomes use the stable vocabulary in the roadmap.
-- [ ] Unsupported inference and missing provenance are rejected clearly.
-- [ ] Conflicts retain both claims and require explicit supersession/approval.
-- [ ] Policy behavior has adversarial tests and user-facing documentation.
+- [x] Agents create candidates by default; human writes can become active.
+- [x] Proposal outcomes use the stable vocabulary in the roadmap.
+- [x] Unsupported inference and missing provenance are rejected clearly.
+- [x] Conflicts retain both claims and require explicit supersession/approval.
+- [x] Policy behavior has adversarial tests and user-facing documentation.
 
 **Verification:** Run proposal/lifecycle integration tests over duplicate,
 conflict, invalid, and approval cases.
@@ -209,11 +209,11 @@ through `invoke` with stable envelopes and errors.
 
 **Acceptance criteria:**
 
-- [ ] stdin/stdout contain only protocol JSON and logs use stderr.
-- [ ] Operations are non-interactive, output-bounded, scope-aware, and reject
+- [x] stdin/stdout contain only protocol JSON and logs use stderr.
+- [x] Operations are non-interactive, output-bounded, scope-aware, and reject
       arbitrary filesystem paths.
-- [ ] Protocol versioning and stable error codes are documented.
-- [ ] Golden/contract tests cover success, malformed input, denial, and internal
+- [x] Protocol versioning and stable error codes are documented.
+- [x] Golden/contract tests cover success, malformed input, denial, and internal
       failure without leaking sensitive paths or backtraces.
 
 **Verification:** Run protocol contract tests and pipe every documented example

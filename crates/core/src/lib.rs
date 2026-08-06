@@ -21,8 +21,10 @@ pub use embedder::{
     ensure_default_model, l2_normalize, model_cache_dir, platform_model_cache_dir,
 };
 pub use evaluation::{
-    EvaluationModeReport, EvaluationQuery, EvaluationReport, run_evaluation,
-    run_synthetic_evaluation,
+    AnswerArtifact, AnswerClaim, EvaluationMetadata, EvaluationModeReport, EvaluationQuery,
+    EvaluationReport, EvaluationStageReport, ExpectedClaim, GroundedEvaluationMetrics,
+    GroundedEvaluationReport, GroundedQuestionReport, HostModelEvaluationAdapter, RagQuestion,
+    run_evaluation, run_synthetic_evaluation, run_synthetic_grounded_evaluation,
 };
 pub use index::{
     ContextBlock, ContextOptions, ContextReceipt, ContextResult, DoctorIssue, DoctorReport,
@@ -33,10 +35,10 @@ pub use index::{
     search_stores_with_embedder, sync_store, watch_store,
 };
 pub use record::{
-    Access, RECORD_FORMAT_VERSION, Record, RecordId, RecordKind, RecordStatus, Scope, Source,
-    SourceKind, Timestamp,
+    Access, ProposalActor, ProposalOutcome, RECORD_FORMAT_VERSION, Record, RecordId, RecordKind,
+    RecordStatus, Scope, Source, SourceKind, Timestamp,
 };
-pub use repository::{RecordRepository, RepositoryError, StoredRecord};
+pub use repository::{ProposalResult, RecordRepository, RepositoryError, StoredRecord};
 pub use vector::{SqliteVectorIndex, VectorFilter, VectorHit, VectorIndex, VectorMetadata};
 
 const STORE_FORMAT_VERSION: u32 = 1;

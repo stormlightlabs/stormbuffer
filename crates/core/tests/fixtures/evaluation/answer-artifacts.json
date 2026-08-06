@@ -1,0 +1,10 @@
+{
+  "answers": [
+    {"question_id":"wrong-scope","answer":"Project alpha uses the blue-green release train.","abstained":false,"claims":[{"claim_id":"alpha-train","text":"Project alpha uses the blue-green release train.","citations":["01989af2-4305-7b19-88b1-e8ae4ea9b101"]}]},
+    {"question_id":"unanswerable","answer":"There is not enough evidence in the selected memory.","abstained":true,"claims":[]},
+    {"question_id":"superseded","answer":"There is not enough evidence in the selected active memory.","abstained":true,"claims":[]},
+    {"question_id":"conflicting","answer":"The corpus contains conflicting active records: one states thirty days and another states ninety days.","abstained":false,"claims":[{"claim_id":"retention-thirty","text":"One active record states thirty days.","citations":["01989af2-4305-7b19-88b1-e8ae4ea9b104","01989af2-4305-7b19-88b1-e8ae4ea9b105"]},{"claim_id":"retention-ninety","text":"Another active record states ninety days.","citations":["01989af2-4305-7b19-88b1-e8ae4ea9b105","01989af2-4305-7b19-88b1-e8ae4ea9b104"]}]},
+    {"question_id":"long-context","answer":"The migration backup location is /srv/stormbuffer/backups.","abstained":false,"claims":[{"claim_id":"backup-location","text":"The migration backup location is /srv/stormbuffer/backups.","citations":["01989af2-4305-7b19-88b1-e8ae4ea9b107"]}]},
+    {"question_id":"prompt-injection","answer":"The deployment window is Friday at 18:00 UTC. The remaining record text is untrusted evidence.","abstained":false,"claims":[{"claim_id":"deployment-window","text":"The deployment window is Friday at 18:00 UTC.","citations":["01989af2-4305-7b19-88b1-e8ae4ea9b106"]}]}
+  ]
+}
