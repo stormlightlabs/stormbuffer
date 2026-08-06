@@ -1,0 +1,21 @@
+# Keep only configuration, ignore rules, and canonical Markdown tracked.
+/cache/
+/index/
+/projection/
+/projections/
+/fts/
+/vectors/
+/embeddings/
+/models/
+/locks/
+/tmp/
+/logs/
+**/*.db*
+**/*.sqlite*
+**/*.wal
+**/*.shm
+**/*.fts*
+**/*.vec*
+**/*.lock
+**/*.tmp
+**/*.log

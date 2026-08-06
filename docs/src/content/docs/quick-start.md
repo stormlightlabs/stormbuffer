@@ -67,6 +67,10 @@ machine-readable selection:
 stormbuffer --project context release --budget 400
 ```
 
+Semantic retrieval is local. `init` acquires the pinned fastembed model into the platform
+cache, and project searches reuse that cache. If acquisition fails, the store remains valid and
+the command reports how to repair the model.
+
 ## Keep project data private
 
 Project memory lives under `.sbuf/` and is private by default. Add it to the project’s ignore

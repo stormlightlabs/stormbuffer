@@ -43,9 +43,19 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    let home = directory.join("home");
+    let data = directory.join("data");
+    let cache = directory.join("cache");
     Command::new(binary(name))
         .current_dir(directory)
         .args(arguments)
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("LOCALAPPDATA", &data)
+        .env("APPDATA", &data)
+        .env("XDG_DATA_HOME", &data)
+        .env("XDG_CACHE_HOME", &cache)
+        .env("STORMBUFFER_TEST_MODE", "1")
         .output()
         .expect("run CLI process")
 }
@@ -55,11 +65,21 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    let home = directory.join("home");
+    let data = directory.join("data");
+    let cache = directory.join("cache");
     let mut command = Command::new(binary(name));
     command
         .current_dir(directory)
         .args(arguments)
-        .env("EDITOR", "true");
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("LOCALAPPDATA", &data)
+        .env("APPDATA", &data)
+        .env("XDG_DATA_HOME", &data)
+        .env("XDG_CACHE_HOME", &cache)
+        .env("EDITOR", "true")
+        .env("STORMBUFFER_TEST_MODE", "1");
     command.output().expect("run CLI with editor")
 }
 
@@ -73,7 +93,8 @@ fn with_store_environment(command: &mut Command, root: &Path) {
         .env("LOCALAPPDATA", &data)
         .env("APPDATA", &data)
         .env("XDG_DATA_HOME", &data)
-        .env("XDG_CACHE_HOME", &cache);
+        .env("XDG_CACHE_HOME", &cache)
+        .env("STORMBUFFER_TEST_MODE", "1");
 }
 
 fn run_with_store_environment<I, S>(

@@ -5,8 +5,7 @@ description: Orchestrate bounded coding work with one or two Pi instances runnin
 
 # Orchestrate
 
-Verify that the current session is managed by Herdr before issuing control
-commands:
+Verify that the current session is managed by Herdr before issuing control commands:
 
 ```sh
 test "${HERDR_ENV:-}" = 1
@@ -71,3 +70,40 @@ If an instance is blocked or a wait fails, inspect it before sending a focused
 follow-up. Review all shared-tree changes yourself, resolve integration issues,
 and run the smallest relevant verification. Do not treat an agent's success
 claim as verification.
+
+## Paired review mode
+
+When the user asks for a review, or a completed delegated change warrants an
+independent review, reuse the two Pi instances (with fresh context) as complementary
+read-only, reviewers.
+
+Prompt both before waiting so they work concurrently:
+
+- The standard reviewer checks correctness, error handling, security,
+  concurrency, resource use, API boundaries, tests, and maintainability.
+- The adversarial reviewer tries to break the change with hostile inputs,
+  partial failures, violated invariants, misleading tests, and unverified
+  assumptions. Prefer a small number of consequential findings over nits.
+
+Give both reviewers the same target, intent, changed-file list, and relevant
+constraints. Require findings in this form:
+
+```text
+severity · path:line — problem → impact → fix direction
+```
+
+Wait until both reviewers finish before acting on either report. Merge rather
+than concatenate:
+
+- deduplicate the same root cause
+- keep the higher justified severity
+- identify findings as `standard`, `adversarial`, or `both`
+
+Ground every finding in inspected code and label downstream effects that were
+not verified.
+
+For changes owned by the current task, fix confirmed findings and run one fresh
+paired pass when the fix materially changes behavior.
+
+For external review, remain read-only. Never publish review feedback or mutate a
+pull request without the user's explicit request.

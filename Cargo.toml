@@ -29,3 +29,6 @@ toml = "=0.8.23"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { version = "1.24", features = ["v7"] }
+fastembed = { version = "=5.13.4", default-features = false, features = ["ort-download-binaries-rustls-tls"] }
+sqlite-vec = "=0.1.7"
+ureq = { version = "=3.3.0", default-features = false, features = ["rustls"] }

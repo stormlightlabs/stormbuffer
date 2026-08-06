@@ -1,4 +1,4 @@
 interface:
   display_name: "Orchestrate with Pi"
-  short_description: "Delegate bounded work to Pi through Herdr"
-  default_prompt: "Use $orchestrate to complete this task with up to two Pi instances in a neighboring Herdr tab."
+  short_description: "Delegate work or run paired Pi reviews"
+  default_prompt: "Use $orchestrate to delegate this task, using paired standard and adversarial Pi reviewers when review is needed."

@@ -41,6 +41,7 @@ fn run(name: &str, directory: &Path, arguments: &[&str]) -> Output {
         .env("APPDATA", &data)
         .env("XDG_DATA_HOME", &data)
         .env("XDG_CACHE_HOME", &cache)
+        .env("STORMBUFFER_TEST_MODE", "1")
         .output()
         .expect("run documented CLI example")
 }

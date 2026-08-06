@@ -9,14 +9,27 @@ use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, Transaction, params, params_from_iter};
 use serde::Serialize;
 
+use crate::embedder::Embedder;
 use crate::record::Access;
 use crate::repository::{acquire_store_mutation_lock, replace_file};
+use crate::vector::{
+    SqliteVectorIndex, VectorDocument, VectorFilter, VectorIndex, VectorMetadata,
+    register_sqlite_vec,
+};
 use crate::{Error, Record, StorePaths, StoreScope};
 
-pub const INDEX_SCHEMA_VERSION: u32 = 2;
+pub const INDEX_SCHEMA_VERSION: u32 = 3;
 const MAX_CHUNK_WORDS: usize = 160;
 const DEFAULT_SEARCH_LIMIT: usize = 20;
 const MAX_SEARCH_LIMIT: usize = 100;
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum RetrievalMode {
+    Lexical,
+    Semantic,
+    #[default]
+    Hybrid,
+}
 
 #[derive(Clone, Debug)]
 pub struct SearchOptions {
@@ -25,6 +38,8 @@ pub struct SearchOptions {
     pub current_scope: Option<String>,
     pub allowed_scopes: Option<Vec<String>>,
     pub allowed_access: Option<Vec<Access>>,
+    pub allowed_kinds: Option<Vec<String>>,
+    pub mode: RetrievalMode,
 }
 
 impl Default for SearchOptions {
@@ -35,6 +50,8 @@ impl Default for SearchOptions {
             current_scope: None,
             allowed_scopes: None,
             allowed_access: None,
+            allowed_kinds: None,
+            mode: RetrievalMode::Hybrid,
         }
     }
 }
@@ -97,6 +114,8 @@ pub struct SearchResult {
     pub path: String,
     pub score: f64,
     pub lexical_match_reason: String,
+    pub match_reasons: Vec<String>,
+    pub vector_distance: Option<f64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -127,6 +146,7 @@ pub struct ContextReceipt {
     pub omitted_results: usize,
     pub index_version: u32,
     pub embedding_version: Option<String>,
+    pub retrieval_mode: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -202,6 +222,8 @@ struct SearchHit {
     path: String,
     score: f64,
     lexical_match_reason: String,
+    match_reasons: Vec<String>,
+    vector_distance: Option<f64>,
 }
 
 #[derive(Clone, Debug)]
@@ -482,8 +504,9 @@ pub fn search_store(
 pub fn search_stores(
     stores: &[StorePaths],
     query: &str,
-    options: SearchOptions,
+    mut options: SearchOptions,
 ) -> crate::Result<Vec<SearchResult>> {
+    options.mode = RetrievalMode::Lexical;
     let mut hits = Vec::new();
     for paths in stores {
         let index = Index::open_at(&index_path(paths))?;
@@ -496,6 +519,44 @@ pub fn search_stores(
     sort_hits(&mut hits, current.as_deref());
     hits.truncate(options.bounded_limit());
     Ok(hits.into_iter().map(SearchResult::from).collect())
+}
+
+pub fn search_stores_with_embedder(
+    stores: &[StorePaths],
+    query: &str,
+    options: SearchOptions,
+    embedder: &dyn Embedder,
+) -> crate::Result<Vec<SearchResult>> {
+    let mut lexical = Vec::new();
+    let mut semantic = Vec::new();
+    for paths in stores {
+        let index = Index::open_at(&index_path(paths))?;
+        if options.mode != RetrievalMode::Semantic {
+            let mut lexical_options = options.clone();
+            lexical_options.limit = MAX_SEARCH_LIMIT;
+            lexical_options.mode = RetrievalMode::Lexical;
+            lexical.extend(index.search_hits(paths, query, &lexical_options)?);
+        }
+        if options.mode != RetrievalMode::Lexical {
+            semantic.extend(index.vector_hits(paths, query, &options, embedder)?);
+        }
+    }
+    let current = options
+        .current_scope
+        .clone()
+        .or_else(|| stores.first().and_then(current_scope));
+    let mut fused = fuse_hits(lexical, semantic, current.as_deref(), options.mode);
+    fused.truncate(options.bounded_limit());
+    Ok(fused.into_iter().map(SearchResult::from).collect())
+}
+
+pub fn rebuild_vector_index(
+    paths: &StorePaths,
+    embedder: &dyn Embedder,
+) -> crate::Result<VectorMetadata> {
+    let _lock = acquire_store_mutation_lock(paths)?;
+    let mut index = Index::open_at(&index_path(paths))?;
+    index.rebuild_vectors(embedder)
 }
 
 pub fn context_store(
@@ -557,7 +618,7 @@ pub fn context_stores(
             text: selected,
             token_count,
             score: hit.score,
-            ranking_reasons: vec![hit.lexical_match_reason.clone()],
+            ranking_reasons: hit.match_reasons.clone(),
         });
     }
 
@@ -589,7 +650,117 @@ pub fn context_stores(
             omitted_results,
             index_version: INDEX_SCHEMA_VERSION,
             embedding_version: None,
+            retrieval_mode: "lexical".to_owned(),
         },
+    })
+}
+
+pub fn context_stores_with_embedder(
+    stores: &[StorePaths],
+    query: &str,
+    mut options: ContextOptions,
+    embedder: &dyn Embedder,
+) -> crate::Result<ContextResult> {
+    if options.search.allowed_scopes.is_none() && options.search.current_scope.is_none() {
+        if let Some(paths) = stores.first() {
+            options.search = SearchOptions::for_store(paths);
+        }
+    }
+    let mut lexical = Vec::new();
+    let mut semantic = Vec::new();
+    for paths in stores {
+        let index = Index::open_at(&index_path(paths))?;
+        if options.search.mode != RetrievalMode::Semantic {
+            let mut lexical_options = options.search.clone();
+            lexical_options.limit = MAX_SEARCH_LIMIT;
+            lexical_options.mode = RetrievalMode::Lexical;
+            lexical.extend(index.search_hits(paths, query, &lexical_options)?);
+        }
+        if options.search.mode != RetrievalMode::Lexical {
+            semantic.extend(index.vector_hits(paths, query, &options.search, embedder)?);
+        }
+    }
+    let current = options.search.current_scope.as_deref();
+    let hits = fuse_hits(lexical, semantic, current, options.search.mode);
+    context_from_hits(
+        query,
+        &options,
+        hits,
+        Some(embedder.model_version().to_owned()),
+    )
+}
+
+fn context_from_hits(
+    query: &str,
+    options: &ContextOptions,
+    hits: Vec<SearchHit>,
+    embedding_version: Option<String>,
+) -> crate::Result<ContextResult> {
+    let budget = options.budget;
+    let mut used_tokens = 0;
+    let mut truncated = false;
+    let mut blocks = Vec::new();
+    for hit in &hits {
+        if used_tokens >= budget {
+            break;
+        }
+        let words: Vec<_> = hit.text.split_whitespace().collect();
+        let remaining = budget - used_tokens;
+        let selected = if words.len() > remaining {
+            truncated = true;
+            words[..remaining].join(" ")
+        } else {
+            hit.text.clone()
+        };
+        let token_count = selected.split_whitespace().count();
+        if token_count == 0 {
+            continue;
+        }
+        used_tokens += token_count;
+        blocks.push(ContextBlock {
+            record_id: hit.record_id.clone(),
+            chunk_id: hit.chunk_id.clone(),
+            title: hit.title.clone(),
+            kind: hit.kind.clone(),
+            scope: hit.scope.clone(),
+            status: hit.status.clone(),
+            access: hit.access.clone(),
+            sources: hit.sources.clone(),
+            text: selected,
+            token_count,
+            score: hit.score,
+            ranking_reasons: hit.match_reasons.clone(),
+        });
+    }
+    let scopes = options.search.allowed_scopes.clone().unwrap_or_default();
+    let access = options
+        .search
+        .allowed_access
+        .as_ref()
+        .map(|values| values.iter().map(ToString::to_string).collect())
+        .unwrap_or_else(|| vec!["human".to_owned(), "agent".to_owned()]);
+    Ok(ContextResult {
+        receipt: ContextReceipt {
+            query: query.to_owned(),
+            scopes,
+            statuses: if options.search.include_inactive {
+                vec!["candidate", "active", "superseded", "archived"]
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect()
+            } else {
+                vec!["active".to_owned()]
+            },
+            access,
+            budget,
+            used_tokens,
+            truncated,
+            omitted_results: hits.len().saturating_sub(blocks.len()),
+            index_version: INDEX_SCHEMA_VERSION,
+            embedding_version,
+            retrieval_mode: retrieval_mode_name(options.search.mode).to_owned(),
+        },
+        blocks,
     })
 }
 
@@ -739,6 +910,7 @@ struct Index {
 
 impl Index {
     fn open_at(path: &Path) -> crate::Result<Self> {
+        register_sqlite_vec();
         let parent = path.parent().ok_or_else(|| {
             Error::io(
                 "resolve the index directory",
@@ -760,6 +932,118 @@ impl Index {
         self.connection
             .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
             .map_err(|source| db_error("checkpoint the index", source))
+    }
+
+    fn rebuild_vectors(&mut self, embedder: &dyn Embedder) -> crate::Result<VectorMetadata> {
+        let mut statement = self.connection.prepare(
+            "SELECT r.record_id, c.chunk_id, s.name, r.kind, r.status, r.access, c.retrieval_text FROM chunks c JOIN records r ON r.record_id = c.record_id JOIN scopes s ON s.scope_id = r.scope_id ORDER BY r.record_id, c.ordinal",
+        ).map_err(|source| db_error("prepare vector backfill", source))?;
+        let documents = statement
+            .query_map([], |row| {
+                Ok(VectorDocument {
+                    record_id: row.get(0)?,
+                    chunk_id: row.get(1)?,
+                    scope: row.get(2)?,
+                    kind: row.get(3)?,
+                    status: row.get(4)?,
+                    access: row.get(5)?,
+                    text: row.get(6)?,
+                })
+            })
+            .map_err(|source| db_error("read vector backfill", source))?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|source| db_error("read vector backfill", source))?;
+        drop(statement);
+        SqliteVectorIndex::rebuild(&mut self.connection, embedder, &documents)
+    }
+
+    fn vector_hits(
+        &self,
+        paths: &StorePaths,
+        query: &str,
+        options: &SearchOptions,
+        embedder: &dyn Embedder,
+    ) -> crate::Result<Vec<SearchHit>> {
+        let Some(vector) = SqliteVectorIndex::active(&self.connection)? else {
+            return Ok(Vec::new());
+        };
+        if vector.metadata().model_version != embedder.model_version()
+            || vector.metadata().model_checksum != embedder.model_checksum()
+            || vector.metadata().dimension != embedder.dimension()
+        {
+            return Err(Error::embedding(
+                "search vector index",
+                "active vector index uses a different model; run semantic reindex",
+            ));
+        }
+        let scopes = options.allowed_scopes.clone().unwrap_or_else(|| {
+            SearchOptions::for_store(paths)
+                .allowed_scopes
+                .unwrap_or_default()
+        });
+        let filter = VectorFilter {
+            scopes: Some(scopes),
+            kinds: options.allowed_kinds.clone(),
+            statuses: Some(if options.include_inactive {
+                vec![
+                    "candidate".to_owned(),
+                    "active".to_owned(),
+                    "superseded".to_owned(),
+                    "archived".to_owned(),
+                ]
+            } else {
+                vec!["active".to_owned()]
+            }),
+            accesses: options
+                .allowed_access
+                .as_ref()
+                .map(|values| values.iter().map(ToString::to_string).collect()),
+        };
+        let embedding = embedder.embed(query)?;
+        let vector_hits = vector.search(&embedding, &filter, options.bounded_limit())?;
+        let mut hits = Vec::with_capacity(vector_hits.len());
+        for vector_hit in vector_hits {
+            let row = self.connection.query_row(
+                "SELECT c.text, r.title, r.path FROM chunks c JOIN records r ON r.record_id = c.record_id WHERE c.chunk_id = ?1",
+                params![vector_hit.chunk_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)),
+            ).optional().map_err(|source| db_error("read vector result", source))?;
+            let Some((text, title, path)) = row else {
+                continue;
+            };
+            hits.push(SearchHit {
+                record_id: vector_hit.record_id.clone(),
+                chunk_id: vector_hit.chunk_id,
+                title,
+                kind: vector_hit.kind,
+                scope: vector_hit.scope,
+                status: vector_hit.status,
+                access: vector_hit.access,
+                text,
+                sources: self.sources_for(&vector_hit.record_id)?,
+                path,
+                score: 1.0 / (1.0 + vector_hit.distance.abs()),
+                lexical_match_reason: "vector".to_owned(),
+                match_reasons: vec![format!("vector:distance={:.6}", vector_hit.distance)],
+                vector_distance: Some(vector_hit.distance),
+            });
+        }
+        let current = options
+            .current_scope
+            .clone()
+            .or_else(|| current_scope(paths));
+        hits.sort_by(|left, right| {
+            left.score
+                .total_cmp(&right.score)
+                .reverse()
+                .then_with(|| {
+                    scope_rank(&right.scope, current.as_deref())
+                        .cmp(&scope_rank(&left.scope, current.as_deref()))
+                })
+                .then_with(|| left.record_id.cmp(&right.record_id))
+                .then_with(|| left.chunk_id.cmp(&right.chunk_id))
+        });
+        Ok(hits)
     }
 
     fn sync_canonical(&mut self, paths: &StorePaths) -> crate::Result<SyncReport> {
@@ -1013,6 +1297,20 @@ impl Index {
             }
             next_parameter += access.len();
         }
+        if let Some(kinds) = &options.allowed_kinds {
+            if kinds.is_empty() {
+                return Ok(Vec::new());
+            }
+            let placeholders = (0..kinds.len())
+                .map(|offset| format!("?{}", next_parameter + offset))
+                .collect::<Vec<_>>()
+                .join(", ");
+            sql.push_str(&format!(" AND r.kind IN ({placeholders})"));
+            for kind in kinds {
+                values.push(Value::Text(kind.clone()));
+            }
+            next_parameter += kinds.len();
+        }
         let placeholders = (0..scopes.len())
             .map(|offset| format!("?{}", next_parameter + offset))
             .collect::<Vec<_>>()
@@ -1114,6 +1412,8 @@ impl Index {
                 path,
                 score: 1.0 / (1.0 + rank.abs()) + boost,
                 lexical_match_reason: reason.to_owned(),
+                match_reasons: vec![format!("lexical:{reason}")],
+                vector_distance: None,
             });
         }
         let current = options
@@ -1161,6 +1461,8 @@ impl From<SearchHit> for SearchResult {
             path: hit.path,
             score: hit.score,
             lexical_match_reason: hit.lexical_match_reason,
+            match_reasons: hit.match_reasons,
+            vector_distance: hit.vector_distance,
         }
     }
 }
@@ -1235,6 +1537,22 @@ fn migrate(connection: &Connection) -> crate::Result<()> {
                  PRAGMA user_version = 2;",
             )
             .map_err(|source| db_error("apply index migration 2", source))?;
+    }
+    if version < 3 {
+        transaction
+            .execute_batch(
+                "CREATE TABLE vector_indexes (
+                   index_id INTEGER PRIMARY KEY,
+                   model_version TEXT NOT NULL,
+                   model_checksum TEXT NOT NULL,
+                   dimension INTEGER NOT NULL,
+                   table_name TEXT NOT NULL UNIQUE,
+                   active INTEGER NOT NULL CHECK (active IN (0, 1))
+                 );
+                 INSERT INTO index_metadata(key, value) VALUES ('vector_schema_version', '1') ON CONFLICT(key) DO UPDATE SET value=excluded.value;
+                 PRAGMA user_version = 3;",
+            )
+            .map_err(|source| db_error("apply index migration 3", source))?;
     }
     transaction
         .commit()
@@ -1335,6 +1653,146 @@ fn sort_hits(hits: &mut [SearchHit], current: Option<&str>) {
             .then_with(|| left.record_id.cmp(&right.record_id))
             .then_with(|| left.chunk_id.cmp(&right.chunk_id))
     });
+}
+
+struct FusedEntry {
+    hit: SearchHit,
+    lexical_rank: Option<usize>,
+    semantic_rank: Option<usize>,
+    reasons: Vec<String>,
+    vector_distance: Option<f64>,
+}
+
+fn fuse_hits(
+    mut lexical: Vec<SearchHit>,
+    mut semantic: Vec<SearchHit>,
+    current: Option<&str>,
+    mode: RetrievalMode,
+) -> Vec<SearchHit> {
+    sort_hits(&mut lexical, current);
+    semantic.sort_by(|left, right| {
+        right
+            .score
+            .total_cmp(&left.score)
+            .then_with(|| scope_rank(&right.scope, current).cmp(&scope_rank(&left.scope, current)))
+            .then_with(|| left.record_id.cmp(&right.record_id))
+            .then_with(|| left.chunk_id.cmp(&right.chunk_id))
+    });
+    let mut entries: HashMap<String, FusedEntry> = HashMap::new();
+    for (rank, hit) in lexical.into_iter().enumerate() {
+        let key = hit.record_id.clone();
+        let reason = hit.match_reasons.clone();
+        match entries.get_mut(&key) {
+            Some(entry) => {
+                if entry.lexical_rank.is_none() || hit.score > entry.hit.score {
+                    entry.hit = hit;
+                }
+                entry.lexical_rank = Some(rank + 1);
+                entry.reasons.extend(reason);
+            }
+            None => {
+                entries.insert(
+                    key,
+                    FusedEntry {
+                        hit,
+                        lexical_rank: Some(rank + 1),
+                        semantic_rank: None,
+                        reasons: reason,
+                        vector_distance: None,
+                    },
+                );
+            }
+        }
+    }
+    for (rank, hit) in semantic.into_iter().enumerate() {
+        let key = hit.record_id.clone();
+        let reason = hit.match_reasons.clone();
+        match entries.get_mut(&key) {
+            Some(entry) => {
+                if (entry.semantic_rank.is_none() || hit.score > entry.hit.score)
+                    && (entry.lexical_rank.is_none() || hit.score >= entry.hit.score)
+                {
+                    entry.hit = hit.clone();
+                }
+                entry.semantic_rank = Some(rank + 1);
+                entry.vector_distance = hit.vector_distance;
+                entry.reasons.extend(reason);
+            }
+            None => {
+                entries.insert(
+                    key,
+                    FusedEntry {
+                        hit: hit.clone(),
+                        lexical_rank: None,
+                        semantic_rank: Some(rank + 1),
+                        reasons: reason,
+                        vector_distance: hit.vector_distance,
+                    },
+                );
+            }
+        }
+    }
+    let mut hits = entries
+        .into_values()
+        .map(|mut entry| {
+            let mut score = 0.0;
+            if mode != RetrievalMode::Semantic {
+                if let Some(rank) = entry.lexical_rank {
+                    score += 1.0 / (60.0 + rank as f64);
+                }
+            }
+            if mode != RetrievalMode::Lexical {
+                if let Some(rank) = entry.semantic_rank {
+                    score += 1.0 / (60.0 + rank as f64);
+                }
+            }
+            if entry.lexical_rank.is_none() && entry.semantic_rank.is_none() {
+                score = entry.hit.score;
+            }
+            let boost = deterministic_boost(&entry.hit, current, &mut entry.reasons);
+            entry.hit.score = score + boost;
+            entry.hit.match_reasons = deduplicate_reasons(entry.reasons);
+            entry.hit.vector_distance = entry.vector_distance;
+            entry.hit
+        })
+        .collect::<Vec<_>>();
+    sort_hits(&mut hits, current);
+    hits
+}
+
+fn deterministic_boost(hit: &SearchHit, current: Option<&str>, reasons: &mut Vec<String>) -> f64 {
+    let mut boost = 0.0;
+    if current == Some(hit.scope.as_str()) {
+        boost += 0.01;
+        reasons.push("boost:current_scope".to_owned());
+    }
+    let exact_boost = match hit.lexical_match_reason.as_str() {
+        "exact_title" => Some((0.04, "boost:exact_title")),
+        "exact_alias" => Some((0.03, "boost:exact_alias")),
+        "exact_filename" => Some((0.03, "boost:exact_filename")),
+        _ => None,
+    };
+    if let Some((value, reason)) = exact_boost {
+        boost += value;
+        reasons.push(reason.to_owned());
+    }
+    boost
+}
+
+fn deduplicate_reasons(reasons: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    reasons
+        .into_iter()
+        .filter(|reason| seen.insert(reason.clone()))
+        .collect()
+}
+
+fn retrieval_mode_name(mode: RetrievalMode) -> &'static str {
+    match mode {
+        RetrievalMode::Lexical => "lexical",
+        RetrievalMode::Semantic => "semantic",
+        RetrievalMode::Hybrid => "hybrid",
+    }
 }
 
 fn query_terms(query: &str) -> Vec<String> {

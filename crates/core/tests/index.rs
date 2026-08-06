@@ -110,7 +110,7 @@ fn sync_is_incremental_and_search_returns_attributable_results() {
     )
     .expect("context");
     assert!(context.receipt.used_tokens <= 3);
-    assert_eq!(context.receipt.index_version, 2);
+    assert_eq!(context.receipt.index_version, 3);
 }
 
 #[test]

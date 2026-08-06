@@ -1,0 +1,9 @@
+{
+  "queries": [
+    {"id":"exact-command","query":"cargo test --workspace","scope":"project:alpha","expected_record_ids":["01989af2-4305-7b19-88b1-e8ae4ea9a101"]},
+    {"id":"paraphrase-release","query":"publishing version checks","scope":"project:alpha","expected_record_ids":["01989af2-4305-7b19-88b1-e8ae4ea9a103"]},
+    {"id":"scope-collision","query":"release procedure","scope":"project:alpha","expected_record_ids":["01989af2-4305-7b19-88b1-e8ae4ea9a101","01989af2-4305-7b19-88b1-e8ae4ea9a103"]},
+    {"id":"superseded","query":"old release procedure","scope":"project:alpha","expected_record_ids":[]},
+    {"id":"conflict","query":"retention disposable projections","scope":"global","expected_record_ids":["01989af2-4305-7b19-88b1-e8ae4ea9a106","01989af2-4305-7b19-88b1-e8ae4ea9a107"]}
+  ]
+}

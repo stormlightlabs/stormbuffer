@@ -80,6 +80,8 @@ pub enum CliCommand {
     Import(PathArgs),
     /// Invoke the versioned JSON protocol (not implemented).
     Invoke(InvokeArgs),
+    /// Run the checked-in retrieval evaluation corpus.
+    Evaluate,
     /// Run the MCP adapter over stdio (not implemented).
     Mcp(McpArgs),
 }

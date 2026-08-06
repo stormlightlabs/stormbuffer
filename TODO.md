@@ -197,12 +197,12 @@ for local CPU inference.
 
 **Acceptance criteria:**
 
-- [ ] Model acquisition is documented, resumable or safely retryable, and never
+- [x] Model acquisition is documented, resumable or safely retryable, and never
       executes unverified content.
-- [ ] Documents and queries use the intended tokenization, attention-mask mean
+- [x] Documents and queries use the intended tokenization, attention-mask mean
       pooling, and L2 normalization.
-- [ ] Offline behavior and a missing/corrupt model produce actionable errors.
-- [ ] Deterministic fixtures verify dimensions and numerical tolerances.
+- [x] Offline behavior and a missing/corrupt model produce actionable errors.
+- [x] Deterministic fixtures verify dimensions and numerical tolerances.
 
 **Verification:** Run embedder contract tests with a pinned fixture model.
 
@@ -215,10 +215,10 @@ for local CPU inference.
 
 **Acceptance criteria:**
 
-- [ ] Embeddings are keyed to chunks and filter by scope, kind, and active state.
-- [ ] Model/table/checksum/dimension metadata is recorded.
-- [ ] Backfill and validation complete before the active vector table switches.
-- [ ] A failed migration leaves the previous index available.
+- [x] Embeddings are keyed to chunks and filter by scope, kind, and active state.
+- [x] Model/table/checksum/dimension metadata is recorded.
+- [x] Backfill and validation complete before the active vector table switches.
+- [x] A failed migration leaves the previous index available.
 
 **Verification:** Run vector contract, filter, backfill, and rollback tests.
 
@@ -232,10 +232,10 @@ and compile bounded context.
 
 **Acceptance criteria:**
 
-- [ ] Search receipts explain lexical, vector, and deterministic match reasons.
-- [ ] Superseded, archived, inaccessible, and wrong-scope records are excluded.
-- [ ] No blanket recency boost applies to facts, decisions, or procedures.
-- [ ] Context selection is deterministic for a fixed store/model and stays
+- [x] Search receipts explain lexical, vector, and deterministic match reasons.
+- [x] Superseded, archived, inaccessible, and wrong-scope records are excluded.
+- [x] No blanket recency boost applies to facts, decisions, or procedures.
+- [x] Context selection is deterministic for a fixed store/model and stays
       within budget.
 
 **Verification:** Run hybrid retrieval and context-budget integration tests.
@@ -249,11 +249,11 @@ FTS-only, vector-only, and hybrid behavior with reported metrics.
 
 **Acceptance criteria:**
 
-- [ ] The harness reports every metric named in the roadmap.
-- [ ] Queries include exact terms, paraphrases, scope collisions, superseded
+- [x] The harness reports every metric named in the roadmap.
+- [x] Queries include exact terms, paraphrases, scope collisions, superseded
       records, duplicates, and conflicts.
-- [ ] Initial release thresholds and an intentional update process are documented.
-- [ ] Ranking changes cannot update expected results silently.
+- [x] Initial release thresholds and an intentional update process are documented.
+- [x] Ranking changes cannot update expected results silently.
 
 **Verification:** Run the evaluation command and inspect the checked-in summary.
 

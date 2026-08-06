@@ -7,22 +7,33 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 mod codec;
+mod embedder;
+mod evaluation;
 mod index;
 mod record;
 mod repository;
+mod vector;
 
 pub use codec::{parse_markdown, render_markdown};
+pub use embedder::{
+    DEFAULT_MODEL_VERSION, DeterministicEmbedder, Embedder, Embedding, LocalEmbedder,
+    MODEL_MANIFEST_VERSION, ModelArtifact, ModelManifest, default_model_manifest,
+    ensure_default_model, l2_normalize, model_cache_dir, platform_model_cache_dir,
+};
+pub use evaluation::{EvaluationModeReport, EvaluationQuery, EvaluationReport, run_evaluation};
 pub use index::{
     ContextBlock, ContextOptions, ContextReceipt, ContextResult, DoctorIssue, DoctorReport,
-    SearchOptions, SearchResult, SourceReceipt, SyncInvalidFile, SyncReport, WatchOptions,
-    WatchReport, chunk_record, content_hash, context_store, context_stores, doctor_store,
-    index_path, reindex_store, search_store, search_stores, sync_store, watch_store,
+    RetrievalMode, SearchOptions, SearchResult, SourceReceipt, SyncInvalidFile, SyncReport,
+    WatchOptions, WatchReport, chunk_record, content_hash, context_store, context_stores,
+    context_stores_with_embedder, doctor_store, index_path, rebuild_vector_index, reindex_store,
+    search_store, search_stores, search_stores_with_embedder, sync_store, watch_store,
 };
 pub use record::{
     Access, RECORD_FORMAT_VERSION, Record, RecordId, RecordKind, RecordStatus, Scope, Source,
     SourceKind, Timestamp,
 };
 pub use repository::{RecordRepository, RepositoryError, StoredRecord};
+pub use vector::{SqliteVectorIndex, VectorFilter, VectorHit, VectorIndex, VectorMetadata};
 
 const STORE_FORMAT_VERSION: u32 = 1;
 const PRIVATE_PROJECT_GITIGNORE: &[u8] = b"*\n!.gitignore\n";
@@ -125,6 +136,11 @@ pub enum Error {
         #[source]
         source: rusqlite::Error,
     },
+    #[error("embedding operation failed: {operation}: {message}")]
+    Embedding {
+        operation: &'static str,
+        message: String,
+    },
 }
 
 impl Error {
@@ -162,6 +178,13 @@ impl Error {
 
     pub(crate) fn invalid_input(message: impl Into<String>) -> Self {
         Self::InvalidInput {
+            message: message.into(),
+        }
+    }
+
+    pub(crate) fn embedding(operation: &'static str, message: impl Into<String>) -> Self {
+        Self::Embedding {
+            operation,
             message: message.into(),
         }
     }

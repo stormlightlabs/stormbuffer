@@ -1,0 +1,29 @@
+{
+  "corpus_revision": "m3-fixture-1",
+  "metrics": {
+    "fts-only": {
+      "recall_at_5": 0.8,
+      "mean_reciprocal_rank": 0.7,
+      "wrong_scope_retrieval_rate": 0.0,
+      "superseded_memory_retrieval_rate": 0.0,
+      "duplicate_or_conflicting_retrieval_rate": 1.0,
+      "context_tokens_per_useful_memory": 15.0
+    },
+    "vector-only": {
+      "recall_at_5": 0.8,
+      "mean_reciprocal_rank": 0.8,
+      "wrong_scope_retrieval_rate": 0.0,
+      "superseded_memory_retrieval_rate": 0.0,
+      "duplicate_or_conflicting_retrieval_rate": 1.0,
+      "context_tokens_per_useful_memory": 21.666666666666668
+    },
+    "hybrid": {
+      "recall_at_5": 0.8,
+      "mean_reciprocal_rank": 0.7,
+      "wrong_scope_retrieval_rate": 0.0,
+      "superseded_memory_retrieval_rate": 0.0,
+      "duplicate_or_conflicting_retrieval_rate": 1.0,
+      "context_tokens_per_useful_memory": 21.666666666666668
+    }
+  }
+}

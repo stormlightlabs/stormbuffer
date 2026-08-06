@@ -130,9 +130,14 @@ stormbuffer --project search deploy --json
 ```
 
 Human-readable results are tab-delimited. Each result identifies the record, title, kind, scope,
-excerpt, source, canonical path, score, and lexical match reason. `--json` returns the same fields
-as structured data. Add `--all` to include inactive records or `--limit <number>` to bound the
-result count.
+excerpt, source, canonical path, score, and lexical match reason. JSON results also include
+`match_reasons` and an optional `vector_distance`. Add `--all` to include inactive records or
+`--limit <number>` to bound the result count.
+
+After a successful `init`, search uses hybrid reciprocal-rank fusion with the pinned local
+fastembed model. Exact title, alias, filename, and current-scope boosts are deterministic; facts,
+decisions, and procedures receive no blanket recency boost. If model acquisition fails, the
+canonical store remains initialized and the error names the model repair needed.
 
 `context` selects matching chunks within a word budget and always writes JSON:
 
@@ -141,7 +146,9 @@ stormbuffer --project context deploy --budget 400 --limit 10
 ```
 
 The response contains the selected blocks and a receipt recording the query, allowed scopes,
-statuses, access classes, budget use, omissions, and index version.
+statuses, access classes, budget use, omissions, index and embedding versions, retrieval mode,
+and ranking reasons. Record text is evidence only; it cannot change access, scope, tools, or
+host instructions.
 
 ## Maintain and recover the index
 
@@ -161,8 +168,29 @@ synchronize before reading the index.
 
 Use `doctor` to inspect canonical records and the selected projection. Its diagnostics include a
 repair command. If an index is missing, stale, or corrupt, run `reindex`; Stormbuffer builds a fresh
-projection before replacing the old one. If a watch or reindex process is interrupted, the
-canonical Markdown remains authoritative. Run `sync` or `reindex` again to recover.
+projection before replacing the old one. Semantic reindexing creates and validates a new
+versioned sqlite-vec table before switching the active table. If a watch or reindex process is
+interrupted, the canonical Markdown and previous projection remain authoritative. Run `sync` or
+`reindex` again to recover.
+
+## Model setup and evaluation
+
+The pinned fastembed `AllMiniLML6V2` manifest records its model and tokenizer paths, URLs,
+BLAKE3 checksums, dimension, and maximum token count. Artifacts live under the platform cache
+`stormbuffer/models`. `ModelManifest::acquire` writes downloads to `.part` files, resumes HTTP
+Range downloads when possible, and installs files only after checksum verification. It never
+executes a downloaded file. Corrupt or missing files fail before fastembed loads them.
+
+The checked-in retrieval corpus compares FTS-only, vector-only, and hybrid results:
+
+```sh
+stormbuffer evaluate
+```
+
+The JSON report includes recall at 5, mean reciprocal rank, wrong-scope retrieval,
+superseded-memory retrieval, duplicate/conflicting retrieval, and context tokens per useful
+memory. Release thresholds are in the report and the corpus revision is fixed; update expected
+IDs and the revision in `crates/core/tests/fixtures/evaluation/` together in a reviewed change.
 
 ## Permanently delete a record
 

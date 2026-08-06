@@ -52,6 +52,7 @@ where
     let machine = matches!(&parsed.command, CliCommand::Status(arguments) if arguments.json)
         || matches!(&parsed.command, CliCommand::Search(arguments) if arguments.json)
         || matches!(&parsed.command, CliCommand::Context(_))
+        || matches!(&parsed.command, CliCommand::Evaluate)
         || matches!(&parsed.command, CliCommand::Invoke(_));
     let output = Output::new(parsed.color.clone(), machine);
     run_command(parsed, output)
@@ -81,6 +82,7 @@ fn run_command(cli: Cli, output: Output) -> i32 {
         CliCommand::Archive(arguments) => run_archive(scope, arguments, &output),
         CliCommand::Restore(arguments) => run_restore(scope, arguments, &output),
         CliCommand::Forget(arguments) => run_forget(scope, arguments, &output),
+        CliCommand::Evaluate => run_evaluate(&output),
         CliCommand::Mcp(arguments) => {
             if !arguments.stdio {
                 output.error("mcp currently requires --stdio; the adapter is not implemented yet");
@@ -108,19 +110,44 @@ fn run_command(cli: Cli, output: Output) -> i32 {
     }
 }
 
+fn run_evaluate(output: &Output) -> i32 {
+    match core::run_evaluation() {
+        Ok(report) => match serde_json::to_string_pretty(&report) {
+            Ok(value) => {
+                output.line(&value);
+                if report.passed { 0 } else { FAILURE }
+            }
+            Err(error) => report_error(anyhow::Error::new(error), output),
+        },
+        Err(error) => report_error(
+            anyhow::Error::new(error).context("could not run retrieval evaluation"),
+            output,
+        ),
+    }
+}
+
 fn run_search(scope: StoreScope, arguments: SearchArgs, output: &Output) -> i32 {
     let paths = match resolve(scope) {
         Ok(paths) => paths,
         Err(error) => return report_error(error, output),
     };
+    let embedder = match configured_embedder() {
+        Ok(embedder) => embedder,
+        Err(error) => return report_error(error, output),
+    };
     let mut options = core::SearchOptions::for_store(&paths);
-    let stores = match prepare_retrieval_stores(scope, paths, output) {
+    let stores = match prepare_retrieval_stores(scope, paths, output, embedder.as_deref()) {
         Some(stores) => stores,
         None => return FAILURE,
     };
     options.limit = arguments.limit;
     options.include_inactive = arguments.all;
-    let results = match core::search_stores(&stores, &arguments.query, options) {
+    let results = match match embedder.as_deref() {
+        Some(embedder) => {
+            core::search_stores_with_embedder(&stores, &arguments.query, options, embedder)
+        }
+        None => core::search_stores(&stores, &arguments.query, options),
+    } {
         Ok(results) => results,
         Err(error) => return report_error(anyhow::Error::new(error), output),
     };
@@ -160,21 +187,27 @@ fn run_context(scope: StoreScope, arguments: ContextArgs, output: &Output) -> i3
         Ok(paths) => paths,
         Err(error) => return report_error(error, output),
     };
+    let embedder = match configured_embedder() {
+        Ok(embedder) => embedder,
+        Err(error) => return report_error(error, output),
+    };
     let mut search = core::SearchOptions::for_store(&paths);
-    let stores = match prepare_retrieval_stores(scope, paths, output) {
+    let stores = match prepare_retrieval_stores(scope, paths, output, embedder.as_deref()) {
         Some(stores) => stores,
         None => return FAILURE,
     };
     search.limit = arguments.limit;
     search.include_inactive = arguments.all;
-    let result = match core::context_stores(
-        &stores,
-        &arguments.query,
-        core::ContextOptions {
-            budget: arguments.budget,
-            search,
-        },
-    ) {
+    let context_options = core::ContextOptions {
+        budget: arguments.budget,
+        search,
+    };
+    let result = match match embedder.as_deref() {
+        Some(embedder) => {
+            core::context_stores_with_embedder(&stores, &arguments.query, context_options, embedder)
+        }
+        None => core::context_stores(&stores, &arguments.query, context_options),
+    } {
         Ok(result) => result,
         Err(error) => return report_error(anyhow::Error::new(error), output),
     };
@@ -278,6 +311,7 @@ fn prepare_retrieval_stores(
     scope: StoreScope,
     paths: core::StorePaths,
     output: &Output,
+    embedder: Option<&dyn core::Embedder>,
 ) -> Option<Vec<core::StorePaths>> {
     let mut stores = vec![paths];
     if scope == StoreScope::Project {
@@ -292,11 +326,37 @@ fn prepare_retrieval_stores(
             stores.push(global);
         }
     }
-    if stores.iter().all(|paths| reconcile(paths, output)) {
-        Some(stores)
-    } else {
-        None
+    if !stores.iter().all(|paths| reconcile(paths, output)) {
+        return None;
     }
+    if let Some(embedder) = embedder {
+        for store in &stores {
+            if let Err(error) = core::rebuild_vector_index(store, embedder) {
+                report_error(
+                    anyhow::Error::new(error).context("could not build semantic index"),
+                    output,
+                );
+                return None;
+            }
+        }
+    }
+    Some(stores)
+}
+
+fn configured_embedder() -> AnyhowResult<Option<Box<dyn core::Embedder>>> {
+    if !semantic_model_enabled() {
+        return Ok(None);
+    }
+    let global = resolve(StoreScope::Global)?;
+    core::ensure_default_model(&global)
+        .context("could not acquire the verified local embedding model")?;
+    let embedder = core::LocalEmbedder::from_default_cache(&global)
+        .context("could not load the verified local embedding model")?;
+    Ok(Some(Box::new(embedder)))
+}
+
+fn semantic_model_enabled() -> bool {
+    !cfg!(debug_assertions) || std::env::var_os("STORMBUFFER_TEST_MODE").is_none()
 }
 
 fn report_invalid_files(files: &[core::SyncInvalidFile], output: &Output) {
@@ -327,6 +387,16 @@ fn run_init(scope: StoreScope, shared: bool, output: &Output) -> i32 {
     } else {
         "Already initialized"
     };
+    if scope == StoreScope::Global && semantic_model_enabled() {
+        if let Err(error) = core::ensure_default_model(&paths) {
+            return report_error(
+                anyhow::Error::new(error).context(
+                    "store initialized, but the verified local embedding model is unavailable",
+                ),
+                output,
+            );
+        }
+    }
     let visibility = if shared {
         "shared"
     } else {
@@ -849,6 +919,7 @@ fn command_as_str(command: &CliCommand) -> &'static str {
         CliCommand::Export(_) => "export",
         CliCommand::Import(_) => "import",
         CliCommand::Invoke(_) => "invoke",
+        CliCommand::Evaluate => "evaluate",
         CliCommand::Mcp(_) => "mcp",
     }
 }

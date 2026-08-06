@@ -7,7 +7,7 @@ order: 6
 ---
 
 Stormbuffer keeps your memory local and readable by making Markdown-backed records the source
-of truth. Search indexes and caches are derived from them.
+of truth. Search indexes, vector tables, model files, and caches are derived from them.
 
 ## Your records stay readable
 
@@ -21,9 +21,11 @@ A failed indexing or cache update does not invalidate a saved record.
 
 ## Indexes are disposable
 
-Search data and model caches are projections of your records.
+Search data, sqlite-vec tables, and model caches are projections of your records.
 
-Stormbuffer can rebuild them from Markdown, so they do not need to be part of your backup.
+Stormbuffer can rebuild them from Markdown. They do not need to be part of your backup.
+Semantic retrieval uses a verified local ONNX model; the core never sends record text to a
+remote model.
 
 Use `stormbuffer status` to see which store is selected. Back up that store's Markdown records.
 
@@ -36,3 +38,14 @@ A project store belongs to one repository and lives under `.sbuf/`.
 Commands use the global store by default; add `--project` to select project memory explicitly.
 
 Project stores are private unless initialized with `--project init --shared`.
+
+## Retrieval projections
+
+Lexical indexing runs during `sync`. Global `init` acquires the pinned fastembed
+`AllMiniLML6V2` artifacts into the platform cache at `stormbuffer/models`; project stores reuse
+that same cache.
+
+Downloads are verified with pinned BLAKE3 checksums before fastembed loads them.
+Search and context rebuild the versioned vector projection before use. A missing,
+corrupt, or mismatched model fails with a repair instruction instead of falling
+back silently.
