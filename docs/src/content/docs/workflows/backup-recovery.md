@@ -70,10 +70,11 @@ sbuf --project gc
 `gc` only considers known indexes, model-cache files, locks, logs, and temporary files. It never
 removes `store.toml`, `.gitignore`, or Markdown records. A dry run does not change anything.
 
-## Privacy and Merging
+## Sharing and Merging
 
-Global stores are private user memory. Project stores are private by default; initialize with
-`sbuf --project init --shared` only when the repository should carry a curated memory set.
+Global stores live outside the repository. For project stores, add `.sbuf/` to the repository's
+ignore rules before initialization when the memory should stay out of version control. Initialize
+with `sbuf --project init --shared` when the repository should carry a curated memory set.
 Shared records are visible to anyone who can read the repository, so do not store secrets, raw
 transcripts, credentials, or personal notes in them. Review source references before committing.
 
@@ -81,7 +82,5 @@ When branches change shared records, merge the Markdown files as canonical text,
 claims when they conflict, and use an explicit supersession rather than silently choosing one.
 Re-run `sync` after the merge. Do not commit generated indexes or model files.
 
-Choose private project memory before initialization by omitting `--shared` and ignoring `.sbuf/`
-under that repository's normal ignore policy. If the repository already shares a store, leave its
-tracked canonical files intact. Use the global store for personal memory, or a separate private
-checkout when the memory must remain project-scoped.
+If the repository already shares a store, leave its tracked canonical files intact. Use the global
+store for personal memory, or a separate checkout when the memory must remain project-scoped.

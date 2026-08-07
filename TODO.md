@@ -47,7 +47,7 @@ Markdown/TOML parser and renderer for the canonical schema.
 ### SB-102 — Resolve global and project stores safely
 
 Used platform directories for global data/cache locations and discover
-`.sbuf/` project configuration with private defaults.
+`.sbuf/` project configuration with explicit shared initialization.
 
 ### SB-103 — Add atomic repository operations and lifecycle commands
 

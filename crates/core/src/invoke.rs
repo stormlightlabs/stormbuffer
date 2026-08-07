@@ -890,6 +890,14 @@ fn map_core_error(error: &crate::Error) -> InvokeFailure {
         crate::Error::InvalidInput { .. } => {
             InvokeFailure::new("invalid_request", "request input is invalid")
         }
+        crate::Error::IndexUnavailable { .. } => InvokeFailure::new(
+            "internal_error",
+            "the SQLite projection could not be opened; check that its directory is writable, then reindex the selected store",
+        ),
+        crate::Error::IndexBusy => InvokeFailure::new(
+            "conflict",
+            "the SQLite projection is busy; retry the operation",
+        ),
         crate::Error::Io { .. }
         | crate::Error::InvalidWorkingDirectory
         | crate::Error::MissingHomeDirectory

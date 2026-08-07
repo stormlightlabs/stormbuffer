@@ -1,17 +1,19 @@
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::Duration;
 
+use fs2::FileExt;
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, Transaction, params, params_from_iter};
 use serde::Serialize;
 
 use crate::embedder::Embedder;
 use crate::record::Access;
-use crate::repository::{acquire_store_mutation_lock, replace_file};
+use crate::repository::replace_file;
 use crate::vector::{
     SqliteVectorIndex, VectorDocument, VectorFilter, VectorIndex, VectorMetadata,
     register_sqlite_vec,
@@ -25,6 +27,42 @@ const MAX_CHUNK_WORDS: usize = 160;
 const MAX_CONTEXT_BLOCK_BYTES: usize = 64 * 1024;
 const DEFAULT_SEARCH_LIMIT: usize = 20;
 const MAX_SEARCH_LIMIT: usize = 100;
+static NEXT_WRITE_PROBE: AtomicU64 = AtomicU64::new(0);
+
+struct ProjectionLock {
+    file: File,
+}
+
+impl ProjectionLock {
+    fn acquire(index_path: &Path) -> crate::Result<Self> {
+        let parent = index_path.parent().ok_or_else(|| {
+            Error::io(
+                "resolve the index directory",
+                io::Error::other("index path has no parent"),
+            )
+        })?;
+        fs::create_dir_all(parent)
+            .map_err(|source| Error::io("create the index directory", source))?;
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(parent.join("projection.lock"))
+            .map_err(|source| Error::io("open the projection lock", source))?;
+        match file.try_lock_exclusive() {
+            Ok(()) => Ok(Self { file }),
+            Err(source) if source.kind() == io::ErrorKind::WouldBlock => Err(Error::IndexBusy),
+            Err(source) => Err(Error::io("lock the projection", source)),
+        }
+    }
+}
+
+impl Drop for ProjectionLock {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.file);
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 /// Retrieval strategy used to rank matching record chunks.
@@ -318,6 +356,72 @@ pub fn index_path(paths: &StorePaths) -> PathBuf {
     }
 }
 
+fn active_index_path(paths: &StorePaths) -> crate::Result<PathBuf> {
+    let configured = index_path(paths);
+    if paths.scope != StoreScope::Global || directory_supports_writes(&paths.cache) {
+        return Ok(configured);
+    }
+    fallback_global_index_path(paths)
+}
+
+fn directory_supports_writes(directory: &Path) -> bool {
+    if let Err(error) = fs::create_dir_all(directory) {
+        return error.kind() != io::ErrorKind::PermissionDenied;
+    }
+    let probe = directory.join(format!(
+        ".write-probe-{}-{}",
+        std::process::id(),
+        NEXT_WRITE_PROBE.fetch_add(1, Ordering::Relaxed)
+    ));
+    match OpenOptions::new().write(true).create_new(true).open(&probe) {
+        Ok(file) => {
+            drop(file);
+            let _ = fs::remove_file(probe);
+            true
+        }
+        Err(error) => error.kind() != io::ErrorKind::PermissionDenied,
+    }
+}
+
+fn fallback_global_index_path(paths: &StorePaths) -> crate::Result<PathBuf> {
+    let identity = blake3::hash(paths.root.to_string_lossy().as_bytes())
+        .to_hex()
+        .to_string();
+    let directory = std::env::temp_dir().join(format!("stormbuffer-projection-{identity}"));
+    create_private_directory(&directory)?;
+    Ok(directory.join("index.sqlite3"))
+}
+
+#[cfg(unix)]
+fn create_private_directory(directory: &Path) -> crate::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+
+    let mut builder = fs::DirBuilder::new();
+    builder.mode(0o700);
+    match builder.create(directory) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+            let metadata = fs::symlink_metadata(directory)
+                .map_err(|source| Error::io("inspect the fallback index directory", source))?;
+            if !metadata.file_type().is_dir() {
+                return Err(Error::io(
+                    "secure the fallback index directory",
+                    io::Error::other("fallback index path is not a directory"),
+                ));
+            }
+        }
+        Err(source) => return Err(Error::io("create the fallback index directory", source)),
+    }
+    fs::set_permissions(directory, fs::Permissions::from_mode(0o700))
+        .map_err(|source| Error::io("secure the fallback index directory", source))
+}
+
+#[cfg(not(unix))]
+fn create_private_directory(directory: &Path) -> crate::Result<()> {
+    fs::create_dir_all(directory)
+        .map_err(|source| Error::io("create the fallback index directory", source))
+}
+
 pub fn content_hash(markdown: &str) -> String {
     blake3::hash(markdown.as_bytes()).to_hex().to_string()
 }
@@ -528,8 +632,9 @@ pub fn chunk_record(record: &Record) -> Vec<(String, Option<String>, String, usi
 }
 
 pub fn sync_store(paths: &StorePaths) -> crate::Result<SyncReport> {
-    let _lock = acquire_store_mutation_lock(paths)?;
-    let mut index = Index::open_at(&index_path(paths))?;
+    let destination = active_index_path(paths)?;
+    let _lock = ProjectionLock::acquire(&destination)?;
+    let mut index = Index::open_at(&destination)?;
     index.sync_canonical(paths)
 }
 
@@ -541,8 +646,8 @@ pub fn reindex_store_with_embedder(
     paths: &StorePaths,
     embedder: Option<&dyn Embedder>,
 ) -> crate::Result<SyncReport> {
-    let _lock = acquire_store_mutation_lock(paths)?;
-    let destination = index_path(paths);
+    let destination = active_index_path(paths)?;
+    let _lock = ProjectionLock::acquire(&destination)?;
     let parent = destination.parent().ok_or_else(|| {
         Error::io(
             "resolve the index directory",
@@ -619,7 +724,7 @@ pub fn search_stores(
     options.mode = RetrievalMode::Lexical;
     let mut hits = Vec::new();
     for paths in stores {
-        let index = Index::open_at(&index_path(paths))?;
+        let index = Index::open_at(&active_index_path(paths)?)?;
         hits.extend(index.search_hits(paths, query, &options)?);
     }
     let current = options
@@ -644,7 +749,7 @@ pub fn search_stores_with_embedder(
     let mut lexical = Vec::new();
     let mut semantic = Vec::new();
     for paths in stores {
-        let index = Index::open_at(&index_path(paths))?;
+        let index = Index::open_at(&active_index_path(paths)?)?;
         if options.mode != RetrievalMode::Semantic {
             let mut lexical_options = options.clone();
             lexical_options.limit = MAX_SEARCH_LIMIT;
@@ -672,8 +777,9 @@ pub fn rebuild_vector_index(
     paths: &StorePaths,
     embedder: &dyn Embedder,
 ) -> crate::Result<VectorMetadata> {
-    let _lock = acquire_store_mutation_lock(paths)?;
-    let mut index = Index::open_at(&index_path(paths))?;
+    let destination = active_index_path(paths)?;
+    let _lock = ProjectionLock::acquire(&destination)?;
+    let mut index = Index::open_at(&destination)?;
     let report = index.sync_canonical(paths)?;
     if !report.is_complete() {
         return Err(Error::invalid_record(
@@ -707,7 +813,7 @@ pub fn context_stores(
     normalize_context_options(&mut options, stores);
     let mut hits = Vec::new();
     for paths in stores {
-        let index = Index::open_at(&index_path(paths))?;
+        let index = Index::open_at(&active_index_path(paths)?)?;
         hits.extend(index.search_hits(paths, query, &options.search)?);
     }
     sort_hits(&mut hits, options.search.current_scope.as_deref());
@@ -728,7 +834,7 @@ pub fn context_stores_with_embedder(
     let mut lexical = Vec::new();
     let mut semantic = Vec::new();
     for paths in stores {
-        let index = Index::open_at(&index_path(paths))?;
+        let index = Index::open_at(&active_index_path(paths)?)?;
         if options.search.mode != RetrievalMode::Semantic {
             let mut lexical_options = options.search.clone();
             lexical_options.limit = MAX_SEARCH_LIMIT;
@@ -925,7 +1031,7 @@ pub fn watch_store(paths: &StorePaths, options: WatchOptions) -> crate::Result<W
 }
 
 pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
-    let destination = index_path(paths);
+    let destination = active_index_path(paths)?;
     let mut report = DoctorReport {
         index_path: destination.display().to_string(),
         failures: 0,
@@ -1048,6 +1154,12 @@ struct Index {
 
 impl Index {
     fn open_at(path: &Path) -> crate::Result<Self> {
+        Self::try_open_at(path).map_err(|source| Error::IndexUnavailable {
+            source: Box::new(source),
+        })
+    }
+
+    fn try_open_at(path: &Path) -> crate::Result<Self> {
         register_sqlite_vec();
         let parent = path.parent().ok_or_else(|| {
             Error::io(

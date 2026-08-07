@@ -446,9 +446,9 @@ documentation and graph usability receive a human review.
   acquisition and verification policy before semantic search ships.
 - Executable aliases differ across package managers and Windows. Packaging
   tests must prove `stormbuffer`, `stormbuf`, and `sbuf`, not assume symlinks.
-- Shared project stores introduce merge and privacy concerns. Private-by-default
-  behavior must remain obvious. Shared mode tracks only canonical configuration
-  and Markdown; this repository's `.sbuf/` store is the reference example.
+- Shared project stores introduce merge and privacy concerns. Shared mode must
+  remain explicit and tracks only canonical configuration and Markdown; this
+  repository's `.sbuf/` store is the reference example.
 - Retrieved Markdown may contain instructions intended to steer the generator.
   Treat it as untrusted evidence, enforce policy outside the model, and include
   indirect prompt injection in the evaluation corpus.

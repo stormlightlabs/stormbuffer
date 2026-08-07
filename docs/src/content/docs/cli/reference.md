@@ -37,8 +37,7 @@ Initialization creates the store if it does not exist.
 
 Running it again leaves an existing store unchanged.
 
-Project stores are private by default but you can opt into tracked configuration and canonical
-Markdown explicitly:
+Use `--shared` when the repository should carry the store's configuration and canonical Markdown:
 
 ```text
 sbuf --project init --shared

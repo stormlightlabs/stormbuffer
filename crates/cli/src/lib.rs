@@ -661,6 +661,14 @@ fn run_init(scope: StoreScope, shared: bool, output: &Output) -> i32 {
         Ok(created) => created,
         Err(error) => return report_error(error, output),
     };
+    let sync = match core::sync_store(&paths).context("could not initialize the search index") {
+        Ok(report) => report,
+        Err(error) => return report_error(error, output),
+    };
+    if !sync.is_complete() {
+        report_invalid_files(&sync.invalid_files, output);
+        return FAILURE;
+    }
     let action = if created {
         "Initialized"
     } else {
@@ -676,13 +684,9 @@ fn run_init(scope: StoreScope, shared: bool, output: &Output) -> i32 {
             );
         }
     }
-    let visibility = if shared {
-        "shared"
-    } else {
-        "private by default"
-    };
+    let visibility = if shared { " (shared)" } else { "" };
     output.line(&format!(
-        "{} {} store at {} ({visibility})",
+        "{} {} store at {}{visibility}",
         output.success(action),
         scope,
         paths.root.display()

@@ -153,6 +153,13 @@ pub enum Error {
         #[source]
         source: rusqlite::Error,
     },
+    #[error("SQLite projection unavailable: {source}")]
+    IndexUnavailable {
+        #[source]
+        source: Box<Error>,
+    },
+    #[error("SQLite projection is busy; retry the operation")]
+    IndexBusy,
     #[error("embedding operation failed: {operation}: {message}")]
     Embedding {
         operation: &'static str,

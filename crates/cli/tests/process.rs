@@ -156,6 +156,7 @@ fn init_root_and_status_work_for_project_and_global_stores() {
     assert_eq!(project_init.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&project_init.stdout).contains("Initialized project store"));
     assert!(project.join(".sbuf/store.toml").is_file());
+    assert!(project.join(".sbuf/index.sqlite3").is_file());
 
     let project_root = run(&project, ["--project", "root"]);
     assert_eq!(project_root.status.code(), Some(0));
@@ -173,7 +174,9 @@ fn init_root_and_status_work_for_project_and_global_stores() {
     with_store_environment(&mut global_command, &root);
     let global_init = global_command.output().expect("run global init");
     assert_eq!(global_init.status.code(), Some(0));
+    assert!(!String::from_utf8_lossy(&global_init.stdout).contains("private"));
     assert!(root.join("data/stormbuffer/store.toml").is_file());
+    assert!(root.join("cache/stormbuffer/global.sqlite3").is_file());
 
     let mut global_status_command = Command::new(binary());
     global_status_command

@@ -37,7 +37,8 @@ A project store belongs to one repository and lives under `.sbuf/`.
 
 Commands use the global store by default; add `--project` to select project memory explicitly.
 
-Project stores are private unless initialized with `--project init --shared`.
+Use `--project init --shared` when the repository should carry the store. Otherwise, add `.sbuf/`
+to the repository's ignore rules before creating project memory.
 
 ## Retrieval projections
 

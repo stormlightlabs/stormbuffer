@@ -80,8 +80,8 @@ sbuf --project init
 sbuf --project status
 ```
 
-Project stores are private by default. Add `.sbuf/` to the project's ignore
-rules before creating project memory:
+If project memory should stay out of version control, add `.sbuf/` to the project's ignore
+rules before creating the store:
 
 ```sh
 printf '%s\n' '.sbuf/' >> .gitignore

@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use stormbuffer_core::{
     SearchOptions, StoreInitMode, StorePaths, StoreScope, context_store, doctor_store, index_path,
-    initialize_store, reindex_store, search_store, search_stores, sync_store,
+    initialize_store, invoke_request, reindex_store, search_store, search_stores, sync_store,
 };
 
 struct TempStore {
@@ -329,4 +329,71 @@ fn project_search_includes_global_and_rebuild_preserves_manual_edits() {
         fs::read(invalid).expect("read invalid after sync"),
         invalid_bytes
     );
+}
+
+#[test]
+fn invoke_search_reports_an_unopenable_sqlite_projection() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    fs::create_dir(index_path(&paths)).expect("block projection path");
+
+    let error = invoke_request(&paths, "search", br#"{"version":1,"query":"projection"}"#)
+        .expect_err("search should fail when the projection cannot be opened");
+
+    assert_eq!(error.code(), "internal_error");
+    assert_eq!(
+        error.message(),
+        "the SQLite projection could not be opened; check that its directory is writable, then reindex the selected store"
+    );
+    let root = paths.root.to_string_lossy();
+    assert!(!error.message().contains(root.as_ref()));
+    assert!(!error.message().contains("unable to open database file"));
+}
+
+#[cfg(unix)]
+#[test]
+fn global_store_uses_a_temporary_projection_when_its_cache_is_read_only() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    write_record(
+        &paths,
+        "fallback.md",
+        "019fdb80-0000-7000-8000-000000000001",
+        "Fallback projection",
+        "global",
+        "writable fallback",
+        "Agents can rebuild a disposable projection.",
+    );
+
+    let mut permissions = fs::metadata(&paths.cache)
+        .expect("cache metadata")
+        .permissions();
+    permissions.set_mode(0o555);
+    fs::set_permissions(&paths.cache, permissions).expect("make cache read-only");
+
+    let report = sync_store(&paths).expect("sync through fallback projection");
+    assert_eq!(report.indexed, 1);
+    let doctor = doctor_store(&paths).expect("inspect fallback projection");
+    let fallback = PathBuf::from(&doctor.index_path);
+    assert!(fallback.starts_with(std::env::temp_dir()));
+    assert_ne!(fallback, paths.cache.join("global.sqlite3"));
+    assert!(fallback.is_file());
+    assert_eq!(
+        search_store(&paths, "disposable", SearchOptions::for_store(&paths))
+            .expect("search fallback projection")
+            .len(),
+        1
+    );
+
+    let mut permissions = fs::metadata(&paths.cache)
+        .expect("cache metadata")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&paths.cache, permissions).expect("restore cache permissions");
+    fs::remove_dir_all(fallback.parent().expect("fallback directory"))
+        .expect("remove fallback projection");
 }
