@@ -14,7 +14,7 @@ fn temporary_root() -> PathBuf {
 }
 
 fn binary() -> PathBuf {
-    std::env::var_os("CARGO_BIN_EXE_stormbuffer")
+    std::env::var_os("CARGO_BIN_EXE_sbuf")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             std::env::current_exe()
@@ -22,7 +22,7 @@ fn binary() -> PathBuf {
                 .parent()
                 .and_then(Path::parent)
                 .expect("locate debug directory")
-                .join("stormbuffer")
+                .join("sbuf")
         })
 }
 

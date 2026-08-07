@@ -15,8 +15,8 @@ fn temporary_directory() -> PathBuf {
     path
 }
 
-fn binary(name: &str) -> PathBuf {
-    if let Some(path) = env::var_os(format!("CARGO_BIN_EXE_{name}")) {
+fn binary() -> PathBuf {
+    if let Some(path) = env::var_os("CARGO_BIN_EXE_sbuf") {
         return PathBuf::from(path);
     }
 
@@ -25,14 +25,14 @@ fn binary(name: &str) -> PathBuf {
         .parent()
         .and_then(Path::parent)
         .expect("locate Cargo's debug directory")
-        .join(name)
+        .join("sbuf")
 }
 
-fn run(name: &str, directory: &Path, arguments: &[&str]) -> Output {
+fn run(directory: &Path, arguments: &[&str]) -> Output {
     let home = directory.join("home");
     let data = directory.join("data");
     let cache = directory.join("cache");
-    Command::new(binary(name))
+    Command::new(binary())
         .current_dir(directory)
         .args(arguments)
         .env("HOME", &home)
@@ -104,21 +104,18 @@ fn documented_cli_examples() -> Vec<(String, Vec<String>)> {
                 "```sh" => in_shell_block = true,
                 "```" if in_shell_block => in_shell_block = false,
                 _ if in_shell_block => {
-                    if !matches!(
-                        line.split_whitespace().next(),
-                        Some("stormbuffer" | "stormbuf" | "sbuf")
-                    ) {
+                    if !matches!(line.split_whitespace().next(), Some("sbuf")) {
                         continue;
                     }
                     let parts = shell_parts(line);
-                    // Evaluation requires the separately downloaded, checksum-verified model.
-                    if parts.get(1).map(String::as_str) == Some("evaluate") {
+                    // These require the separately downloaded, checksum-verified model.
+                    if parts
+                        .iter()
+                        .any(|part| matches!(part.as_str(), "evaluate" | "reindex"))
+                    {
                         continue;
                     }
-                    if matches!(
-                        parts.first().map(String::as_str),
-                        Some("stormbuffer" | "stormbuf" | "sbuf")
-                    ) {
+                    if matches!(parts.first().map(String::as_str), Some("sbuf")) {
                         examples.push((file.display().to_string(), parts));
                     }
                 }
@@ -148,12 +145,11 @@ fn documented_cli_examples_stay_executable() {
             page_root = root.join(format!("page-{page_number}"));
             fs::create_dir_all(&page_root).expect("create documentation page test directory");
         }
-        let name = &parts[0];
         let arguments: Vec<_> = parts[1..].iter().map(String::as_str).collect();
-        let output = run(name, &page_root, &arguments);
+        let output = run(&page_root, &arguments);
         assert!(
             output.status.success(),
-            "documented command from {source} failed: {name} {}\n{}",
+            "documented command from {source} failed: sbuf {}\n{}",
             arguments.join(" "),
             String::from_utf8_lossy(&output.stderr)
         );

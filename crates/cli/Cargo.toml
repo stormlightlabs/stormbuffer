@@ -11,20 +11,12 @@ keywords.workspace = true
 categories.workspace = true
 readme.workspace = true
 build = "build.rs"
-default-run = "stormbuffer"
+default-run = "sbuf"
 autobins = false
 
 [[bin]]
-name = "stormbuffer"
-path = "src/bin/stormbuffer.rs"
-
-[[bin]]
-name = "stormbuf"
-path = "src/bin/stormbuffer.rs"
-
-[[bin]]
 name = "sbuf"
-path = "src/bin/stormbuffer.rs"
+path = "src/bin/sbuf.rs"
 
 [dependencies]
 anyhow.workspace = true

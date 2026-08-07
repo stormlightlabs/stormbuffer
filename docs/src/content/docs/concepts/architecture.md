@@ -27,7 +27,7 @@ Stormbuffer can rebuild them from Markdown. They do not need to be part of your 
 Semantic retrieval uses a verified local ONNX model; the core never sends record text to a
 remote model.
 
-Use `stormbuffer status` to see which store is selected. Back up that store's Markdown records.
+Use `sbuf status` to see which store is selected. Back up that store's Markdown records.
 
 ## Global and project stores stay separate
 

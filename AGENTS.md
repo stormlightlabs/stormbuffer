@@ -21,6 +21,12 @@ SvelteKit documentation site and a local web editor.
 When the user explicitly requests Herdr/Pi delegation, use the project-local
 `$orchestrate` skill. Use no more than two Pi instances.
 
+## Project memory
+
+Use `$stormbuffer-memory` once when work depends on prior project decisions,
+conventions, commands, architecture, or unfinished work. Keep retrieval project-scoped
+and fail soft when Stormbuffer is unavailable or has no useful evidence.
+
 ## Architecture boundaries
 
 - Markdown with TOML frontmatter is canonical. SQLite, FTS, vectors, generated
@@ -53,7 +59,7 @@ When the user explicitly requests Herdr/Pi delegation, use the project-local
 
 ## CLI and protocols
 
-- `stormbuffer`, `stormbuf`, and `sbuf` are equivalent public names.
+- `sbuf` is the only public CLI executable.
 - Follow clig.dev conventions. Keep results on stdout, diagnostics on stderr,
   prompts TTY-only, errors actionable, and exit codes stable.
 - JSON invocation is versioned, bounded, non-interactive, and JSON-only on

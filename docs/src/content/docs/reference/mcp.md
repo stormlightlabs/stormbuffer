@@ -93,7 +93,7 @@ only this operation mapping and core call:
 
 ```sh
 printf '%s\n' '{"version":1,"query":"release constraint","limit":5}' \
-  | stormbuffer --project invoke search
+  | sbuf --project invoke search
 ```
 
 The successful CLI envelope is:

@@ -27,21 +27,33 @@ const DEFAULT_SEARCH_LIMIT: usize = 20;
 const MAX_SEARCH_LIMIT: usize = 100;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+/// Retrieval strategy used to rank matching record chunks.
 pub enum RetrievalMode {
+    /// Rank full-text matches without consulting the vector index.
     Lexical,
+    /// Rank nearest vector matches without full-text score fusion.
     Semantic,
+    /// Fuse lexical and semantic rankings.
     #[default]
     Hybrid,
 }
 
 #[derive(Clone, Debug)]
+/// Filters and ranking policy shared by search and context compilation.
 pub struct SearchOptions {
+    /// Maximum results requested. Retrieval clamps this to its supported range.
     pub limit: usize,
+    /// Include candidate, superseded, and archived records in addition to active records.
     pub include_inactive: bool,
+    /// Scope that receives the local-result ranking boost.
     pub current_scope: Option<String>,
+    /// Scopes eligible for retrieval. `None` derives them from the selected stores.
     pub allowed_scopes: Option<Vec<String>>,
+    /// Access levels eligible for retrieval. `None` permits every access level.
     pub allowed_access: Option<Vec<Access>>,
+    /// Record kinds eligible for retrieval. `None` permits every kind.
     pub allowed_kinds: Option<Vec<String>>,
+    /// Ranking strategy to use.
     pub mode: RetrievalMode,
 }
 
@@ -60,6 +72,10 @@ impl Default for SearchOptions {
 }
 
 impl SearchOptions {
+    /// Builds the default scope policy for a store.
+    ///
+    /// Project stores search their own scope and the global scope; global stores search only the
+    /// global scope.
     pub fn for_store(paths: &StorePaths) -> Self {
         let current_scope = current_scope(paths);
         let mut allowed_scopes = Vec::new();
@@ -82,8 +98,11 @@ impl SearchOptions {
 }
 
 #[derive(Clone, Debug)]
+/// Controls evidence selection for a compiled context response.
 pub struct ContextOptions {
+    /// Maximum approximate token count available for evidence blocks.
     pub budget: usize,
+    /// Retrieval filters and ranking policy used to select evidence.
     pub search: SearchOptions,
 }
 
@@ -97,6 +116,7 @@ impl Default for ContextOptions {
 }
 
 #[derive(Clone, Debug, Serialize)]
+/// Provenance attached to a retrieved record.
 pub struct SourceReceipt {
     pub kind: String,
     pub reference: String,
@@ -104,6 +124,7 @@ pub struct SourceReceipt {
 }
 
 #[derive(Clone, Debug, Serialize)]
+/// A ranked record chunk returned by search.
 pub struct SearchResult {
     pub record_id: String,
     pub chunk_id: String,
@@ -182,12 +203,19 @@ pub struct ContextResult {
     pub receipt: ContextReceipt,
 }
 
+/// A canonical Markdown file that could not be projected into the disposable index.
 #[derive(Clone, Debug, Serialize)]
 pub struct SyncInvalidFile {
+    /// Display path of the invalid canonical file.
     pub path: String,
+    /// Actionable parse or validation failure.
     pub error: String,
 }
 
+/// Result of reconciling canonical Markdown with the disposable index.
+///
+/// A report can contain successful work and invalid files at the same time. Callers
+/// should use [`SyncReport::is_complete`] before treating retrieval as authoritative.
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct SyncReport {
     pub indexed: usize,
@@ -197,6 +225,13 @@ pub struct SyncReport {
     pub semantic: Option<SemanticIndexReport>,
 }
 
+impl SyncReport {
+    /// Returns `true` when every discovered canonical record was indexed successfully.
+    pub fn is_complete(&self) -> bool {
+        self.invalid_files.is_empty()
+    }
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct SemanticIndexReport {
     pub status: String,
@@ -204,6 +239,7 @@ pub struct SemanticIndexReport {
     pub message: Option<String>,
 }
 
+/// Aggregate result from one or more watch reconciliation cycles.
 #[derive(Clone, Debug, Serialize)]
 pub struct WatchReport {
     pub cycles: usize,
@@ -211,6 +247,13 @@ pub struct WatchReport {
     pub skipped: usize,
     pub removed: usize,
     pub invalid_files: Vec<SyncInvalidFile>,
+}
+
+impl WatchReport {
+    /// Returns `true` when every observed canonical record was indexed successfully.
+    pub fn is_complete(&self) -> bool {
+        self.invalid_files.is_empty()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -534,7 +577,7 @@ pub fn reindex_store_with_embedder(
                 status: "unavailable".to_owned(),
                 model_version: None,
                 message: Some(
-                    "no verified embedding model was supplied; run `stormbuffer init` when online, then `stormbuffer reindex`".to_owned(),
+                    "no verified embedding model was supplied; run `sbuf init` when online, then `sbuf reindex`".to_owned(),
                 ),
             },
         });
@@ -552,6 +595,10 @@ pub fn reindex_store_with_embedder(
     result
 }
 
+/// Searches one store's current lexical projection.
+///
+/// Call [`sync_store`] first when canonical Markdown may have changed. This
+/// function is a read-only projection query and does not reconcile the store.
 pub fn search_store(
     paths: &StorePaths,
     query: &str,
@@ -560,6 +607,10 @@ pub fn search_store(
     search_stores(std::slice::from_ref(paths), query, options)
 }
 
+/// Searches the current lexical projections for multiple stores.
+///
+/// Each store must be reconciled with [`sync_store`] before this call when its
+/// canonical Markdown may have changed.
 pub fn search_stores(
     stores: &[StorePaths],
     query: &str,
@@ -580,6 +631,10 @@ pub fn search_stores(
     Ok(hits.into_iter().map(SearchResult::from).collect())
 }
 
+/// Searches current lexical and semantic projections using `embedder`.
+///
+/// Call [`sync_store`] and [`rebuild_vector_index`] after canonical Markdown
+/// changes. A stale semantic projection is rejected rather than queried.
 pub fn search_stores_with_embedder(
     stores: &[StorePaths],
     query: &str,
@@ -609,16 +664,29 @@ pub fn search_stores_with_embedder(
     Ok(fused.into_iter().map(SearchResult::from).collect())
 }
 
+/// Reconciles canonical Markdown and rebuilds the semantic projection.
+///
+/// Returns an error if any canonical record is invalid; callers never receive
+/// metadata for a partial semantic index.
 pub fn rebuild_vector_index(
     paths: &StorePaths,
     embedder: &dyn Embedder,
 ) -> crate::Result<VectorMetadata> {
     let _lock = acquire_store_mutation_lock(paths)?;
     let mut index = Index::open_at(&index_path(paths))?;
-    index.sync_canonical(paths)?;
+    let report = index.sync_canonical(paths)?;
+    if !report.is_complete() {
+        return Err(Error::invalid_record(
+            "canonical store",
+            "one or more canonical records are invalid",
+        ));
+    }
     index.rebuild_vectors(paths, embedder)
 }
 
+/// Compiles context from one store's current lexical projection.
+///
+/// Call [`sync_store`] first when canonical Markdown may have changed.
 pub fn context_store(
     paths: &StorePaths,
     query: &str,
@@ -627,6 +695,10 @@ pub fn context_store(
     context_stores(std::slice::from_ref(paths), query, options)
 }
 
+/// Compiles context from multiple stores' current lexical projections.
+///
+/// Each store must be reconciled with [`sync_store`] before this call when its
+/// canonical Markdown may have changed.
 pub fn context_stores(
     stores: &[StorePaths],
     query: &str,
@@ -642,6 +714,10 @@ pub fn context_stores(
     context_from_hits(query, &options, hits, None)
 }
 
+/// Compiles context from current lexical and semantic projections.
+///
+/// Call [`sync_store`] and [`rebuild_vector_index`] after canonical Markdown
+/// changes. A stale semantic projection is rejected rather than queried.
 pub fn context_stores_with_embedder(
     stores: &[StorePaths],
     query: &str,
@@ -874,7 +950,7 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
             &mut report,
             "failure",
             "the selected store is not initialized".to_owned(),
-            "run `stormbuffer init` (or `stormbuffer --project init`)",
+            "run `sbuf init` (or `sbuf --project init`)",
         );
         return Ok(report);
     }
@@ -902,7 +978,7 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
                 &mut report,
                 "failure",
                 format!("canonical record {} is invalid: {error}", path.display()),
-                "repair the Markdown, then run `stormbuffer sync`",
+                "repair the Markdown, then run `sbuf sync`",
             ),
         }
     }
@@ -912,7 +988,7 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
             &mut report,
             "warning",
             "the SQLite projection is missing".to_owned(),
-            "run `stormbuffer reindex`",
+            "run `sbuf reindex`",
         );
     } else {
         match Index::open_at(&destination).and_then(|index| index.projected_records()) {
@@ -927,13 +1003,13 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
                             &mut report,
                             "warning",
                             format!("projection is stale for {}", record.path),
-                            "run `stormbuffer sync`",
+                            "run `sbuf sync`",
                         ),
                         None => issue(
                             &mut report,
                             "warning",
                             format!("projection contains deleted record {}", record.path),
-                            "run `stormbuffer sync`",
+                            "run `sbuf sync`",
                         ),
                     }
                 }
@@ -943,7 +1019,7 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
                             &mut report,
                             "warning",
                             format!("canonical record is not indexed: {path}"),
-                            "run `stormbuffer sync`",
+                            "run `sbuf sync`",
                         );
                     }
                 }
@@ -952,7 +1028,7 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
                 &mut report,
                 "failure",
                 format!("the SQLite projection cannot be opened: {error}"),
-                "run `stormbuffer reindex`",
+                "run `sbuf reindex`",
             ),
         }
     }
@@ -1134,7 +1210,7 @@ impl Index {
         {
             return Err(Error::embedding(
                 "search vector index",
-                "active semantic index is stale for the canonical or lexical projection; run `stormbuffer sync` followed by `stormbuffer reindex`",
+                "active semantic index is stale for the canonical or lexical projection; run `sbuf sync` followed by `sbuf reindex`",
             ));
         }
         let scopes = options.allowed_scopes.clone().unwrap_or_else(|| {

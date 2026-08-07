@@ -18,18 +18,17 @@ skill shipped in this repository.
 
 Place the copied `SKILL.md` in the skill directory used by your agent.
 
-The skill expects the `stormbuffer` command to be installed and a store to be initialized.
+The skill expects `sbuf` to be installed and a store to be initialized.
 
 ## Verification
 
 From the project where the agent will run:
 
 ```sh
-stormbuffer --project init
-stormbuffer --project status
-stormbuffer --project search "project conventions" --json
+sbuf --project init
+sbuf --project status
+sbuf --project search "project conventions" --json
 ```
 
-The first command should identify the intended project store.
-
-The second should return empty JSON without prompting, even when the store has no matching memories.
+`status` should identify the intended project store. The search should return an empty JSON array
+without prompting when the store has no matching memories.

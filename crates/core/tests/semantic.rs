@@ -274,6 +274,29 @@ fn rebuilding_vectors_synchronizes_changed_canonical_content() {
     assert_eq!(results.len(), 1);
 }
 
+#[test]
+fn rebuilding_vectors_rejects_invalid_canonical_records() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    let id = "01989af2-4305-7b19-88b1-e8ae4ea9a207";
+    write_record(
+        &paths,
+        id,
+        "global",
+        "fact",
+        "active",
+        "valid canonical content",
+    );
+    let embedder = DeterministicEmbedder::new("semantic-v1", 24).expect("embedder");
+    rebuild_vector_index(&paths, &embedder).expect("initial vector backfill");
+    fs::write(paths.records.join(format!("{id}.md")), "invalid record").expect("corrupt record");
+
+    let error = rebuild_vector_index(&paths, &embedder)
+        .expect_err("invalid canonical records must prevent a vector rebuild");
+    assert!(matches!(error, Error::InvalidRecord { .. }));
+}
+
 struct FilteredEmbedder;
 impl Embedder for FilteredEmbedder {
     fn model_version(&self) -> &str {

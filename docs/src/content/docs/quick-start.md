@@ -15,13 +15,13 @@ belongs to one repository.
 For a user-wide store, run:
 
 ```sh
-stormbuffer init
+sbuf init
 ```
 
 For a project-local store, run the command from the project directory:
 
 ```sh
-stormbuffer --project init --shared
+sbuf --project init --shared
 ```
 
 Initialization creates the configured store structure without changing existing metadata.
@@ -31,8 +31,8 @@ Initialization creates the configured store structure without changing existing 
 Use `root` to print the resolved location and `status` to inspect the store without changing it:
 
 ```sh
-stormbuffer root
-stormbuffer status
+sbuf root
+sbuf status
 ```
 
 A status report identifies the selected scope, root path, initialization state, and record count.
@@ -43,8 +43,8 @@ Add `--json` for machine-readable output.
 `add` opens a temporary Markdown record in `$VISUAL` or `$EDITOR`:
 
 ```text
-stormbuffer --project add --title "Release constraint" --kind fact
-stormbuffer --project list
+sbuf --project add --title "Release constraint" --kind fact
+sbuf --project list
 ```
 
 Use `show` to print the canonical Markdown, `edit` to change it safely, and `supersede`,
@@ -56,7 +56,7 @@ Use `list --all` to include inactive records.
 Search active project memory and any initialized global memory with:
 
 ```sh
-stormbuffer --project search release
+sbuf --project search release
 ```
 
 Stormbuffer synchronizes the disposable search index before each search, so edits made directly
@@ -64,10 +64,10 @@ to the Markdown files appear in the results. Use `context` when another program 
 machine-readable selection:
 
 ```sh
-stormbuffer --project context release --budget 400
+sbuf --project context release --budget 400
 ```
 
-Semantic retrieval is local. Global `stormbuffer init` acquires the pinned fastembed model into
+Semantic retrieval is local. Global `sbuf init` acquires the pinned fastembed model into
 the platform cache, and project searches reuse that cache. Project initialization creates only the
 project store. If model acquisition fails, the store remains valid and the command reports how to
 repair it.
@@ -93,9 +93,9 @@ generated index. From a clean checkout, rebuild the disposable projection and re
 decision:
 
 ```sh
-stormbuffer --project sync
-stormbuffer --project search "canonical records projection failures"
-stormbuffer --project context "What survives an index failure?" --budget 256
+sbuf --project sync
+sbuf --project search "canonical records projection failures"
+sbuf --project context "What survives an index failure?" --budget 256
 ```
 
 The search and context output should cite record

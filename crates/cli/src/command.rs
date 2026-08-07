@@ -1,4 +1,4 @@
-use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum ColorMode {
@@ -9,7 +9,7 @@ pub enum ColorMode {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "stormbuffer",
+    name = "sbuf",
     version,
     about = "A memory store for facts, decisions, procedures, and checkpoints.",
     long_about = "Stormbuffer keeps memories in readable, indexed Markdown.",
@@ -170,7 +170,7 @@ pub struct SearchArgs {
     /// Include candidate, superseded, and archived records.
     #[arg(long)]
     pub all: bool,
-    /// Emit a JSON array instead of tab-delimited human output.
+    /// Emit a JSON array instead of human-readable result cards.
     #[arg(long)]
     pub json: bool,
 }
@@ -242,7 +242,8 @@ pub struct GcArgs {
 
 #[derive(Args, Debug)]
 pub struct InvokeArgs {
-    /// Protocol operation name.
+    /// Version 1 operation: search, context, get, propose, supersede, or archive.
+    #[arg(value_name = "OPERATION")]
     pub operation: String,
 }
 
@@ -255,13 +256,4 @@ pub struct McpArgs {
     /// Explicitly enable MCP write tools.
     #[arg(long)]
     pub allow_writes: bool,
-}
-
-pub fn command_name(invoked_name: &str) -> clap::Command {
-    let name = if invoked_name.is_empty() {
-        "stormbuffer".to_owned()
-    } else {
-        invoked_name.to_owned()
-    };
-    Cli::command().name(name)
 }

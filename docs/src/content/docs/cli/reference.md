@@ -7,7 +7,7 @@ group: CLI
 order: 3
 ---
 
-The Stormbuffer CLI is available as `stormbuffer`, `stormbuf`, or `sbuf`.
+The Stormbuffer CLI is installed as `sbuf`.
 Each name accepts the same commands and options.
 
 ## Choose a store
@@ -16,7 +16,7 @@ Stormbuffer uses a global store by default. Add `--project` to use the nearest `
 directory instead:
 
 ```sh
-stormbuffer --project root
+sbuf --project root
 ```
 
 ## Initialize a store
@@ -24,13 +24,13 @@ stormbuffer --project root
 Initialize the global store with:
 
 ```sh
-stormbuffer init
+sbuf init
 ```
 
 For project memory, run the command from the project directory:
 
 ```sh
-stormbuffer --project init
+sbuf --project init
 ```
 
 Initialization creates the store if it does not exist.
@@ -41,7 +41,7 @@ Project stores are private by default but you can opt into tracked configuration
 Markdown explicitly:
 
 ```text
-stormbuffer --project init --shared
+sbuf --project init --shared
 ```
 
 ## Locate a store
@@ -49,8 +49,8 @@ stormbuffer --project init --shared
 Print the resolved store path without initializing it:
 
 ```sh
-stormbuffer root
-stormbuffer --project root
+sbuf root
+sbuf --project root
 ```
 
 ## Inspect a store
@@ -58,15 +58,15 @@ stormbuffer --project root
 `status` reports the selected scope, root path, initialization state, visibility, and record count:
 
 ```sh
-stormbuffer status
-stormbuffer --project status
+sbuf status
+sbuf --project status
 ```
 
 Use `--json` when another program will consume the result:
 
 ```sh
-stormbuffer --project status --json
-stormbuf --project status
+sbuf --project status --json
+sbuf --project status
 sbuf --project root
 ```
 
@@ -92,9 +92,9 @@ After initializing a store, `add` opens a temporary Markdown copy in `$VISUAL`, 
 The optional flags provide the initial frontmatter and body before editing:
 
 ```text
-stormbuffer add --title "Deploy procedure" --kind procedure --body "Check the release health."
-stormbuffer edit <id>
-stormbuffer show <id>
+sbuf add --title "Deploy procedure" --kind procedure --body "Check the release health."
+sbuf edit <id>
+sbuf show <id>
 ```
 
 `show` writes the canonical Markdown to stdout. `edit` accepts active records.
@@ -110,16 +110,16 @@ records by default.
 Include archived and superseded records with `--all`:
 
 ```text
-stormbuffer list
-stormbuffer list --all
+sbuf list
+sbuf list --all
 ```
 
 Lifecycle commands retain the Markdown history:
 
 ```text
-stormbuffer supersede <id>
-stormbuffer archive <id>
-stormbuffer restore <id>
+sbuf supersede <id>
+sbuf archive <id>
+sbuf restore <id>
 ```
 
 `supersede` creates a new active record and marks the old record superseded.
@@ -134,12 +134,13 @@ These commands print the affected ID and status on stdout.
 includes accessible records from an initialized global store:
 
 ```sh
-stormbuffer --project search deploy
-stormbuffer --project search deploy --json
+sbuf --project search deploy
+sbuf --project search deploy --json
 ```
 
-Human-readable results are tab-delimited. Each result identifies the record, title, kind, scope,
-excerpt, source, canonical path, score, and lexical match reason. JSON results also include
+Human-readable results use labeled cards. Each result identifies the record, title, kind, scope,
+excerpt, source, canonical path, score, and lexical match reason. Use `--json` for stable
+machine-readable output; JSON results also include
 `match_reasons` and an optional `vector_distance`. Add `--all` to include inactive records or
 `--limit <number>` to bound the result count.
 
@@ -151,7 +152,7 @@ canonical store remains initialized and the error names the model repair needed.
 `context` selects matching chunks within a word budget and always writes JSON:
 
 ```sh
-stormbuffer --project context deploy --budget 400 --limit 10
+sbuf --project context deploy --budget 400 --limit 10
 ```
 
 The response contains the selected blocks and a receipt recording the query, allowed scopes,
@@ -165,9 +166,9 @@ Agents use `propose` to create sourced candidates. Candidates are not active unt
 person approves them:
 
 ```text
-stormbuffer --project propose --title "Release constraint" --kind fact --body "Keep the release offline."
-stormbuffer --project approve <candidate-id>
-stormbuffer --project reject <candidate-id>
+sbuf --project propose --title "Release constraint" --kind fact --body "Keep the release offline."
+sbuf --project approve <candidate-id>
+sbuf --project reject <candidate-id>
 ```
 
 A proposal must have attributable sources. The core reports one of `accepted`,
@@ -183,9 +184,9 @@ to stdout. It is noninteractive, versioned, and does not accept filesystem paths
 
 ```sh
 printf '%s\n' '{"version":1,"query":"release","limit":10}' \\
-  | stormbuffer --project invoke search
+  | sbuf --project invoke search
 printf '%s\n' '{"version":1,"query":"release","budget":400}' \\
-  | stormbuffer --project invoke context
+  | sbuf --project invoke context
 ```
 
 Version 1 supports `search`, `context`, `get`, `propose`, `supersede`, and `archive`.
@@ -202,7 +203,8 @@ commands to approve or reject a candidate.
 Callers can handle these stable version 1 error codes: `invalid_json`, `invalid_request`,
 `unsupported_version`, `unknown_operation`, `input_too_large`, `output_too_large`,
 `path_denied`, `scope_denied`, `access_denied`, `permission_denied`, `not_found`,
-`conflict`, and `internal_error`. New protocol behavior requires a new version rather
+`not_initialized`, `invalid_state`, `invalid_record`, `conflict`, and `internal_error`.
+New protocol behavior requires a new version rather
 than changing the meaning of an existing envelope or code.
 
 ## Maintain and recover the index
@@ -211,13 +213,13 @@ Canonical Markdown is the source of truth. SQLite and full-text search data are 
 can be rebuilt:
 
 ```sh
-stormbuffer --project sync
-stormbuffer --project reindex
-stormbuffer --project doctor
+sbuf --project sync
+sbuf --project reindex
+sbuf --project doctor
 ```
 
 `sync` reconciles new, edited, moved, invalid, and deleted Markdown files. Repeating it without
-changes skips records whose content hash is unchanged. Run `stormbuffer --project watch` for the
+changes skips records whose content hash is unchanged. Run `sbuf --project watch` for the
 same reconciliation on an interval. The watcher is optional because `search` and `context`
 synchronize before reading the index.
 
@@ -240,7 +242,7 @@ The checked-in retrieval corpus compares FTS-only, vector-only, and hybrid resul
 pinned All-MiniLM-L6-v2 FastEmbed pipeline:
 
 ```sh
-stormbuffer evaluate
+sbuf evaluate
 ```
 
 The JSON report includes recall at 5, mean reciprocal rank, wrong-scope retrieval,
@@ -251,7 +253,7 @@ still filters returned results. The duplicate/conflicting fixture contains more 
 memories than the top-five window, so its coverage is not tautologically 100%. Release
 thresholds are in the report and the corpus revision is fixed; update expected IDs and the
 revision in `crates/core/tests/fixtures/evaluation/` together in a reviewed change. If the
-pinned artifacts are missing or offline, the command reports the model cache and the `stormbuffer init`
+pinned artifacts are missing or offline, the command reports the model cache and the `sbuf init`
 repair command.
 
 Grounded-answer evaluation remains provider-neutral. Configure a host model to consume the
@@ -271,8 +273,8 @@ It always requires `--destroy` where an interactive terminal also asks for confi
 Piped or scripted use must add `--yes`:
 
 ```text
-stormbuffer forget <id> --destroy
-stormbuffer forget <id> --destroy --yes
+sbuf forget <id> --destroy
+sbuf forget <id> --destroy --yes
 ```
 
 The mutation lock, validated temporary writes, file synchronization, and atomic replacement

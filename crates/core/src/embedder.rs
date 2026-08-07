@@ -410,7 +410,7 @@ fn model_setup_error(cache: &Path, details: impl Into<String>) -> Error {
     Error::embedding(
         "prepare the local embedding model",
         format!(
-            "{}; model cache: {}; repair with `stormbuffer init`",
+            "{}; model cache: {}; repair with `sbuf init`",
             details.into(),
             cache.display()
         ),
@@ -630,7 +630,7 @@ mod tests {
         };
         let message = error.to_string();
         assert!(message.contains(&model_cache_dir(&paths).display().to_string()));
-        assert!(message.contains("stormbuffer init"));
+        assert!(message.contains("sbuf init"));
         let _ = fs::remove_dir_all(root);
     }
 }

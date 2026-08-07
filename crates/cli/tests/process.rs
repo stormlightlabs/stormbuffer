@@ -17,8 +17,8 @@ fn temporary_directory(name: &str) -> PathBuf {
     path
 }
 
-fn binary(name: &str) -> PathBuf {
-    if let Some(path) = env::var_os(format!("CARGO_BIN_EXE_{name}")) {
+fn binary() -> PathBuf {
+    if let Some(path) = env::var_os("CARGO_BIN_EXE_sbuf") {
         return PathBuf::from(path);
     }
 
@@ -27,19 +27,19 @@ fn binary(name: &str) -> PathBuf {
         .parent()
         .and_then(Path::parent)
         .expect("locate Cargo's debug directory");
-    let mut path = target_debug.join(name);
+    let mut path = target_debug.join("sbuf");
     if cfg!(windows) {
         path.set_extension("exe");
     }
     assert!(
         path.is_file(),
-        "locate the {name} test binary at {}",
+        "locate the sbuf test binary at {}",
         path.display()
     );
     path
 }
 
-fn run<I, S>(name: &str, directory: &Path, arguments: I) -> Output
+fn run<I, S>(directory: &Path, arguments: I) -> Output
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -47,7 +47,7 @@ where
     let home = directory.join("home");
     let data = directory.join("data");
     let cache = directory.join("cache");
-    Command::new(binary(name))
+    Command::new(binary())
         .current_dir(directory)
         .args(arguments)
         .env("HOME", &home)
@@ -61,7 +61,7 @@ where
         .expect("run CLI process")
 }
 
-fn run_json<I, S>(name: &str, directory: &Path, arguments: I, input: &str) -> Output
+fn run_json<I, S>(directory: &Path, arguments: I, input: &str) -> Output
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -69,7 +69,7 @@ where
     let home = directory.join("home");
     let data = directory.join("data");
     let cache = directory.join("cache");
-    let mut command = Command::new(binary(name));
+    let mut command = Command::new(binary());
     command
         .current_dir(directory)
         .args(arguments)
@@ -95,7 +95,7 @@ where
         .expect("collect JSON protocol output")
 }
 
-fn run_with_editor<I, S>(name: &str, directory: &Path, arguments: I) -> Output
+fn run_with_editor<I, S>(directory: &Path, arguments: I) -> Output
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -103,7 +103,7 @@ where
     let home = directory.join("home");
     let data = directory.join("data");
     let cache = directory.join("cache");
-    let mut command = Command::new(binary(name));
+    let mut command = Command::new(binary());
     command
         .current_dir(directory)
         .args(arguments)
@@ -132,17 +132,12 @@ fn with_store_environment(command: &mut Command, root: &Path) {
         .env("STORMBUFFER_TEST_MODE", "1");
 }
 
-fn run_with_store_environment<I, S>(
-    name: &str,
-    directory: &Path,
-    root: &Path,
-    arguments: I,
-) -> Output
+fn run_with_store_environment<I, S>(directory: &Path, root: &Path, arguments: I) -> Output
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let mut command = Command::new(binary(name));
+    let mut command = Command::new(binary());
     command
         .current_dir(directory)
         .args(arguments)
@@ -157,12 +152,12 @@ fn init_root_and_status_work_for_project_and_global_stores() {
     let project = root.join("project");
     fs::create_dir_all(&project).expect("create project directory");
 
-    let project_init = run("stormbuffer", &project, ["--project", "init"]);
+    let project_init = run(&project, ["--project", "init"]);
     assert_eq!(project_init.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&project_init.stdout).contains("Initialized project store"));
     assert!(project.join(".sbuf/store.toml").is_file());
 
-    let project_root = run("stormbuffer", &project, ["--project", "root"]);
+    let project_root = run(&project, ["--project", "root"]);
     assert_eq!(project_root.status.code(), Some(0));
     let expected_project_root = project
         .join(".sbuf")
@@ -173,14 +168,14 @@ fn init_root_and_status_work_for_project_and_global_stores() {
         expected_project_root.to_string_lossy()
     );
 
-    let mut global_command = Command::new(binary("stormbuffer"));
+    let mut global_command = Command::new(binary());
     global_command.current_dir(&project).arg("init");
     with_store_environment(&mut global_command, &root);
     let global_init = global_command.output().expect("run global init");
     assert_eq!(global_init.status.code(), Some(0));
     assert!(root.join("data/stormbuffer/store.toml").is_file());
 
-    let mut global_status_command = Command::new(binary("stormbuffer"));
+    let mut global_status_command = Command::new(binary());
     global_status_command
         .current_dir(&project)
         .args(["status", "--json"]);
@@ -198,17 +193,17 @@ fn shared_project_init_is_explicit_and_global_shared_is_rejected() {
     let project = root.join("project");
     fs::create_dir_all(&project).expect("create project directory");
 
-    let global_shared = run("stormbuffer", &root, ["init", "--shared"]);
+    let global_shared = run(&root, ["init", "--shared"]);
     assert_eq!(global_shared.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&global_shared.stderr).contains("project scope"));
     assert!(!root.join("data/stormbuffer").exists());
 
-    let global_flag = run("stormbuffer", &root, ["--shared", "init"]);
+    let global_flag = run(&root, ["--shared", "init"]);
     assert_eq!(global_flag.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&global_flag.stderr).contains("unexpected argument"));
     assert!(!root.join("data/stormbuffer").exists());
 
-    let shared_init = run("stormbuffer", &project, ["--project", "init", "--shared"]);
+    let shared_init = run(&project, ["--project", "init", "--shared"]);
     assert_eq!(shared_init.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&shared_init.stdout).contains("shared"));
     assert!(project.join(".sbuf/store.toml").is_file());
@@ -225,11 +220,11 @@ fn shared_project_init_is_explicit_and_global_shared_is_rejected() {
         assert!(ignore.lines().any(|line| line == pattern));
     }
 
-    let status = run("stormbuffer", &project, ["--project", "status"]);
+    let status = run(&project, ["--project", "status"]);
     assert_eq!(status.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&status.stdout).contains("Visibility: shared"));
 
-    let status_json = run("stormbuffer", &project, ["--project", "status", "--json"]);
+    let status_json = run(&project, ["--project", "status", "--json"]);
     assert_eq!(status_json.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&status_json.stdout).contains("\"visibility\":\"shared\""));
 
@@ -240,18 +235,18 @@ fn shared_project_init_is_explicit_and_global_shared_is_rejected() {
 fn invalid_input_and_unfinished_commands_are_explicit_and_safe() {
     let root = temporary_directory("errors");
 
-    let invalid = run("stormbuffer", &root, ["status", "--project", "extra"]);
+    let invalid = run(&root, ["status", "--project", "extra"]);
     assert_eq!(invalid.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("unexpected argument"));
     assert!(!String::from_utf8_lossy(&invalid.stderr).contains("panicked"));
 
-    let add = run("stormbuffer", &root, ["--project", "add"]);
+    let add = run(&root, ["--project", "add"]);
     assert_eq!(add.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&add.stderr).contains("not initialized"));
     assert!(add.stdout.is_empty());
     assert!(!root.join(".sbuf").exists());
 
-    let forget = run("stormbuffer", &root, ["forget", "memory-id"]);
+    let forget = run(&root, ["forget", "memory-id"]);
     assert_eq!(forget.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&forget.stderr).contains("--destroy"));
     assert!(!root.join(".sbuf").exists());
@@ -262,11 +257,10 @@ fn invalid_input_and_unfinished_commands_are_explicit_and_safe() {
 #[test]
 fn lifecycle_commands_preserve_records_and_use_tab_delimited_output() {
     let root = temporary_directory("lifecycle");
-    let init = run("stormbuffer", &root, ["--project", "init"]);
+    let init = run(&root, ["--project", "init"]);
     assert_eq!(init.status.code(), Some(0));
 
     let add = run_with_editor(
-        "stormbuffer",
         &root,
         [
             "--project",
@@ -288,7 +282,7 @@ fn lifecycle_commands_preserve_records_and_use_tab_delimited_output() {
     let id = String::from_utf8_lossy(&add.stdout).trim().to_owned();
     assert!(!id.is_empty());
 
-    let list = run("stormbuffer", &root, ["--project", "list"]);
+    let list = run(&root, ["--project", "list"]);
     assert_eq!(list.status.code(), Some(0));
     let line = String::from_utf8_lossy(&list.stdout);
     let fields: Vec<_> = line.trim_end().split('\t').collect();
@@ -300,36 +294,32 @@ fn lifecycle_commands_preserve_records_and_use_tab_delimited_output() {
     assert_eq!(fields[4], "A durable fact");
     assert!(!line.contains("\\t"));
 
-    let show = run("stormbuffer", &root, ["--project", "show", &id]);
+    let show = run(&root, ["--project", "show", &id]);
     assert_eq!(show.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&show.stdout).contains("The body stays readable."));
 
-    let edit = run_with_editor("stormbuffer", &root, ["--project", "edit", &id]);
+    let edit = run_with_editor(&root, ["--project", "edit", &id]);
     assert_eq!(edit.status.code(), Some(0));
     assert_eq!(String::from_utf8_lossy(&edit.stdout).trim(), id);
 
-    let archive = run("stormbuffer", &root, ["--project", "archive", &id]);
+    let archive = run(&root, ["--project", "archive", &id]);
     assert_eq!(archive.status.code(), Some(0));
     assert_eq!(
         String::from_utf8_lossy(&archive.stdout).trim(),
         format!("{id}\tarchived")
     );
-    assert!(
-        run("stormbuffer", &root, ["--project", "list"])
-            .stdout
-            .is_empty()
-    );
-    let all = run("stormbuffer", &root, ["--project", "list", "--all"]);
+    assert!(run(&root, ["--project", "list"]).stdout.is_empty());
+    let all = run(&root, ["--project", "list", "--all"]);
     assert!(String::from_utf8_lossy(&all.stdout).contains(&format!("{id}\tarchived")));
 
-    let restore = run("stormbuffer", &root, ["--project", "restore", &id]);
+    let restore = run(&root, ["--project", "restore", &id]);
     assert_eq!(restore.status.code(), Some(0));
     assert_eq!(
         String::from_utf8_lossy(&restore.stdout).trim(),
         format!("{id}\tactive")
     );
 
-    let supersede = run_with_editor("stormbuffer", &root, ["--project", "supersede", &id]);
+    let supersede = run_with_editor(&root, ["--project", "supersede", &id]);
     assert_eq!(
         supersede.status.code(),
         Some(0),
@@ -338,20 +328,15 @@ fn lifecycle_commands_preserve_records_and_use_tab_delimited_output() {
     );
     let replacement = String::from_utf8_lossy(&supersede.stdout).trim().to_owned();
     assert_ne!(replacement, id);
-    let active = run("stormbuffer", &root, ["--project", "list"]);
+    let active = run(&root, ["--project", "list"]);
     let active_output = String::from_utf8_lossy(&active.stdout);
     assert!(active_output.contains(&replacement));
     assert!(!active_output.contains(&id));
 
-    let blocked_forget = run(
-        "stormbuffer",
-        &root,
-        ["--project", "forget", &replacement, "--destroy"],
-    );
+    let blocked_forget = run(&root, ["--project", "forget", &replacement, "--destroy"]);
     assert_eq!(blocked_forget.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&blocked_forget.stderr).contains("--yes"));
     let forgotten = run(
-        "stormbuffer",
         &root,
         ["--project", "forget", &replacement, "--destroy", "--yes"],
     );
@@ -368,7 +353,7 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
     fs::create_dir_all(&project).expect("create project directory");
 
     for arguments in [vec!["init"], vec!["--project", "init"]] {
-        let output = run_with_store_environment("stormbuffer", &project, &root, arguments);
+        let output = run_with_store_environment(&project, &root, arguments);
         assert_eq!(
             output.status.code(),
             Some(0),
@@ -377,7 +362,6 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
         );
     }
     let global_add = run_with_store_environment(
-        "stormbuffer",
         &project,
         &root,
         [
@@ -392,14 +376,13 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
     );
     assert_eq!(global_add.status.code(), Some(0));
     let project_add = run_with_store_environment(
-        "stormbuffer",
         &project,
         &root,
         [
             "--project",
             "add",
             "--title",
-            "Project collision",
+            "Project\u{202e} collision\u{2028}card",
             "--kind",
             "fact",
             "--body",
@@ -409,7 +392,6 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
     assert_eq!(project_add.status.code(), Some(0));
 
     let search = run_with_store_environment(
-        "stormbuffer",
         &project,
         &root,
         ["--project", "search", "scope collision", "--json"],
@@ -427,17 +409,85 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
     assert_eq!(results[0]["scope"], "project:demo");
     assert_eq!(results[1]["scope"], "global");
 
+    let human_search =
+        run_with_store_environment(&project, &root, ["--project", "search", "scope collision"]);
+    assert_eq!(human_search.status.code(), Some(0));
+    let human_search = String::from_utf8_lossy(&human_search.stdout);
+    assert!(human_search.contains("Project collision card\n  ID: "));
+    assert!(human_search.contains("  Kind: fact  Scope: project:demo"));
+    assert!(human_search.contains("\n  Score: "));
+    assert!(!human_search.contains('\t'));
+    assert!(!human_search.contains('\u{202e}'));
+    assert!(!human_search.contains('\u{2028}'));
+
+    fs::remove_dir_all(root).expect("remove test directory");
+}
+
+#[test]
+fn retrieval_commands_fail_when_canonical_records_are_invalid() {
+    let root = temporary_directory("invalid-retrieval");
+    assert!(run(&root, ["--project", "init"]).status.success());
+    let added = run_with_editor(
+        &root,
+        [
+            "--project",
+            "add",
+            "--title",
+            "Soon invalid",
+            "--kind",
+            "fact",
+            "--body",
+            "canonical content",
+        ],
+    );
+    assert_eq!(
+        added.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&added.stderr)
+    );
+    let indexed = run(&root, ["--project", "sync"]);
+    assert_eq!(indexed.status.code(), Some(0));
+    let record_path = fs::read_dir(root.join(".sbuf/records"))
+        .expect("read records")
+        .map(|entry| entry.expect("record entry").path())
+        .find(|path| path.extension() == Some(OsStr::new("md")))
+        .expect("canonical record");
+    fs::write(record_path, "not frontmatter").expect("corrupt canonical record");
+
+    for arguments in [
+        vec!["--project", "sync"],
+        vec!["--project", "watch", "--once"],
+        vec!["--project", "reindex"],
+        vec!["--project", "search", "anything", "--json"],
+        vec!["--project", "context", "anything"],
+    ] {
+        let output = run(&root, arguments);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&output.stderr).contains("invalid canonical record"));
+    }
+
+    let invoked = run_json(
+        &root,
+        ["--project", "invoke", "search"],
+        r#"{"version":1,"query":"anything"}"#,
+    );
+    assert_eq!(invoked.status.code(), Some(1));
+    assert!(invoked.stderr.is_empty());
+    let envelope: serde_json::Value =
+        serde_json::from_slice(&invoked.stdout).expect("invalid record envelope");
+    assert_eq!(envelope["error"]["code"], "invalid_record");
+
     fs::remove_dir_all(root).expect("remove test directory");
 }
 
 #[test]
 fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
     let root = temporary_directory("invoke-contract");
-    let init = run("stormbuffer", &root, ["--project", "init"]);
+    let init = run(&root, ["--project", "init"]);
     assert_eq!(init.status.code(), Some(0));
 
     let proposal = run_json(
-        "stormbuffer",
         &root,
         ["--project", "invoke", "propose"],
         r#"{"version":1,"title":"Protocol memory","kind":"fact","access":"agent","body":"A sourced protocol memory.","sources":[{"kind":"document","reference":"ROADMAP.md#agent-writes","actor":"human"}]}"#,
@@ -458,7 +508,7 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
         .as_str()
         .expect("candidate id");
 
-    let approve = run("stormbuffer", &root, ["--project", "approve", id]);
+    let approve = run(&root, ["--project", "approve", id]);
     assert_eq!(
         approve.status.code(),
         Some(0),
@@ -476,12 +526,7 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
         } else {
             "propose"
         };
-        let denied = run_json(
-            "stormbuffer",
-            &root,
-            ["--project", "invoke", operation],
-            request,
-        );
+        let denied = run_json(&root, ["--project", "invoke", operation], request);
         assert_eq!(denied.status.code(), Some(1));
         let envelope: serde_json::Value =
             serde_json::from_slice(&denied.stdout).expect("permission denial envelope");
@@ -489,7 +534,6 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
     }
 
     let denied_supersede = run_json(
-        "stormbuffer",
         &root,
         ["--project", "invoke", "supersede"],
         &format!(
@@ -502,7 +546,6 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
     assert_eq!(denied_supersede["error"]["code"], "permission_denied");
 
     let get = run_json(
-        "stormbuffer",
         &root,
         ["--project", "invoke", "get"],
         &format!(r#"{{"version":1,"id":"{id}"}}"#),
@@ -525,12 +568,7 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
             r#"{"version":1,"query":"protocol memory","budget":128}"#,
         ),
     ] {
-        let output = run_json(
-            "stormbuffer",
-            &root,
-            ["--project", "invoke", operation],
-            request,
-        );
+        let output = run_json(&root, ["--project", "invoke", operation], request);
         assert_eq!(
             output.status.code(),
             Some(0),
@@ -544,7 +582,6 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
     }
 
     let supersede = run_json(
-        "stormbuffer",
         &root,
         ["--project", "invoke", "supersede"],
         &format!(
@@ -564,7 +601,6 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
         .expect("replacement id");
 
     let archive = run_json(
-        "stormbuffer",
         &root,
         ["--project", "invoke", "archive"],
         &format!(r#"{{"version":1,"id":"{replacement_id}"}}"#),
@@ -574,19 +610,13 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
         serde_json::from_slice(&archive.stdout).expect("archive envelope");
     assert_eq!(archive_envelope["result"]["status"], "archived");
 
-    let malformed = run_json(
-        "stormbuffer",
-        &root,
-        ["--project", "invoke", "search"],
-        "{not-json",
-    );
+    let malformed = run_json(&root, ["--project", "invoke", "search"], "{not-json");
     assert_eq!(malformed.status.code(), Some(1));
     let malformed_envelope: serde_json::Value =
         serde_json::from_slice(&malformed.stdout).expect("malformed envelope");
     assert_eq!(malformed_envelope["error"]["code"], "invalid_json");
 
     let denied = run_json(
-        "stormbuffer",
         &root,
         ["--project", "invoke", "search"],
         r#"{"version":1,"query":"protocol","path":"/private/record.md"}"#,
@@ -603,7 +633,6 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
     fs::remove_file(&index).expect("remove fixture index");
     fs::create_dir(&index).expect("block fixture index");
     let internal = run_json(
-        "stormbuffer",
         &root,
         ["--project", "invoke", "search"],
         r#"{"version":1,"query":"protocol"}"#,
@@ -623,7 +652,7 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
 #[test]
 fn invoke_protocol_bounds_the_complete_serialized_response() {
     let root = temporary_directory("invoke-output-bound");
-    let init = run("stormbuffer", &root, ["--project", "init"]);
+    let init = run(&root, ["--project", "init"]);
     assert_eq!(init.status.code(), Some(0));
 
     for index in 0..5 {
@@ -641,7 +670,6 @@ fn invoke_protocol_bounds_the_complete_serialized_response() {
             }]
         });
         let proposal = run_json(
-            "stormbuffer",
             &root,
             ["--project", "invoke", "propose"],
             &request.to_string(),
@@ -657,12 +685,11 @@ fn invoke_protocol_bounds_the_complete_serialized_response() {
         let id = envelope["result"]["record_id"]
             .as_str()
             .expect("candidate id");
-        let approve = run("stormbuffer", &root, ["--project", "approve", id]);
+        let approve = run(&root, ["--project", "approve", id]);
         assert_eq!(approve.status.code(), Some(0));
     }
 
     let output = run_json(
-        "stormbuffer",
         &root,
         ["--project", "invoke", "context"],
         r#"{"version":1,"query":"bounded response","limit":5,"budget":10}"#,
@@ -677,60 +704,46 @@ fn invoke_protocol_bounds_the_complete_serialized_response() {
 }
 
 #[test]
-fn aliases_share_commands_and_help_uses_the_invoked_name() {
-    let root = temporary_directory("aliases");
-    for name in ["stormbuffer", "stormbuf", "sbuf"] {
-        let version = run(name, &root, ["--version"]);
-        assert_eq!(version.status.code(), Some(0), "{name}");
-        assert!(String::from_utf8_lossy(&version.stdout).contains("0.1.0"));
+fn sbuf_exposes_version_help_and_commands() {
+    let root = temporary_directory("public-name");
+    let version = run(&root, ["--version"]);
+    assert_eq!(version.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&version.stdout).contains("0.1.0"));
 
-        let help = run(name, &root, ["--help"]);
-        assert_eq!(help.status.code(), Some(0), "{name}");
-        assert!(
-            String::from_utf8_lossy(&help.stdout).contains(&format!("Usage: {name}")),
-            "{}",
-            String::from_utf8_lossy(&help.stdout)
-        );
+    let help = run(&root, ["--help"]);
+    assert_eq!(help.status.code(), Some(0));
+    assert!(
+        String::from_utf8_lossy(&help.stdout).contains("Usage: sbuf"),
+        "{}",
+        String::from_utf8_lossy(&help.stdout)
+    );
 
-        let status = run(name, &root, ["--project", "status"]);
-        assert_eq!(status.status.code(), Some(0), "{name}");
-        assert!(String::from_utf8_lossy(&status.stdout).contains("State: not initialized"));
-    }
+    let status = run(&root, ["--project", "status"]);
+    assert_eq!(status.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&status.stdout).contains("State: not initialized"));
     fs::remove_dir_all(root).expect("remove test directory");
 }
 
 #[test]
 fn color_modes_no_color_and_json_output_follow_the_contract() {
     let root = temporary_directory("color");
-    let init = run("stormbuffer", &root, ["--project", "init"]);
+    let init = run(&root, ["--project", "init"]);
     assert_eq!(init.status.code(), Some(0));
     assert!(!init.stdout.contains(&0x1b));
 
-    let auto = run(
-        "stormbuffer",
-        &root,
-        ["--project", "--color", "auto", "status"],
-    );
+    let auto = run(&root, ["--project", "--color", "auto", "status"]);
     assert_eq!(auto.status.code(), Some(0));
     assert!(!auto.stdout.contains(&0x1b));
 
-    let never = run(
-        "stormbuffer",
-        &root,
-        ["--project", "--color", "never", "status"],
-    );
+    let never = run(&root, ["--project", "--color", "never", "status"]);
     assert_eq!(never.status.code(), Some(0));
     assert!(!never.stdout.contains(&0x1b));
 
-    let always = run(
-        "stormbuffer",
-        &root,
-        ["--project", "--color", "always", "status"],
-    );
+    let always = run(&root, ["--project", "--color", "always", "status"]);
     assert_eq!(always.status.code(), Some(0));
     assert!(always.stdout.contains(&0x1b));
 
-    let mut no_color_command = Command::new(binary("stormbuffer"));
+    let mut no_color_command = Command::new(binary());
     no_color_command
         .current_dir(&root)
         .args(["--project", "--color", "auto", "status"])
@@ -740,7 +753,6 @@ fn color_modes_no_color_and_json_output_follow_the_contract() {
     assert!(!no_color.stdout.contains(&0x1b));
 
     let json = run(
-        "stormbuffer",
         &root,
         ["--project", "--color", "always", "status", "--json"],
     );

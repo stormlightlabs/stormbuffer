@@ -47,8 +47,8 @@ included in the GitHub release archives.
 ## Confirm the installation
 
 ```sh
-stormbuffer --version
-stormbuffer --help
+sbuf --version
+sbuf --help
 stormbuffer-mcp --version
 ```
 
@@ -67,7 +67,7 @@ The download is checksum-verified before use and stays in the platform cache.
 |                                  | Retrieval reports that the verified model is unavailable until the machine is online.         |
 
 If a global `init` cannot acquire the model, the store is still initialized and
-its canonical Markdown remains valid. Re-run `stormbuffer init` after network
+its canonical Markdown remains valid. Re-run `sbuf init` after network
 access is restored.
 
 ## Choose a store
@@ -76,8 +76,8 @@ Stormbuffer uses a global store by default. Add `--project` to use the nearest
 `.sbuf/` directory instead:
 
 ```sh
-stormbuffer --project init
-stormbuffer --project status
+sbuf --project init
+sbuf --project status
 ```
 
 Project stores are private by default. Add `.sbuf/` to the project's ignore
@@ -93,12 +93,12 @@ Release installation replaces programs and support files, not stores. Before an
 upgrade, locate the selected store and create a portable backup:
 
 ```sh
-stormbuffer --project root
-stormbuffer --project export stormbuffer-backup.json
+sbuf --project root
+sbuf --project export stormbuffer-backup.json
 ```
 
-Replace the installed programs, then run `stormbuffer --project status` and
-`stormbuffer --project doctor`. Run `stormbuffer --project sync` if the
+Replace the installed programs, then run `sbuf --project status` and
+`sbuf --project doctor`. Run `sbuf --project sync` if the
 disposable index needs to be rebuilt.
 
 ## Rollback
@@ -110,7 +110,7 @@ Read the newer release notes before rolling back across a record-format change.
 
 Remove the four programs and any man pages or completions you installed. This
 does not remove canonical records. Global data will remain at the path reported by
-`stormbuffer root` & project data will stay in `.sbuf/`.
+`sbuf root` & project data will stay in `.sbuf/`.
 
 Delete either location only when you separately intend to delete those records.
 The cached embedding model is disposable and can be removed independently.

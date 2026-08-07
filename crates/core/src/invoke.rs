@@ -260,7 +260,13 @@ fn invocation_stores(
         }
     }
     for store in &stores {
-        crate::sync_store(store).map_err(|error| map_core_error(&error))?;
+        let report = crate::sync_store(store).map_err(|error| map_core_error(&error))?;
+        if !report.is_complete() {
+            return Err(InvokeFailure::new(
+                "invalid_record",
+                "one or more canonical records are invalid",
+            ));
+        }
     }
     Ok(stores)
 }

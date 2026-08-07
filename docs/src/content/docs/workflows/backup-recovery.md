@@ -15,13 +15,13 @@ projections, model downloads, locks, logs, and temporary files are disposable.
 Initialize a project store before exporting it:
 
 ```sh
-stormbuffer --project init --shared
+sbuf --project init --shared
 ```
 
 Export the selected store to a JSON archive:
 
 ```sh
-stormbuffer --project export stormbuffer-memory.json
+sbuf --project export stormbuffer-memory.json
 ```
 
 The archive does not contain the host's absolute paths. Copy it using your normal backup or
@@ -29,7 +29,7 @@ transfer process. To import it into another store, choose a policy when the stor
 same scope:
 
 ```sh
-stormbuffer --project import stormbuffer-memory.json --on-scope remap
+sbuf --project import stormbuffer-memory.json --on-scope remap
 ```
 
 A scope remap changes `project:<name>` to the selected project's scope. It is explicit because it
@@ -54,8 +54,8 @@ Restore `.sbuf/store.toml`, `.sbuf/.gitignore`, and `.sbuf/records/` (or import 
 then rebuild projections:
 
 ```sh
-stormbuffer --project sync
-stormbuffer --project reindex
+sbuf --project sync
+sbuf --project reindex
 ```
 
 ## Garbage Collection
@@ -63,8 +63,8 @@ stormbuffer --project reindex
 Inspect disposable data before removing it:
 
 ```sh
-stormbuffer --project gc --dry-run
-stormbuffer --project gc
+sbuf --project gc --dry-run
+sbuf --project gc
 ```
 
 `gc` only considers known indexes, model-cache files, locks, logs, and temporary files. It never
@@ -73,7 +73,7 @@ removes `store.toml`, `.gitignore`, or Markdown records. A dry run does not chan
 ## Privacy and Merging
 
 Global stores are private user memory. Project stores are private by default; initialize with
-`stormbuffer --project init --shared` only when the repository should carry a curated memory set.
+`sbuf --project init --shared` only when the repository should carry a curated memory set.
 Shared records are visible to anyone who can read the repository, so do not store secrets, raw
 transcripts, credentials, or personal notes in them. Review source references before committing.
 

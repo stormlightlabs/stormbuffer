@@ -2,6 +2,8 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 
+use clap::CommandFactory;
+
 #[path = "src/artifacts.rs"]
 mod artifacts;
 #[path = "src/command.rs"]
@@ -27,7 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     fs::create_dir_all(&man_directory)?;
     fs::create_dir_all(&completions_directory)?;
 
-    let (man_pages, completions) = artifacts::render(command::command_name("stormbuffer"))?;
+    let (man_pages, completions) = artifacts::render(command::Cli::command())?;
     write_directory(&man_directory, &man_pages)?;
     write_directory(&completions_directory, &completions)?;
 

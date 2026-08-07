@@ -16,10 +16,10 @@ Stores are global by default. Add `--project` to use the nearest
 `.sbuf/` directory instead:
 
 ```sh
-stormbuffer --project init
-stormbuf --project root
+sbuf --project init
+sbuf --project root
 sbuf --project status
-stormbuffer status --json
+sbuf status --json
 ```
 
 The documentation covers the workflows that are easy to get wrong:

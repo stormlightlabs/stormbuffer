@@ -7,20 +7,20 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result as AnyhowResult, bail};
 
-use clap::FromArgMatches;
+use clap::{CommandFactory, FromArgMatches};
 use owo_colors::OwoColorize;
 use serde_json::Value;
 use stormbuffer_core::{self as core, ProposalActor, StoreInitMode, StoreScope};
 
 mod command;
 
-pub use command::{
+use command::{
     AddArgs, Cli, CliCommand, ColorMode, ContextArgs, EditArgs, ForgetArgs, GcArgs, IdArgs,
-    ImportArgs, InitArgs, InvokeArgs, ListArgs, McpArgs, PathArgs, SearchArgs, StatusArgs,
-    SupersedeArgs, WatchArgs, WriteStubArgs, command_name,
+    ImportArgs, InvokeArgs, ListArgs, McpArgs, PathArgs, SearchArgs, SupersedeArgs, WatchArgs,
+    WriteStubArgs,
 };
 
-pub const FAILURE: i32 = 1;
+const FAILURE: i32 = 1;
 
 pub fn run() {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
@@ -35,13 +35,12 @@ pub fn run() {
     std::process::exit(code);
 }
 
-pub fn run_with_args<I>(args: I) -> i32
+fn run_with_args<I>(args: I) -> i32
 where
     I: IntoIterator<Item = OsString>,
 {
     let args: Vec<OsString> = args.into_iter().collect();
-    let invoked_name = invoked_name(args.first());
-    let parsed = match parse(args, &invoked_name) {
+    let parsed = match parse(args) {
         Ok(cli) => cli,
         Err(error) => {
             let code = error.exit_code();
@@ -59,8 +58,8 @@ where
     run_command(parsed, output)
 }
 
-fn parse(args: Vec<OsString>, invoked_name: &str) -> Result<Cli, clap::Error> {
-    let matches = command_name(invoked_name).try_get_matches_from(args)?;
+fn parse(args: Vec<OsString>) -> Result<Cli, clap::Error> {
+    let matches = Cli::command().try_get_matches_from(args)?;
     Cli::from_arg_matches(&matches)
 }
 
@@ -242,26 +241,45 @@ fn run_search(scope: StoreScope, arguments: SearchArgs, output: &Output) -> i32 
             Err(error) => report_error(anyhow::Error::new(error), output),
         };
     }
-    for result in results {
+    for (index, result) in results.iter().enumerate() {
+        if index > 0 {
+            output.line("");
+        }
         let source = result
             .sources
             .first()
             .map(|source| source.reference.as_str())
             .unwrap_or("");
         output.line(&format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\n  ID: {}\n  Kind: {}  Scope: {}\n  {}\n  Source: {}\n  Path: {}\n  Score: {:.4} ({})",
+            human_text(&result.title),
             result.record_id,
-            result.title,
             result.kind,
             result.scope,
-            result.excerpt.replace('\n', " "),
-            source,
-            result.path,
+            human_text(&result.excerpt),
+            human_text(source),
+            human_text(&result.path),
             result.score,
-            result.lexical_match_reason,
+            human_text(&result.lexical_match_reason),
         ));
     }
     0
+}
+
+fn human_text(value: &str) -> String {
+    value
+        .chars()
+        .filter_map(|character| match character {
+            '\n' | '\r' | '\t' | '\u{2028}' | '\u{2029}' => Some(' '),
+            '\u{061c}'
+            | '\u{200e}'
+            | '\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2066}'..='\u{2069}' => None,
+            character if character.is_control() => None,
+            character => Some(character),
+        })
+        .collect()
 }
 
 fn run_context(scope: StoreScope, arguments: ContextArgs, output: &Output) -> i32 {
@@ -474,7 +492,7 @@ fn run_sync(scope: StoreScope, output: &Output) -> i32 {
                 report.invalid_files.len()
             ));
             report_invalid_files(&report.invalid_files, output);
-            0
+            if report.is_complete() { 0 } else { FAILURE }
         }
         Err(error) => report_error(anyhow::Error::new(error), output),
     }
@@ -493,7 +511,7 @@ fn run_watch(scope: StoreScope, arguments: WatchArgs, output: &Output) -> i32 {
         Ok(report) => {
             output.line(&format!("Watch cycles: {}", report.cycles));
             report_invalid_files(&report.invalid_files, output);
-            0
+            if report.is_complete() { 0 } else { FAILURE }
         }
         Err(error) => report_error(anyhow::Error::new(error), output),
     }
@@ -510,10 +528,12 @@ fn run_reindex(scope: StoreScope, output: &Output) -> i32 {
     };
     match core::reindex_store_with_embedder(&paths, embedder.as_deref()) {
         Ok(report) => {
+            let mut complete = report.is_complete();
             output.line(&format!("Reindexed: {}", report.indexed));
             report_invalid_files(&report.invalid_files, output);
             if let Some(ref error) = model_error {
                 output.error(&format!("semantic index unavailable: {error}"));
+                complete = false;
             }
             if let Some(semantic) = report.semantic {
                 if semantic.status == "unavailable" && model_error.is_none() {
@@ -523,11 +543,12 @@ fn run_reindex(scope: StoreScope, output: &Output) -> i32 {
                             .message
                             .unwrap_or_else(|| "configure a verified model".to_owned())
                     ));
+                    complete = false;
                 } else if let Some(version) = semantic.model_version {
                     output.line(&format!("Semantic index: {} ({version})", semantic.status));
                 }
             }
-            0
+            if complete { 0 } else { FAILURE }
         }
         Err(error) => report_error(anyhow::Error::new(error), output),
     }
@@ -556,7 +577,7 @@ fn reconcile(paths: &core::StorePaths, output: &Output) -> bool {
     match core::sync_store(paths) {
         Ok(report) => {
             report_invalid_files(&report.invalid_files, output);
-            true
+            report.is_complete()
         }
         Err(error) => {
             report_error(anyhow::Error::new(error), output);
@@ -1243,15 +1264,6 @@ fn report_error(error: anyhow::Error, output: &Output) -> i32 {
     FAILURE
 }
 
-fn invoked_name(argument: Option<&OsString>) -> String {
-    argument
-        .and_then(|argument| Path::new(argument).file_name())
-        .and_then(|name| name.to_str())
-        .map(|name| name.strip_suffix(".exe").unwrap_or(name).to_owned())
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| "stormbuffer".to_owned())
-}
-
 fn json_escape(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {
@@ -1328,27 +1340,15 @@ impl Output {
 mod tests {
     use super::*;
     #[test]
-    fn aliases_change_only_the_invoked_usage_name() {
-        for name in ["stormbuffer", "stormbuf", "sbuf"] {
-            let usage = command_name(name).render_help().to_string();
-            assert!(usage.contains(&format!("Usage: {name}")), "{usage}");
-            assert!(usage.contains("init"));
-            assert!(usage.contains("mcp"));
-        }
+    fn help_uses_the_public_binary_name() {
+        let usage = Cli::command().render_help().to_string();
+        assert!(usage.contains("Usage: sbuf"), "{usage}");
+        assert!(usage.contains("init"));
+        assert!(usage.contains("mcp"));
     }
 
     #[test]
     fn json_escape_handles_paths_safely() {
         assert_eq!(json_escape("a\"b\\c\n"), "a\\\"b\\\\c\\n");
-    }
-
-    #[test]
-    fn invoked_name_uses_the_file_name() {
-        assert_eq!(
-            invoked_name(Some(&OsString::from("/tmp/stormbuf"))),
-            "stormbuf"
-        );
-        assert_eq!(invoked_name(Some(&OsString::from("sbuf.exe"))), "sbuf");
-        assert_eq!(invoked_name(Some(&OsString::new())), "stormbuffer");
     }
 }

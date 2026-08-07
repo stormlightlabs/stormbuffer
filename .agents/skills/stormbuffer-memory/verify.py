@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 REPOSITORY = Path(__file__).resolve().parents[3]
-CLI = os.environ.get("STORMBUFFER_BIN", str(REPOSITORY / "target/debug/stormbuffer"))
+CLI = os.environ.get("STORMBUFFER_BIN", str(REPOSITORY / "target/debug/sbuf"))
 MCP = os.environ.get(
     "STORMBUFFER_MCP_BIN", str(REPOSITORY / "target/debug/stormbuffer-mcp")
 )
