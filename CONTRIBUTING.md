@@ -1,6 +1,6 @@
 ---
 title: Contributing
-description: Keep public behavior, examples, and operator artifacts aligned.
+description: Update examples and operator artifacts when public behavior changes.
 section: Reference
 group: Contributors
 order: 7

@@ -8,7 +8,6 @@ order: 3
 ---
 
 The Stormbuffer CLI is installed as `sbuf`.
-Each name accepts the same commands and options.
 
 ## Choose a store
 
@@ -35,7 +34,7 @@ sbuf --project init
 
 Initialization creates the store if it does not exist.
 
-Running it again leaves an existing store unchanged.
+Running it again leaves an initialized store unchanged.
 
 Use `--shared` when the repository should carry the store's configuration and canonical Markdown:
 
@@ -77,9 +76,9 @@ The command-line help also accepts `--color auto|always|never` for human-facing 
 
 ## Back up and clean a store
 
-`export` writes canonical records and provenance to a portable JSON archive. `import` restores an
-archive and requires an explicit policy whenever IDs, scope, or equivalent records collide. `gc`
-removes only disposable indexes, caches, locks, logs, and temporary files; add `--dry-run` to
+`export` writes canonical records and provenance to a JSON archive. `import` restores an archive
+and requires a collision policy for IDs, scope, or equivalent records. `gc` removes only
+disposable indexes, caches, locks, logs, and temporary files. Add `--dry-run` to
 inspect its candidates first.
 
 See [Backup and recovery](/docs/workflows/backup-recovery/) for examples and collision choices.
@@ -98,7 +97,7 @@ sbuf show <id>
 
 `show` writes the canonical Markdown to stdout. `edit` accepts active records.
 
-Restore an archived record before editing it, while superseded history remains immutable.
+Restore an archived record before editing it. Superseded history is immutable.
 
 Editor output is parsed and validated before it replaces the record. If the canonical
 file changed while it was open, the edit fails instead of overwriting the newer bytes.
@@ -138,15 +137,15 @@ sbuf --project search deploy --json
 ```
 
 Human-readable results use labeled cards. Each result identifies the record, title, kind, scope,
-excerpt, source, canonical path, score, and lexical match reason. Use `--json` for stable
-machine-readable output; JSON results also include
+excerpt, source, canonical path, score, and lexical match reason. Use `--json` for versioned
+machine-readable output. JSON results also include
 `match_reasons` and an optional `vector_distance`. Add `--all` to include inactive records or
 `--limit <number>` to bound the result count.
 
 After a successful `init`, search uses hybrid reciprocal-rank fusion with the pinned local
-fastembed model. Exact title, alias, filename, and current-scope boosts are deterministic; facts,
+fastembed model. Exact title, alias, filename, and current-scope boosts are deterministic. Facts,
 decisions, and procedures receive no blanket recency boost. If model acquisition fails, the
-canonical store remains initialized and the error names the model repair needed.
+store initialization succeeds and the error names the model repair needed.
 
 `context` selects matching chunks within a word budget and always writes JSON:
 
@@ -172,13 +171,12 @@ sbuf --project reject <candidate-id>
 
 A proposal must have attributable sources. The core reports one of `accepted`,
 `duplicate_of`, `conflicts_with`, `requires_approval`, or `invalid`. Duplicate
-proposals are not written. Conflicting proposals remain candidates so both claims
-are retained; use explicit `supersede` followed by approval rather than silently
-rewriting the existing record.
+proposals are not written. Conflicting proposals are retained as candidates so both claims
+are retained. Use `supersede` followed by approval instead of rewriting the stored record.
 
 ## Invoke the JSON protocol
 
-`invoke` reads exactly one bounded JSON object from stdin and writes one JSON envelope
+`invoke` reads one size-limited JSON object from stdin and writes one JSON envelope
 to stdout. It is noninteractive, versioned, and does not accept filesystem paths:
 
 ```sh
@@ -189,22 +187,22 @@ printf '%s\n' '{"version":1,"query":"release","budget":400}' \\
 ```
 
 Version 1 supports `search`, `context`, `get`, `propose`, `supersede`, and `archive`.
-Success is `{ "version": 1, "operation": "...", "ok": true, "result": ... }`;
-failures use the same envelope with `ok: false` and an `error.code`. Scope and access
+Success is `{ "version": 1, "operation": "...", "ok": true, "result": ... }`.
+Failures use the version 1 envelope with `ok: false` and an `error.code`. Scope and access
 filters are applied before records are returned. Internal failures are sanitized and
 never include canonical paths or backtraces.
 
 The protocol is agent-scoped: it cannot opt into human-only reads by setting an access
-field. Its `propose` operation always creates a candidate that needs explicit approval;
+field. Its `propose` operation always creates a candidate that needs human approval.
 request fields cannot claim a human actor or grant approval. Use the human CLI review
 commands to approve or reject a candidate.
 
-Callers can handle these stable version 1 error codes: `invalid_json`, `invalid_request`,
+Callers can handle these version 1 error codes: `invalid_json`, `invalid_request`,
 `unsupported_version`, `unknown_operation`, `input_too_large`, `output_too_large`,
 `path_denied`, `scope_denied`, `access_denied`, `permission_denied`, `not_found`,
 `not_initialized`, `invalid_state`, `invalid_record`, `conflict`, and `internal_error`.
 New protocol behavior requires a new version rather
-than changing the meaning of an existing envelope or code.
+than changing the meaning of a version 1 envelope or code.
 
 ## Maintain and recover the index
 
@@ -219,14 +217,15 @@ sbuf --project doctor
 
 `sync` reconciles new, edited, moved, invalid, and deleted Markdown files. Repeating it without
 changes skips records whose content hash is unchanged. Run `sbuf --project watch` for the
-same reconciliation on an interval. The watcher is optional because `search` and `context`
+reconciliation on an interval. The watcher is optional because `search` and `context`
 synchronize before reading the index.
 
 Use `doctor` to inspect canonical records and the selected projection. Its diagnostics include a
-repair command. If an index is missing, stale, or corrupt, run `reindex`; Stormbuffer builds a fresh
+repair command. If an index is missing, stale, or corrupt, run `reindex`. Stormbuffer builds a fresh
 projection before replacing the old one. Semantic reindexing creates and validates a new
 versioned sqlite-vec table before switching the active table. If a watch or reindex process is
-interrupted, the canonical Markdown and previous projection remain authoritative. Run `sync` or
+interrupted, canonical Markdown remains authoritative and the previous projection is preserved.
+Run `sync` or
 `reindex` again to recover.
 
 ## Model setup and evaluation
@@ -245,23 +244,23 @@ sbuf evaluate
 ```
 
 The JSON report includes recall at 5, mean reciprocal rank, wrong-scope retrieval,
-superseded-memory retrieval, duplicate/conflicting retrieval, and context tokens per useful
+superseded-memory retrieval, duplicate/conflicting retrieval, and context tokens per used
 memory. Wrong-scope results are intentionally measured with an unscoped ranking probe instead
-of being hidden by the normal scope filter; the probe is diagnostic while the stable core policy
+of being hidden by the normal scope filter. The probe is diagnostic while the core policy
 still filters returned results. The duplicate/conflicting fixture contains more competing
 memories than the top-five window, so its coverage is not tautologically 100%. Release
-thresholds are in the report and the corpus revision is fixed; update expected IDs and the
+thresholds are in the report and the corpus revision is fixed. Update expected IDs and the
 revision in `crates/core/tests/fixtures/evaluation/` together in a reviewed change. If the
 pinned artifacts are missing or offline, the command reports the model cache and the `sbuf init`
 repair command.
 
-Grounded-answer evaluation remains provider-neutral. Configure a host model to consume the
+Grounded-answer evaluation is provider-neutral. Configure a host model to consume the
 `context` contract, save one answer artifact per question with its claims and cited record IDs,
 then pass those artifacts and the run metadata to `HostModelEvaluationAdapter`. Record the
 generator, model and version, prompt-contract version, parameters, and corpus revision. Inspect
 the returned per-question claim report before accepting a run. It separates retrieval,
 context-assembly, and generation failures and reports citation and abstention quality. The
-checked-in deterministic artifacts exercise the same adapter without contacting a model;
+checked-in deterministic artifacts exercise the adapter without contacting a model.
 model-assisted judgments never rewrite fixtures or thresholds.
 
 ## Permanently delete a record
@@ -277,4 +276,4 @@ sbuf forget <id> --destroy --yes
 ```
 
 The mutation lock, validated temporary writes, file synchronization, and atomic replacement
-keep competing or interrupted writes from exposing partial Markdown.
+prevent competing or interrupted writes from exposing partial Markdown.

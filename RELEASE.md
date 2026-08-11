@@ -38,7 +38,7 @@ SHA-256 file accompanies every archive.
    the standard launcher.
 
    Record the Linux distribution and version used to build the GNU archive in
-   the release notes; that host establishes its minimum libc baseline.
+   the release notes. That host establishes its minimum libc baseline.
 
 The archive check verifies its SHA-256 file, required documentation, man pages,
 completions, all three CLI names, and the MCP protocol surface. It initializes a
@@ -86,7 +86,7 @@ its contents have not already been accepted by crates.io.
 
 Installing or replacing Stormbuffer changes only program and support files. It
 does not move, rewrite, or delete canonical Markdown. Before an upgrade, record
-the store location with `stormbuffer root` and create a portable backup:
+the store location with `stormbuffer root` and create a JSON backup:
 
 ```sh
 stormbuffer export stormbuffer-backup.json

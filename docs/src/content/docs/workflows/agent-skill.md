@@ -1,6 +1,6 @@
 ---
 title: Agent skill
-description: Give an agent the Stormbuffer workflow without hiding memory changes from you.
+description: Give an agent the Stormbuffer workflow while keeping memory changes visible.
 section: Reference
 group: Agent setup
 order: 7
@@ -11,7 +11,7 @@ order: 7
 </script>
 
 The Stormbuffer skill teaches a coding agent to retrieve project memory, cite what it used,
-and propose small changes for human approval. The copy below always comes from the canonical
+and propose sourced memories for human approval. The copy below comes from the canonical
 skill shipped in this repository.
 
 <CopySkill />

@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: Install & manage Stormbuffer.
+description: Install and manage Stormbuffer.
 section: Get started
 group: Get started
 order: 1
@@ -57,7 +57,7 @@ stormbuffer-mcp --version
 Installation does not download a model. Stormbuffer acquires its pinned local
 embedding model when a global store is initialized or retrieval first needs it.
 
-The download is checksum-verified before use and stays in the platform cache.
+Stormbuffer verifies the checksum before use and stores the model in the platform cache.
 
 | Environment                      | Behavior                                                                                      |
 | -------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -66,9 +66,9 @@ The download is checksum-verified before use and stays in the platform cache.
 | Offline without the model cached | Project initialization and canonical record operations work.                                  |
 |                                  | Retrieval reports that the verified model is unavailable until the machine is online.         |
 
-If a global `init` cannot acquire the model, the store is still initialized and
-its canonical Markdown remains valid. Re-run `sbuf init` after network
-access is restored.
+If a global `init` cannot acquire the model, it still initializes the store and
+does not change its canonical Markdown. Re-run `sbuf init` after network access
+is restored.
 
 ## Choose a store
 
@@ -90,7 +90,7 @@ printf '%s\n' '.sbuf/' >> .gitignore
 ## Upgrade
 
 Release installation replaces programs and support files, not stores. Before an
-upgrade, locate the selected store and create a portable backup:
+upgrade, locate the selected store and create a JSON backup:
 
 ```sh
 sbuf --project root
@@ -109,8 +109,8 @@ Read the newer release notes before rolling back across a record-format change.
 ## Uninstall
 
 Remove the four programs and any man pages or completions you installed. This
-does not remove canonical records. Global data will remain at the path reported by
-`sbuf root` & project data will stay in `.sbuf/`.
+does not remove canonical records. `sbuf root` reports the global data location.
+Project data is stored in `.sbuf/`.
 
 Delete either location only when you separately intend to delete those records.
 The cached embedding model is disposable and can be removed independently.

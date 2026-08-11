@@ -1,12 +1,12 @@
 ---
-title: Backup & Recovery
+title: Backup and Recovery
 description: Export canonical memory, rebuild disposable data, and choose what a project shares.
 section: Reference
 group: Workflows
 order: 8
 ---
 
-Stormbuffer treats canonical Markdown as the backup boundary. An export contains the complete
+Stormbuffer treats canonical Markdown as the backup boundary. An export contains the full
 record Markdown, including source references and lifecycle metadata. SQLite, full-text and vector
 projections, model downloads, locks, logs, and temporary files are disposable.
 
@@ -32,21 +32,21 @@ same scope:
 sbuf --project import stormbuffer-memory.json --on-scope remap
 ```
 
-A scope remap changes `project:<name>` to the selected project's scope. It is explicit because it
-changes record metadata. Imports preserve IDs and Markdown when no policy requires a change.
+A scope remap changes `project:<name>` to the selected project's scope. Imports preserve IDs and
+Markdown when the selected policy does not require a change.
 
 ## Collisions
 
-Stormbuffer stops instead of guessing when an import meets existing data. Use these options only
-after reviewing the archive:
+Stormbuffer rejects collisions unless you select a policy. Use these options after reviewing the
+archive:
 
 - `--on-scope fail|skip|remap` handles records from another global or project scope.
 - `--on-id fail|skip|overwrite|remap` handles a different record with the same ID.
 - `--on-existing fail|skip|overwrite` handles an equivalent record already in the store.
 
-There is no automatic merge. `overwrite` replaces the selected canonical record; `skip` leaves it
-alone. `remap` assigns a new ID and updates supersession links inside the imported set. Keep a copy
-of the canonical files before using overwrite.
+There is no automatic merge. `overwrite` replaces the selected canonical record. `skip` leaves it
+alone. `remap` assigns a new ID and updates supersession links inside the imported set. Back up the
+canonical files before using overwrite.
 
 ## Recovery
 
@@ -79,8 +79,8 @@ Shared records are visible to anyone who can read the repository, so do not stor
 transcripts, credentials, or personal notes in them. Review source references before committing.
 
 When branches change shared records, merge the Markdown files as canonical text, preserve both
-claims when they conflict, and use an explicit supersession rather than silently choosing one.
+claims when they conflict, and supersede one claim only after resolving the conflict.
 Re-run `sync` after the merge. Do not commit generated indexes or model files.
 
 If the repository already shares a store, leave its tracked canonical files intact. Use the global
-store for personal memory, or a separate checkout when the memory must remain project-scoped.
+store for personal memory, or a separate checkout when the memory must be project-scoped.
