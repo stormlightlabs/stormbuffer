@@ -242,7 +242,7 @@ pub struct GcArgs {
 
 #[derive(Args, Debug)]
 pub struct InvokeArgs {
-    /// Version 1 operation: search, context, get, propose, supersede, or archive.
+    /// Version 1 operation: search, context, get, remember, update, propose, supersede, or archive.
     #[arg(value_name = "OPERATION")]
     pub operation: String,
 }

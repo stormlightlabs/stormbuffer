@@ -32,9 +32,8 @@ For project memory, run the command from the project directory:
 sbuf --project init
 ```
 
-Initialization creates the store if it does not exist.
-
-Running it again leaves an initialized store unchanged.
+Initialization creates the store if it does not exist. Running it again leaves an
+initialized store unchanged.
 
 Use `--shared` when the repository should carry the store's configuration and canonical Markdown:
 
@@ -64,8 +63,6 @@ Use `--json` when another program will consume the result:
 
 ```sh
 sbuf --project status --json
-sbuf --project status
-sbuf --project root
 ```
 
 The global `--project` option can appear before the command.
@@ -169,15 +166,23 @@ sbuf --project approve <candidate-id>
 sbuf --project reject <candidate-id>
 ```
 
-A proposal must have attributable sources. The core reports one of `accepted`,
+A proposal must have attributable sources. Stormbuffer reports one of `accepted`,
 `duplicate_of`, `conflicts_with`, `requires_approval`, or `invalid`. Duplicate
-proposals are not written. Conflicting proposals are retained as candidates so both claims
-are retained. Use `supersede` followed by approval instead of rewriting the stored record.
+proposals are not written. Conflicting proposals remain as candidates so both claims are
+available for review. Use `supersede` followed by approval instead of rewriting the stored
+record.
 
 ## Invoke the JSON protocol
 
 `invoke` reads one size-limited JSON object from stdin and writes one JSON envelope
-to stdout. It is noninteractive, versioned, and does not accept filesystem paths:
+to stdout. It is noninteractive, versioned, and does not accept filesystem paths.
+
+The prefix separates the stable automation protocol from the human CLI. Commands such as
+`sbuf search --json` format a human command's result as JSON; they do not provide a
+versioned request schema or protocol envelope. `sbuf invoke search` accepts structured
+input, uses stable error codes, never prompts, and applies agent access rules. MCP maps to
+the same contract. Keeping it behind `invoke` lets the ordinary CLI evolve without
+silently changing integrations:
 
 ```sh
 printf '%s\n' '{"version":1,"query":"release","limit":10}' \\
@@ -186,23 +191,25 @@ printf '%s\n' '{"version":1,"query":"release","budget":400}' \\
   | sbuf --project invoke context
 ```
 
-Version 1 supports `search`, `context`, `get`, `propose`, `supersede`, and `archive`.
+Version 1 supports `search`, `context`, `get`, `remember`, `update`, `propose`,
+`supersede`, and `archive`.
 Success is `{ "version": 1, "operation": "...", "ok": true, "result": ... }`.
 Failures use the version 1 envelope with `ok: false` and an `error.code`. Scope and access
 filters are applied before records are returned. Internal failures are sanitized and
 never include canonical paths or backtraces.
 
-The protocol is agent-scoped: it cannot opt into human-only reads by setting an access
-field. Its `propose` operation always creates a candidate that needs human approval.
-request fields cannot claim a human actor or grant approval. Use the human CLI review
-commands to approve or reject a candidate.
+The protocol is agent-scoped, so it cannot opt into human-only reads by setting an access
+field. Its `remember`, `update`, and `propose` operations create candidates that need
+human approval; `update` creates a linked replacement candidate rather than editing the
+active record. Request fields cannot claim a human actor or grant approval. Use the
+CLI review commands to approve or reject a candidate.
 
 Callers can handle these version 1 error codes: `invalid_json`, `invalid_request`,
 `unsupported_version`, `unknown_operation`, `input_too_large`, `output_too_large`,
 `path_denied`, `scope_denied`, `access_denied`, `permission_denied`, `not_found`,
 `not_initialized`, `invalid_state`, `invalid_record`, `conflict`, and `internal_error`.
-New protocol behavior requires a new version rather
-than changing the meaning of a version 1 envelope or code.
+New protocol behavior requires a new version rather than a change to the meaning of a
+version 1 envelope or code.
 
 ## Maintain and recover the index
 
@@ -216,17 +223,15 @@ sbuf --project doctor
 ```
 
 `sync` reconciles new, edited, moved, invalid, and deleted Markdown files. Repeating it without
-changes skips records whose content hash is unchanged. Run `sbuf --project watch` for the
-reconciliation on an interval. The watcher is optional because `search` and `context`
+changes skips records whose content hash is unchanged. Run `sbuf --project watch` to reconcile
+at intervals. The watcher is optional because `search` and `context`
 synchronize before reading the index.
 
-Use `doctor` to inspect canonical records and the selected projection. Its diagnostics include a
-repair command. If an index is missing, stale, or corrupt, run `reindex`. Stormbuffer builds a fresh
-projection before replacing the old one. Semantic reindexing creates and validates a new
-versioned sqlite-vec table before switching the active table. If a watch or reindex process is
-interrupted, canonical Markdown remains authoritative and the previous projection is preserved.
-Run `sync` or
-`reindex` again to recover.
+Use `doctor` to inspect canonical records and the selected projection. Its diagnostics include
+a repair command. If an index is missing, stale, or corrupt, run `reindex`. Stormbuffer builds
+a fresh projection before replacing the old one. If a watch or reindex process is interrupted,
+canonical Markdown remains authoritative and the previous projection is preserved. Run `sync`
+or `reindex` again to recover.
 
 ## Model setup and evaluation
 
@@ -245,9 +250,9 @@ sbuf evaluate
 
 The JSON report includes recall at 5, mean reciprocal rank, wrong-scope retrieval,
 superseded-memory retrieval, duplicate/conflicting retrieval, and context tokens per used
-memory. Wrong-scope results are intentionally measured with an unscoped ranking probe instead
-of being hidden by the normal scope filter. The probe is diagnostic while the core policy
-still filters returned results. The duplicate/conflicting fixture contains more competing
+memory. Wrong-scope results are measured with an unscoped ranking probe instead of being hidden
+by the normal scope filter. The probe is diagnostic; normal policy still filters returned
+results. The duplicate/conflicting fixture contains more competing
 memories than the top-five window, so its coverage is not tautologically 100%. Release
 thresholds are in the report and the corpus revision is fixed. Update expected IDs and the
 revision in `crates/core/tests/fixtures/evaluation/` together in a reviewed change. If the
@@ -261,7 +266,7 @@ generator, model and version, prompt-contract version, parameters, and corpus re
 the returned per-question claim report before accepting a run. It separates retrieval,
 context-assembly, and generation failures and reports citation and abstention quality. The
 checked-in deterministic artifacts exercise the adapter without contacting a model.
-model-assisted judgments never rewrite fixtures or thresholds.
+Model-assisted judgments never rewrite fixtures or thresholds.
 
 ## Permanently delete a record
 

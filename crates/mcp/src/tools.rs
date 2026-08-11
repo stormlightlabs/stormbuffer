@@ -18,7 +18,7 @@ pub fn call(
     }
     let operation = schemas::operation(request.name.as_ref())
         .ok_or_else(|| RmcpError::invalid_params("tool is not supported", None))?;
-    let write = matches!(operation, "propose" | "supersede" | "archive");
+    let write = matches!(operation, "remember" | "update" | "archive");
     let envelope = if write && !allow_writes {
         core::invoke_envelope(
             operation,

@@ -10,7 +10,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-
 REPOSITORY = Path(__file__).resolve().parents[3]
 CLI = os.environ.get("STORMBUFFER_BIN", str(REPOSITORY / "target/debug/sbuf"))
 MCP = os.environ.get(
@@ -53,14 +52,14 @@ def main() -> int:
 
         run([CLI, "--project", "init"], cwd=project, env=env)
         proposal = run(
-            [CLI, "--project", "invoke", "propose"],
+            [CLI, "--project", "invoke", "remember"],
             cwd=project,
             env=env,
             stdin=(
                 '{"version":1,"title":"Offline release","kind":"fact",'
-                '"access":"agent","body":"The release must work offline.",'
-                '"sources":[{"kind":"document","reference":"RELEASE.md#offline",'
-                '"actor":"human"}]}\n'
+                '"body":"The release must work offline.",'
+                '"source":{"kind":"document","reference":"RELEASE.md#offline",'
+                '"actor":"human"}}\n'
             ),
         )
         proposal_response = json.loads(proposal.stdout)
@@ -76,17 +75,12 @@ def main() -> int:
         )
         context_response = json.loads(context.stdout)
         assert context_response["ok"]
-        assert context_response["result"]["receipt"]["contract_version"] == "stormbuffer-context-v1"
+        assert (
+            context_response["result"]["receipt"]["contract_version"]
+            == "stormbuffer-context-v1"
+        )
         assert context_response["result"]["blocks"][0]["record_id"] == record_id
         assert context_response["result"]["receipt"]["query"] == "offline release"
-
-        search = run(
-            [CLI, "--project", "invoke", "search"],
-            cwd=project,
-            env=env,
-            stdin='{"version":1,"query":"offline release","limit":5}\n',
-        )
-        search_response = json.loads(search.stdout)
 
         messages = [
             {
@@ -108,8 +102,8 @@ def main() -> int:
                 "id": 2,
                 "method": "tools/call",
                 "params": {
-                    "name": "stormbuffer_search",
-                    "arguments": {"query": "offline release", "limit": 5},
+                    "name": "memory_recall",
+                    "arguments": {"query": "offline release", "budget": 128},
                 },
             },
         ]
@@ -123,9 +117,9 @@ def main() -> int:
         responses = [json.loads(line) for line in mcp.stdout.splitlines()]
         assert responses[0]["result"]["serverInfo"]["name"] == "stormbuffer-mcp"
         envelope = responses[1]["result"]["structuredContent"]
-        assert envelope == search_response
+        assert envelope == context_response
         assert json.loads(responses[1]["result"]["content"][0]["text"]) == envelope
-        assert any(item["record_id"] == record_id for item in envelope["result"])
+        assert envelope["result"]["blocks"][0]["record_id"] == record_id
 
     print("stormbuffer-memory verify: passed")
     return 0

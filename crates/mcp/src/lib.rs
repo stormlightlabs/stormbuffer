@@ -32,15 +32,31 @@ mod tests {
 
     #[test]
     fn schemas_and_resources_are_stable() {
-        assert_eq!(schemas::tools().len(), 6);
+        assert_eq!(schemas::tools().len(), 5);
         assert_eq!(schemas::resource_templates().len(), 3);
-        assert_eq!(schemas::operation("stormbuffer_search"), Some("search"));
+        assert_eq!(
+            [
+                ("memory_recall", "context"),
+                ("memory_get", "get"),
+                ("memory_remember", "remember"),
+                ("memory_update", "update"),
+                ("memory_forget", "archive"),
+            ]
+            .map(|(tool, _)| (tool, schemas::operation(tool))),
+            [
+                ("memory_recall", Some("context")),
+                ("memory_get", Some("get")),
+                ("memory_remember", Some("remember")),
+                ("memory_update", Some("update")),
+                ("memory_forget", Some("archive")),
+            ]
+        );
         assert_eq!(schemas::operation("unknown"), None);
     }
 
     #[test]
     fn writes_are_denied_and_cancellation_is_observed() {
-        let request = CallToolRequestParams::new("stormbuffer_archive");
+        let request = CallToolRequestParams::new("memory_forget");
         let result = tools::call(&paths(), false, request, false).unwrap();
         assert_eq!(result.is_error, Some(true));
         assert_eq!(
@@ -48,7 +64,7 @@ mod tests {
             "permission_denied"
         );
 
-        let request = CallToolRequestParams::new("stormbuffer_search");
+        let request = CallToolRequestParams::new("memory_recall");
         let error = tools::call(&paths(), true, request, true).unwrap_err();
         assert!(error.to_string().contains("cancelled"));
     }

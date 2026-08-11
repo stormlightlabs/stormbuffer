@@ -304,6 +304,67 @@ fn agent_proposals_require_approval_and_rejection_archives_candidates() {
 }
 
 #[test]
+fn update_proposals_preserve_the_active_record_until_approval() {
+    let store = TempStore::new();
+    let repository = store.repository();
+    let old = repository.add(fixture_record()).expect("add fixture");
+    let old_id = old.record().id;
+    let mut replacement = old.record().clone();
+    replacement.id = RecordId::new_v7();
+    replacement.created_at = Timestamp::now_utc();
+    replacement.updated_at = replacement.created_at;
+    replacement.body = "A sourced replacement body".to_owned();
+
+    let proposed = repository
+        .propose_update(old_id, replacement)
+        .expect("propose update");
+    assert_eq!(proposed.outcome, ProposalOutcome::RequiresApproval);
+    let replacement_id = proposed.record_id.parse().expect("replacement id");
+    assert_eq!(
+        repository.find(old_id).expect("find old").record().status,
+        RecordStatus::Active
+    );
+    let candidate = repository
+        .find(replacement_id)
+        .expect("find replacement candidate");
+    assert_eq!(candidate.record().status, RecordStatus::Candidate);
+    assert_eq!(candidate.record().supersedes, vec![old_id]);
+
+    let approved = repository
+        .approve(replacement_id)
+        .expect("approve replacement");
+    assert_eq!(approved.outcome, ProposalOutcome::Accepted);
+    assert_eq!(
+        repository.find(old_id).expect("find old").record().status,
+        RecordStatus::Superseded
+    );
+    assert_eq!(
+        repository
+            .find(replacement_id)
+            .expect("find replacement")
+            .record()
+            .status,
+        RecordStatus::Active
+    );
+}
+
+#[test]
+fn update_proposals_report_missing_evidence_without_writing() {
+    let store = TempStore::new();
+    let repository = store.repository();
+    let old = repository.add(fixture_record()).expect("add fixture");
+    let mut replacement = old.record().clone();
+    replacement.id = RecordId::new_v7();
+    replacement.sources.clear();
+
+    let result = repository
+        .propose_update(old.record().id, replacement)
+        .expect("invalid update result");
+    assert_eq!(result.outcome, ProposalOutcome::Invalid);
+    assert_eq!(repository.list(true).expect("list records").len(), 1);
+}
+
+#[test]
 fn approval_revalidates_user_edited_candidate_provenance() {
     let store = TempStore::new();
     let repository = store.repository();

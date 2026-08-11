@@ -36,11 +36,10 @@ be copyable. `doctor` should identify failures in that path.
 
 ### A smaller agent API
 
-Replace the storage-shaped MCP tools with an intent-level surface built around
-recall, get, remember, update, and forget. The common calls should be short,
-while the results include provenance, conflicts, approval requirements, and
-supersession links. Forgetting through MCP archives a memory. Only a person
-using the CLI can permanently delete one.
+The MCP surface now exposes recall, get, remember, update, and forget intents.
+Common calls stay short while results include provenance, conflicts, approval
+requirements, and supersession links. Forgetting through MCP archives a memory.
+Only a person using the CLI can permanently delete one.
 
 ### Better capture
 

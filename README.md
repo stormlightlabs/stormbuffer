@@ -27,8 +27,8 @@ Documentation for common workflows:
 - [Quick start](docs/src/content/docs/quick-start.md) for private and shared project stores.
 - [Backup and recovery](docs/src/content/docs/workflows/backup-recovery.md) for JSON
   export/import, collision policies, garbage collection, privacy, and merges.
-- [MCP reference](docs/src/content/docs/reference/mcp.md) for the official Rust SDK adapter,
-  resources and tools, write grants, and its equivalence with CLI JSON.
+- [MCP reference](docs/src/content/docs/reference/mcp.md) for source installation, Codex and
+  Pi setup, resources and tools, write grants, and its equivalence with CLI JSON.
 
 The checked-in agent skill uses public interfaces only. Verify by building the CLI and
 MCP binary, then running its end-to-end verification script:

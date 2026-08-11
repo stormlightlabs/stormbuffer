@@ -54,13 +54,13 @@ an attributable source from the conversation, issue, document, or URL. The agent
 creates a `candidate`; it does not approve it:
 
 ```sh
-printf '%s\n' '{"version":1,"title":"Release constraint","kind":"fact","access":"agent","body":"The release must work offline.","sources":[{"kind":"document","reference":"RELEASE.md#offline","actor":"human"}]}' \
-  | sbuf --project invoke propose
+printf '%s\n' '{"version":1,"title":"Release constraint","kind":"fact","body":"The release must work offline.","source":{"kind":"document","reference":"RELEASE.md#offline","actor":"human"}}' \
+  | sbuf --project invoke remember
 ```
 
 Keep the returned `record_id` and `outcome`. `requires_approval` needs a person to review with
 `sbuf --project approve <record-id>`. `duplicate_of` means do not write another copy;
-`conflicts_with` means report the conflict and use explicit supersession after review.
+`conflicts_with` means report the conflict and review it before proposing an update.
 Never claim that a candidate is active.
 
 MCP exposes the same version-1 operation envelope in `structuredContent` and in the text
@@ -72,7 +72,7 @@ stormbuffer-mcp --stdio --project
 ```
 
 Close the adapter's stdin for a clean shutdown. A host must explicitly start it with
-`--allow-writes` before proposal, supersession, or archive tools can change canonical
+`--allow-writes` before remember, update, or forget tools can change canonical
 Markdown. There is no MCP approval or deletion tool.
 
 Run the public CLI/MCP example verification from the repository root:

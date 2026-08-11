@@ -138,46 +138,19 @@ example and curated memories that help agents work on Stormbuffer.
 
 ### SB-501 — Add intent-level memory mutations
 
-**What to build:** Accept remember and update requests while preserving source
-evidence, review policy, and supersession history.
-
-**Blocked by:** SB-403, SB-404
-
-**Acceptance criteria:**
-
-- [ ] Remember creates one sourced candidate and reports validation, duplicate,
-      conflict, and approval outcomes.
-- [ ] Update creates a candidate replacement linked to the active record it
-      supersedes. It never rewrites the active record.
-- [ ] Core and JSON protocol tests cover permitted callers, missing evidence,
-      conflicts, and supersession.
-
-**Verification:** Run the focused core and JSON protocol tests for remember and
-update.
+Added compact remember and update requests to the versioned JSON protocol.
+Remember records one source and reports validation, duplicate, conflict, and
+approval outcomes. Update preserves the active record while creating a linked
+replacement candidate; approval atomically activates it and supersedes the old
+record.
 
 ### SB-502 — Replace the MCP surface with intent-level memory tools
 
-**What to build:** Replace the transport-shaped MCP tool list with
-`memory_recall`, `memory_get`, `memory_remember`, `memory_update`, and
-`memory_forget`.
-
-**Blocked by:** SB-501, SB-601
-
-**Acceptance criteria:**
-
-- [ ] Recall compiles core context within a token budget. MCP does not expose a
-      competing search tool for that job.
-- [ ] An omitted scope uses the server-selected store and project context.
-      Project and global filters retain core policy.
-- [ ] Remember returns duplicate, conflict, validation, and approval outcomes.
-      Evidence includes its source without adding fields to the common call.
-- [ ] Update proposes a replacement with a supersession link. Forget only
-      archives. MCP provides no permanent deletion path.
-- [ ] Protocol tests prove each intent maps to its granular JSON operation.
-      Examples for documented hosts use underscore tool names.
-
-**Verification:** Run the MCP protocol tests and exercise each tool through a
-documented host configuration.
+Replaced the MCP tool list with `memory_recall`, `memory_get`,
+`memory_remember`, `memory_update`, and `memory_forget`. Recall uses budgeted
+core context, writes retain core review and scope policy, and forget only
+archives. Protocol tests cover all five mappings and the documented stdio host
+configuration.
 
 ### SB-503 — Add capture checks to the agent skill
 

@@ -11,33 +11,96 @@ order: 4
 server and stdio transport features). It calls the public core repository and retrieval
 operations. It does not open SQLite, edit arbitrary files, or run a model.
 
-## Start the adapter
+## Install from source
 
-Build the standalone adapter from the repository root:
-
-```sh
-cargo build -p stormbuffer-mcp
-```
-
-Run it from the project whose memory the host should use:
+Install Rust, then install the CLI and adapter from a checkout:
 
 ```sh
-stormbuffer-mcp --stdio --project
+git clone https://github.com/stormlightlabs/stormbuffer.git
+cd stormbuffer
+cargo install --path crates/cli --locked
+cargo install --path crates/mcp --locked
 ```
 
-`--project` selects the nearest `.sbuf/` store. Otherwise, the adapter selects the global
-store. Initialize a store with the CLI before starting MCP. MCP never initializes a store
-or creates canonical records as a side effect of connecting.
+Confirm that both programs are available:
 
-Writes are disabled by default. A host operator enables them when starting the process:
-
-```text
-stormbuffer-mcp --stdio --project --allow-writes
+```sh
+sbuf --version
+stormbuffer-mcp --version
 ```
 
-That grant enables only `propose`, `supersede`, and `archive`. Proposals still become
-candidates and require human approval. There is no MCP approval, restore, edit, reindex,
-raw SQL, arbitrary-file, or permanent-deletion operation.
+The adapter must use an initialized store. Initialize the global store with `sbuf init`,
+or run `sbuf --project init` from a project to create its `.sbuf/` store. Connecting an
+MCP host never initializes a store or creates canonical records as a side effect.
+
+## Choose access and store scope
+
+The examples below are recall-only. Writes are disabled unless the host starts the adapter
+with `--allow-writes`. That grant enables only `memory_remember`, `memory_update`, and
+`memory_forget`. Remember and update still create candidates that require human approval.
+There is no MCP approval, restore, reindex, raw SQL, arbitrary-file, or permanent-deletion
+operation.
+
+Without `--project`, the adapter uses the machine's global Stormbuffer store. Add
+`--project` to select the nearest `.sbuf/` store, and start the host from that project.
+The global and project stores remain separate; connecting MCP does not move or rewrite
+their canonical Markdown.
+
+## Connect Codex
+
+Codex can register a local stdio server from its CLI. To use the global store:
+
+```sh
+codex mcp add stormbuffer -- stormbuffer-mcp --stdio
+codex mcp list
+```
+
+For a project store, register the adapter with `--project` instead:
+
+```sh
+codex mcp add stormbuffer -- stormbuffer-mcp --stdio --project
+```
+
+Choose one registration for the `stormbuffer` name, and start Codex from the initialized
+project when using `--project`. Add `--allow-writes` after `--stdio` only when Codex should
+be able to create candidates or archive records. Codex stores MCP configuration in
+`~/.codex/config.toml`; trusted projects can also use `.codex/config.toml`. See the
+[Codex MCP documentation](https://developers.openai.com/codex/mcp) for configuration fields
+and host controls. In an interactive Codex session, use `/mcp` to inspect the connection.
+
+## Connect Pi
+
+Install [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter), then restart Pi:
+
+```sh
+pi install npm:pi-mcp-adapter
+```
+
+For a project store, create `.mcp.json` in the initialized project:
+
+```json
+{ "mcpServers": { "stormbuffer": { "command": "stormbuffer-mcp", "args": ["--stdio", "--project"] } } }
+```
+
+Run Pi from that project. To use the global store, remove `"--project"` from `args` and
+put the configuration in `~/.config/mcp/mcp.json`. Add `"--allow-writes"` to `args` only
+when Pi should have write access.
+
+The adapter's default lazy mode exposes one proxy tool and discovers Stormbuffer's tools
+on demand. Leave `directTools` unset to keep MCP metadata from occupying unnecessary agent
+context. Use `/mcp` in Pi to inspect server status and available tools.
+
+## Connect another host
+
+A host that accepts the common `mcpServers` configuration shape can start a project-scoped,
+recall-only adapter like this:
+
+```json
+{ "mcpServers": { "stormbuffer": { "command": "stormbuffer-mcp", "args": ["--stdio", "--project"] } } }
+```
+
+Start the host from the project directory so `--project` selects the intended store. Add
+`--allow-writes` only when the host should have write access.
 
 ## JSON-RPC lifecycle
 
@@ -71,19 +134,24 @@ outside the selected scope or access class.
 
 `tools/list` returns exactly these tools:
 
-| Tool                    | Operation   | Default              |
-| ----------------------- | ----------- | -------------------- |
-| `stormbuffer_search`    | `search`    | enabled              |
-| `stormbuffer_context`   | `context`   | enabled              |
-| `stormbuffer_get`       | `get`       | enabled              |
-| `stormbuffer_propose`   | `propose`   | write grant required |
-| `stormbuffer_supersede` | `supersede` | write grant required |
-| `stormbuffer_archive`   | `archive`   | write grant required |
+| Tool              | Operation  | Default              |
+| ----------------- | ---------- | -------------------- |
+| `memory_recall`   | `context`  | enabled              |
+| `memory_get`      | `get`      | enabled              |
+| `memory_remember` | `remember` | write grant required |
+| `memory_update`   | `update`   | write grant required |
+| `memory_forget`   | `archive`  | write grant required |
 
-Read tools accept the version-1 invoke fields `query`, `id`, `limit`, `budget`, `scope`,
-`scopes`, and `access`. `access` is agent-only. Proposal and supersession fields follow
-the record contract: `title`, `kind`, `scope`, `access`, `body`, `tags`, `aliases`,
-`supersedes`, and attributable `sources`.
+`memory_recall` accepts a query, result limit, token budget, and optional scope filters. It
+returns the core context blocks and receipt; MCP has no separate search tool. `memory_get`
+reads one record by ID. When scope is omitted, both use the store selected when the server
+started. Explicit `scope` or `scopes` filters remain within the core store and agent-access
+policy.
+
+`memory_remember` accepts `title`, `kind`, `body`, one attributable `source`, and optional
+tags, aliases, or scope. `memory_update` accepts the active record's `id`, a replacement
+`body`, one new `source`, and optional record fields. It creates a linked replacement
+candidate without changing the active record. `memory_forget` archives the named record.
 
 ## JSON and MCP equivalence
 
@@ -92,14 +160,14 @@ MCP tool arguments are mapped to the public CLI's version-1 operation contract.
 only this operation mapping and core call:
 
 ```sh
-printf '%s\n' '{"version":1,"query":"release constraint","limit":5}' \
-  | sbuf --project invoke search
+printf '%s\n' '{"version":1,"query":"release constraint","budget":256}' \
+  | sbuf --project invoke context
 ```
 
 The successful CLI envelope is:
 
 ```json
-{ "version": 1, "operation": "search", "ok": true, "result": [{ "record_id": "..." }] }
+{ "version": 1, "operation": "context", "ok": true, "result": { "blocks": [], "receipt": {} } }
 ```
 
 MCP puts the CLI envelope in `result.structuredContent` and serializes it
@@ -118,5 +186,5 @@ Run the checked-in public-interface smoke test with the built binaries:
 python3 .agents/skills/stormbuffer-memory/verify.py
 ```
 
-The test exercises candidate approval through the CLI, cites a context receipt, and reads a
-search result through the SDK-backed MCP process.
+The test exercises candidate approval through the CLI and reads a cited context receipt through
+the SDK-backed `memory_recall` tool.

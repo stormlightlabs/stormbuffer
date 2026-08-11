@@ -226,6 +226,95 @@ impl RecordRepository {
         ))
     }
 
+    pub fn propose_update(
+        &self,
+        old_id: RecordId,
+        mut replacement: Record,
+    ) -> Result<ProposalResult, Error> {
+        let record_id = replacement.id;
+        if let Err(error) = replacement
+            .validate()
+            .and_then(|_| replacement.validate_provenance())
+        {
+            return Ok(ProposalResult::invalid(record_id, error.to_string()));
+        }
+        self.validate_store_scope(&replacement)?;
+
+        let _lock = self.prepare_mutation()?;
+        let records = self.scan_locked()?;
+        let old = records
+            .iter()
+            .find(|stored| stored.record.id == old_id)
+            .ok_or_else(|| Error::repository(RepositoryError::NotFound { id: old_id }))?;
+        if old.record.status != RecordStatus::Active {
+            return Err(Error::repository(RepositoryError::MustBeActive {
+                id: old_id,
+                status: old.record.status,
+            }));
+        }
+        if replacement.id == old_id {
+            return Err(Error::repository(RepositoryError::ImmutableId));
+        }
+        if replacement.scope != old.record.scope {
+            return Err(Error::repository(RepositoryError::ScopeDenied {
+                id: replacement.id,
+            }));
+        }
+        if let Some(existing) = records
+            .iter()
+            .find(|stored| stored.record.id == replacement.id)
+        {
+            return Err(Error::repository(RepositoryError::DuplicateId {
+                id: replacement.id,
+                first: existing.path.clone(),
+                second: self.record_path(replacement.id),
+            }));
+        }
+
+        replacement.supersedes = vec![old_id];
+        if let Some(existing) = matching_record_excluding_ids(
+            &records,
+            &replacement,
+            MatchKind::Duplicate,
+            &[old_id, replacement.id],
+        ) {
+            return Ok(ProposalResult::new(
+                ProposalOutcome::DuplicateOf,
+                replacement.id,
+                Some(existing.record.id),
+                Some(existing.record.status),
+                "update matches another memory",
+            ));
+        }
+        let conflict = matching_record_excluding_ids(
+            &records,
+            &replacement,
+            MatchKind::Conflict,
+            &[old_id, replacement.id],
+        );
+        replacement.status = RecordStatus::Candidate;
+        replacement.updated_at = later_timestamp(replacement.created_at);
+        let markdown = render_markdown(&replacement)?;
+        write_atomic(&self.record_path(replacement.id), markdown.as_bytes())?;
+
+        if let Some(existing) = conflict {
+            return Ok(ProposalResult::new(
+                ProposalOutcome::ConflictsWith,
+                replacement.id,
+                Some(existing.record.id),
+                Some(RecordStatus::Candidate),
+                "update conflicts with another memory",
+            ));
+        }
+        Ok(ProposalResult::new(
+            ProposalOutcome::RequiresApproval,
+            replacement.id,
+            Some(old_id),
+            Some(RecordStatus::Candidate),
+            "replacement candidate awaits explicit approval",
+        ))
+    }
+
     pub fn approve(&self, id: RecordId) -> Result<ProposalResult, Error> {
         let _lock = self.prepare_mutation()?;
         let records = self.scan_locked()?;
@@ -246,9 +335,19 @@ impl RecordRepository {
         current.record.validate()?;
         current.record.validate_provenance()?;
         self.validate_store_scope(&current.record)?;
-        if let Some(existing) =
-            matching_record_excluding(&records, &current.record, MatchKind::Duplicate, id)
-        {
+        let excluded = current
+            .record
+            .supersedes
+            .iter()
+            .copied()
+            .chain(std::iter::once(id))
+            .collect::<Vec<_>>();
+        if let Some(existing) = matching_record_excluding_ids(
+            &records,
+            &current.record,
+            MatchKind::Duplicate,
+            &excluded,
+        ) {
             return Ok(ProposalResult::new(
                 ProposalOutcome::DuplicateOf,
                 id,
@@ -258,7 +357,7 @@ impl RecordRepository {
             ));
         }
         if let Some(existing) =
-            matching_record_excluding(&records, &current.record, MatchKind::Conflict, id)
+            matching_record_excluding_ids(&records, &current.record, MatchKind::Conflict, &excluded)
         {
             return Ok(ProposalResult::new(
                 ProposalOutcome::ConflictsWith,
@@ -272,6 +371,31 @@ impl RecordRepository {
         let mut replacement = current.record.clone();
         replacement.transition_to(RecordStatus::Active)?;
         replacement.updated_at = later_timestamp(replacement.created_at);
+        if replacement.supersedes.len() == 1 {
+            let old_id = replacement.supersedes[0];
+            let old = records
+                .iter()
+                .find(|stored| stored.record.id == old_id)
+                .cloned()
+                .ok_or_else(|| Error::repository(RepositoryError::NotFound { id: old_id }))?;
+            if old.record.status != RecordStatus::Active {
+                return Err(Error::repository(RepositoryError::MustBeActive {
+                    id: old_id,
+                    status: old.record.status,
+                }));
+            }
+            if replacement.scope != old.record.scope {
+                return Err(Error::repository(RepositoryError::ScopeDenied { id }));
+            }
+            self.commit_supersession(&old, &replacement, Some(current.markdown.as_bytes()))?;
+            return Ok(ProposalResult::new(
+                ProposalOutcome::Accepted,
+                id,
+                Some(old_id),
+                Some(RecordStatus::Active),
+                "replacement candidate approved",
+            ));
+        }
         let markdown = render_markdown(&replacement)?;
         write_atomic(&current.path, markdown.as_bytes())?;
         Ok(ProposalResult::new(
@@ -437,27 +561,9 @@ impl RecordRepository {
             }));
         }
 
-        let now = Timestamp::now_utc();
-        replacement.updated_at = now;
-        let mut superseded = old.record.clone();
-        superseded.transition_to(RecordStatus::Superseded)?;
-        superseded.updated_at = now;
-
-        let old_markdown = render_markdown(&superseded)?;
-        let new_markdown = render_markdown(&replacement)?;
-        let new_path = self.record_path(replacement.id);
-        let journal = SupersedeJournal {
-            old_path: old.path.clone(),
-            new_path: new_path.clone(),
-            old_before: old.markdown.into_bytes(),
-            old_after: old_markdown,
-            new_after: new_markdown,
-        };
-        self.write_journal(&journal)?;
-        write_atomic(&journal.old_path, journal.old_after.as_bytes())?;
-        write_atomic(&journal.new_path, journal.new_after.as_bytes())?;
-        remove_file_sync(&self.journal_path())?;
-        self.read_record(&journal.new_path)
+        replacement.updated_at = Timestamp::now_utc();
+        self.commit_supersession(&old, &replacement, None)?;
+        self.read_record(&self.record_path(replacement.id))
     }
 
     pub fn forget(
@@ -593,6 +699,32 @@ impl RecordRepository {
         self.paths.root.join(LOCK_DIRECTORY).join(SUPERSEDE_JOURNAL)
     }
 
+    fn commit_supersession(
+        &self,
+        old: &StoredRecord,
+        replacement: &Record,
+        new_before: Option<&[u8]>,
+    ) -> Result<(), Error> {
+        let now = Timestamp::now_utc();
+        let mut superseded = old.record.clone();
+        superseded.transition_to(RecordStatus::Superseded)?;
+        superseded.updated_at = now;
+        let mut replacement = replacement.clone();
+        replacement.updated_at = now;
+        let journal = SupersedeJournal {
+            old_path: old.path.clone(),
+            new_path: self.record_path(replacement.id),
+            old_before: old.markdown.as_bytes().to_vec(),
+            old_after: render_markdown(&superseded)?,
+            new_before: new_before.map(ToOwned::to_owned),
+            new_after: render_markdown(&replacement)?,
+        };
+        self.write_journal(&journal)?;
+        write_atomic(&journal.old_path, journal.old_after.as_bytes())?;
+        write_atomic(&journal.new_path, journal.new_after.as_bytes())?;
+        remove_file_sync(&self.journal_path())
+    }
+
     fn write_journal(&self, journal: &SupersedeJournal) -> Result<(), Error> {
         let contents = toml::to_string(journal).map_err(|source| {
             Error::repository(RepositoryError::InvalidJournal {
@@ -624,18 +756,18 @@ impl RecordRepository {
             }));
         }
         let new_current = read_optional_bytes(&journal.new_path)?;
-        if let Some(current) = new_current.as_deref() {
-            if current != journal.new_after.as_bytes() {
-                return Err(Error::repository(RepositoryError::RecoveryConflict {
-                    path: journal.new_path.clone(),
-                }));
-            }
+        if new_current.as_deref() != journal.new_before.as_deref()
+            && new_current.as_deref() != Some(journal.new_after.as_bytes())
+        {
+            return Err(Error::repository(RepositoryError::RecoveryConflict {
+                path: journal.new_path.clone(),
+            }));
         }
 
         if old_current.as_deref() != Some(journal.old_after.as_bytes()) {
             write_atomic(&journal.old_path, journal.old_after.as_bytes())?;
         }
-        if new_current.is_none() {
+        if new_current.as_deref() != Some(journal.new_after.as_bytes()) {
             write_atomic(&journal.new_path, journal.new_after.as_bytes())?;
         }
         remove_file_sync(&path)?;
@@ -663,9 +795,18 @@ fn matching_record_excluding<'a>(
     kind: MatchKind,
     excluded_id: RecordId,
 ) -> Option<&'a StoredRecord> {
+    matching_record_excluding_ids(records, record, kind, &[excluded_id])
+}
+
+fn matching_record_excluding_ids<'a>(
+    records: &'a [StoredRecord],
+    record: &Record,
+    kind: MatchKind,
+    excluded_ids: &[RecordId],
+) -> Option<&'a StoredRecord> {
     records.iter().find(|stored| {
         let existing = &stored.record;
-        existing.id != excluded_id
+        !excluded_ids.contains(&existing.id)
             && matches!(
                 existing.status,
                 RecordStatus::Candidate | RecordStatus::Active
@@ -699,6 +840,7 @@ struct SupersedeJournal {
     new_path: PathBuf,
     old_before: Vec<u8>,
     old_after: String,
+    new_before: Option<Vec<u8>>,
     new_after: String,
 }
 

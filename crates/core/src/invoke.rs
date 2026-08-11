@@ -73,6 +73,8 @@ pub fn invoke_operation(
         "search" => invoke_search(paths, map),
         "context" => invoke_context(paths, map),
         "get" => invoke_get(paths, map),
+        "remember" => invoke_remember(paths, map),
+        "update" => invoke_update(paths, map),
         "propose" => invoke_propose(paths, map),
         "supersede" => invoke_supersede(paths, map),
         "archive" => invoke_archive(paths, map),
@@ -107,7 +109,7 @@ fn request_map(map: &Map<String, Value>, operation: &str) -> Result<(), InvokeFa
     }
     if !matches!(
         operation,
-        "search" | "context" | "get" | "propose" | "supersede" | "archive"
+        "search" | "context" | "get" | "remember" | "update" | "propose" | "supersede" | "archive"
     ) {
         return Err(InvokeFailure::new(
             "unknown_operation",
@@ -364,6 +366,106 @@ fn invoke_get(paths: &crate::StorePaths, map: &Map<String, Value>) -> Result<Val
         || Err(InvokeFailure::new("not_found", "record was not found")),
         Err,
     )
+}
+
+fn invoke_remember(
+    paths: &crate::StorePaths,
+    map: &Map<String, Value>,
+) -> Result<Value, InvokeFailure> {
+    ensure_keys(
+        map,
+        &[
+            "actor", "approved", "title", "kind", "scope", "tags", "aliases", "source", "body",
+        ],
+    )?;
+    ensure_agent_write(map)?;
+    let mut record_map = Map::new();
+    for key in ["title", "kind", "scope", "tags", "aliases", "body"] {
+        if let Some(value) = map.get(key) {
+            record_map.insert(key.to_owned(), value.clone());
+        }
+    }
+    record_map.insert("access".to_owned(), Value::String("agent".to_owned()));
+    record_map.insert("status".to_owned(), Value::String("candidate".to_owned()));
+    record_map.insert("sources".to_owned(), protocol_source_array(map)?);
+    let record = parse_protocol_record(
+        &Value::Object(record_map),
+        None,
+        &default_protocol_scope(paths),
+    )?;
+    let result = crate::RecordRepository::new(paths.clone())
+        .propose(record, crate::ProposalActor::Agent)
+        .map_err(|error| map_core_error(&error))?;
+    serde_json::to_value(result)
+        .map_err(|_| InvokeFailure::new("internal_error", "could not encode remember result"))
+}
+
+fn invoke_update(
+    paths: &crate::StorePaths,
+    map: &Map<String, Value>,
+) -> Result<Value, InvokeFailure> {
+    ensure_keys(
+        map,
+        &[
+            "actor", "approved", "id", "scope", "scopes", "title", "kind", "tags", "aliases",
+            "source", "body",
+        ],
+    )?;
+    ensure_agent_write(map)?;
+    let target_id = parse_protocol_id(required_string(map, "id")?)?;
+    let scopes = invocation_scope(paths, map)?;
+    let repository = crate::RecordRepository::new(paths.clone());
+    let old = repository
+        .find_allowed(target_id, &scopes, &[crate::Access::Agent])
+        .map_err(|error| map_core_error(&error))?;
+    let mut replacement_map = Map::new();
+    for key in ["title", "kind", "tags", "aliases", "body"] {
+        if let Some(value) = map.get(key) {
+            replacement_map.insert(key.to_owned(), value.clone());
+        }
+    }
+    replacement_map.insert(
+        "id".to_owned(),
+        Value::String(crate::RecordId::new_v7().to_string()),
+    );
+    let now = crate::Timestamp::now_utc().to_string();
+    replacement_map.insert("created_at".to_owned(), Value::String(now.clone()));
+    replacement_map.insert("updated_at".to_owned(), Value::String(now));
+    replacement_map.insert("access".to_owned(), Value::String("agent".to_owned()));
+    replacement_map.insert("status".to_owned(), Value::String("candidate".to_owned()));
+    replacement_map.insert("sources".to_owned(), protocol_source_array(map)?);
+    let replacement = parse_protocol_record(
+        &Value::Object(replacement_map),
+        Some(old.record()),
+        old.record().scope.as_str(),
+    )?;
+    let result = repository
+        .propose_update(target_id, replacement)
+        .map_err(|error| map_core_error(&error))?;
+    serde_json::to_value(result)
+        .map_err(|_| InvokeFailure::new("internal_error", "could not encode update result"))
+}
+
+fn ensure_agent_write(map: &Map<String, Value>) -> Result<(), InvokeFailure> {
+    let actor = map.get("actor").and_then(Value::as_str).unwrap_or("agent");
+    if actor != "agent" || map.contains_key("approved") {
+        return Err(InvokeFailure::new(
+            "permission_denied",
+            "agent writes always require explicit human approval",
+        ));
+    }
+    Ok(())
+}
+
+fn protocol_source_array(map: &Map<String, Value>) -> Result<Value, InvokeFailure> {
+    match map.get("source") {
+        Some(source) if source.is_object() => Ok(Value::Array(vec![source.clone()])),
+        Some(_) => Err(InvokeFailure::new(
+            "invalid_request",
+            "source must be an object",
+        )),
+        None => Ok(Value::Array(Vec::new())),
+    }
 }
 
 fn invoke_propose(

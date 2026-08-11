@@ -653,6 +653,123 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
 }
 
 #[test]
+fn invoke_remember_and_update_enforce_candidate_review() {
+    let root = temporary_directory("invoke-memory-intents");
+    assert!(run(&root, ["--project", "init"]).status.success());
+
+    let missing_evidence = run_json(
+        &root,
+        ["--project", "invoke", "remember"],
+        r#"{"version":1,"title":"Unsourced","kind":"fact","body":"No evidence."}"#,
+    );
+    assert_eq!(missing_evidence.status.code(), Some(0));
+    let missing_evidence: serde_json::Value =
+        serde_json::from_slice(&missing_evidence.stdout).expect("validation envelope");
+    assert_eq!(missing_evidence["result"]["outcome"], "invalid");
+
+    let denied = run_json(
+        &root,
+        ["--project", "invoke", "remember"],
+        r#"{"version":1,"actor":"human","title":"Impersonated","kind":"fact","body":"Must not activate.","source":{"kind":"document","reference":"ROADMAP.md","actor":"human"}}"#,
+    );
+    assert_eq!(denied.status.code(), Some(1));
+    let denied: serde_json::Value =
+        serde_json::from_slice(&denied.stdout).expect("permission envelope");
+    assert_eq!(denied["error"]["code"], "permission_denied");
+
+    let remembered = run_json(
+        &root,
+        ["--project", "invoke", "remember"],
+        r#"{"version":1,"title":"Intent memory","kind":"fact","body":"Original sourced memory.","source":{"kind":"document","reference":"ROADMAP.md#agent-capture","actor":"human"}}"#,
+    );
+    assert_eq!(remembered.status.code(), Some(0));
+    let remembered: serde_json::Value =
+        serde_json::from_slice(&remembered.stdout).expect("remember envelope");
+    assert_eq!(remembered["operation"], "remember");
+    assert_eq!(remembered["result"]["outcome"], "requires_approval");
+    let old_id = remembered["result"]["record_id"]
+        .as_str()
+        .expect("remembered id");
+    assert!(
+        run(&root, ["--project", "approve", old_id])
+            .status
+            .success()
+    );
+
+    let duplicate = run_json(
+        &root,
+        ["--project", "invoke", "remember"],
+        r#"{"version":1,"title":"Intent memory","kind":"fact","body":"Original sourced memory.","source":{"kind":"document","reference":"ROADMAP.md#agent-capture","actor":"human"}}"#,
+    );
+    let duplicate: serde_json::Value =
+        serde_json::from_slice(&duplicate.stdout).expect("duplicate envelope");
+    assert_eq!(duplicate["result"]["outcome"], "duplicate_of");
+
+    let conflict = run_json(
+        &root,
+        ["--project", "invoke", "remember"],
+        r#"{"version":1,"title":"Intent memory","kind":"fact","body":"A conflicting memory.","source":{"kind":"document","reference":"TODO.md#SB-501","actor":"human"}}"#,
+    );
+    let conflict: serde_json::Value =
+        serde_json::from_slice(&conflict.stdout).expect("conflict envelope");
+    assert_eq!(conflict["result"]["outcome"], "conflicts_with");
+    let conflict_id = conflict["result"]["record_id"]
+        .as_str()
+        .expect("conflict id");
+    assert!(
+        run(&root, ["--project", "reject", conflict_id])
+            .status
+            .success()
+    );
+
+    let updated = run_json(
+        &root,
+        ["--project", "invoke", "update"],
+        &format!(
+            r#"{{"version":1,"id":"{old_id}","body":"Replacement sourced memory.","source":{{"kind":"document","reference":"TODO.md#SB-501","actor":"human"}}}}"#
+        ),
+    );
+    assert_eq!(updated.status.code(), Some(0));
+    let updated: serde_json::Value =
+        serde_json::from_slice(&updated.stdout).expect("update envelope");
+    assert_eq!(updated["operation"], "update");
+    assert_eq!(updated["result"]["outcome"], "requires_approval");
+    let replacement_id = updated["result"]["record_id"]
+        .as_str()
+        .expect("replacement id");
+
+    for (id, expected_status, expected_supersedes) in [
+        (old_id, "active", None),
+        (replacement_id, "candidate", Some(old_id)),
+    ] {
+        let get = run_json(
+            &root,
+            ["--project", "invoke", "get"],
+            &format!(r#"{{"version":1,"id":"{id}"}}"#),
+        );
+        let get: serde_json::Value =
+            serde_json::from_slice(&get.stdout).expect("get intent record");
+        assert_eq!(get["result"]["status"], expected_status);
+        if let Some(superseded_id) = expected_supersedes {
+            assert_eq!(get["result"]["supersedes"][0], superseded_id);
+        }
+    }
+
+    assert!(
+        run(&root, ["--project", "approve", replacement_id])
+            .status
+            .success()
+    );
+    let old = run_json(
+        &root,
+        ["--project", "invoke", "get"],
+        &format!(r#"{{"version":1,"id":"{old_id}"}}"#),
+    );
+    let old: serde_json::Value = serde_json::from_slice(&old.stdout).expect("superseded record");
+    assert_eq!(old["result"]["status"], "superseded");
+}
+
+#[test]
 fn invoke_protocol_bounds_the_complete_serialized_response() {
     let root = temporary_directory("invoke-output-bound");
     let init = run(&root, ["--project", "init"]);
