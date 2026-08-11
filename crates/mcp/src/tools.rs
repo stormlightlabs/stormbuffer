@@ -1,23 +1,22 @@
 use rmcp::{
     ErrorData as RmcpError,
-    model::{CallToolRequestParams, CallToolResult},
+    model::{CallToolResult, JsonObject},
 };
 use serde_json::{Value, json};
 use stormbuffer_core as core;
 
-use crate::{config::MAX_TOOL_ENVELOPE_BYTES, schemas};
+use crate::config::MAX_TOOL_ENVELOPE_BYTES;
 
 pub fn call(
     paths: &core::StorePaths,
     allow_writes: bool,
-    request: CallToolRequestParams,
+    operation: &str,
+    mut arguments: JsonObject,
     cancelled: bool,
 ) -> Result<CallToolResult, RmcpError> {
     if cancelled {
         return Err(RmcpError::invalid_params("request was cancelled", None));
     }
-    let operation = schemas::operation(request.name.as_ref())
-        .ok_or_else(|| RmcpError::invalid_params("tool is not supported", None))?;
     let write = matches!(operation, "remember" | "update" | "archive");
     let envelope = if write && !allow_writes {
         core::invoke_envelope(
@@ -28,7 +27,6 @@ pub fn call(
             )),
         )
     } else {
-        let mut arguments = request.arguments.unwrap_or_default();
         arguments.insert("version".to_owned(), json!(core::INVOKE_VERSION));
         arguments.insert("operation".to_owned(), Value::String(operation.to_owned()));
         core::invoke_envelope(

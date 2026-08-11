@@ -100,20 +100,21 @@ fn stdio_lists_surface_and_closes_cleanly_at_eof() {
         responses[0]["result"]["serverInfo"]["name"],
         "stormbuffer-mcp"
     );
-    let tool_names = responses[1]["result"]["tools"]
+    let mut tool_names = responses[1]["result"]["tools"]
         .as_array()
         .unwrap()
         .iter()
         .map(|tool| tool["name"].as_str().unwrap())
         .collect::<Vec<_>>();
+    tool_names.sort_unstable();
     assert_eq!(
         tool_names,
         [
-            "memory_recall",
+            "memory_forget",
             "memory_get",
+            "memory_recall",
             "memory_remember",
             "memory_update",
-            "memory_forget",
         ]
     );
     assert_eq!(

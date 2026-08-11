@@ -65,8 +65,8 @@ and fail soft when Stormbuffer is unavailable or has no useful evidence.
 - JSON invocation is versioned, bounded, non-interactive, and JSON-only on
   stdin/stdout. Logs stay on stderr. MCP exposes the same core semantics. Keep version
   at 1 until the initial release.
-- Build man pages and completions from the runtime Clap definition. Do not hand
-  maintain a second command tree.
+- Build MCP protocol types and annotations with rmcp's models and builders. Use raw
+  JSON only for dynamic schemas and payloads.
 - An unfinished command may be an explicit side-effect-free stub. Never make a
   stub look successful or document it as implemented.
 

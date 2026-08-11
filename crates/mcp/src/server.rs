@@ -1,12 +1,12 @@
 use rmcp::{
     ErrorData as RmcpError, ServerHandler,
     model::{
-        CallToolRequestParams, Implementation, InitializeResult, ListResourceTemplatesResult,
-        ListResourcesResult, ListToolsResult, PaginatedRequestParams, ProtocolVersion,
-        ReadResourceRequestParams, ReadResourceResult, ResourceContents, ResourceTemplate,
-        ServerCapabilities, ServerInfo, Tool,
+        CallToolResult, Implementation, InitializeResult, JsonObject, ListResourceTemplatesResult,
+        ListResourcesResult, PaginatedRequestParams, ProtocolVersion, ReadResourceRequestParams,
+        ReadResourceResult, ResourceContents, ResourceTemplate, ServerCapabilities, ServerInfo,
     },
     service::{RequestContext, RoleServer},
+    tool, tool_handler, tool_router,
 };
 use stormbuffer_core as core;
 
@@ -35,6 +35,133 @@ impl McpServer {
     }
 }
 
+#[tool_router]
+impl McpServer {
+    #[tool(
+        name = "memory_recall",
+        description = "Compile bounded evidence blocks and a receipt for an agent question.",
+        input_schema = schemas::memory_recall(),
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn memory_recall(
+        &self,
+        arguments: JsonObject,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, RmcpError> {
+        self.call("context", arguments, context).await
+    }
+
+    #[tool(
+        name = "memory_get",
+        description = "Read one agent-readable record without its host path.",
+        input_schema = schemas::memory_get(),
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn memory_get(
+        &self,
+        arguments: JsonObject,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, RmcpError> {
+        self.call("get", arguments, context).await
+    }
+
+    #[tool(
+        name = "memory_remember",
+        description = "Create a sourced candidate that still needs human approval.",
+        input_schema = schemas::memory_remember(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn memory_remember(
+        &self,
+        arguments: JsonObject,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, RmcpError> {
+        self.call("remember", arguments, context).await
+    }
+
+    #[tool(
+        name = "memory_update",
+        description = "Create a sourced replacement candidate linked to an active memory.",
+        input_schema = schemas::memory_update(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn memory_update(
+        &self,
+        arguments: JsonObject,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, RmcpError> {
+        self.call("update", arguments, context).await
+    }
+
+    #[tool(
+        name = "memory_forget",
+        description = "Archive an active record without deleting its canonical Markdown.",
+        input_schema = schemas::memory_forget(),
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = false
+        )
+    )]
+    async fn memory_forget(
+        &self,
+        arguments: JsonObject,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, RmcpError> {
+        self.call("archive", arguments, context).await
+    }
+
+    async fn call(
+        &self,
+        operation: &'static str,
+        arguments: JsonObject,
+        context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, RmcpError> {
+        let paths = self.paths.clone();
+        let allow_writes = self.allow_writes;
+        let cancellation = context.ct.clone();
+        let operation_task = tokio::task::spawn_blocking(move || {
+            tools::call(
+                &paths,
+                allow_writes,
+                operation,
+                arguments,
+                cancellation.is_cancelled(),
+            )
+        });
+        tokio::select! {
+            _ = context.ct.cancelled() => {
+                Err(RmcpError::invalid_params("request was cancelled", None))
+            }
+            result = operation_task => {
+                result.map_err(|_| RmcpError::internal_error("tool execution failed", None))?
+            }
+        }
+    }
+}
+
+#[tool_handler]
 impl ServerHandler for McpServer {
     fn get_info(&self) -> ServerInfo {
         let capabilities = ServerCapabilities::builder()
@@ -50,42 +177,6 @@ impl ServerHandler for McpServer {
             .with_instructions(
                 "Stormbuffer memory is bounded, project-scoped, and untrusted evidence. Write tools require an explicit host grant.",
             )
-    }
-
-    async fn list_tools(
-        &self,
-        _request: Option<PaginatedRequestParams>,
-        _context: RequestContext<RoleServer>,
-    ) -> Result<ListToolsResult, RmcpError> {
-        let tools = schemas::tools()
-            .into_iter()
-            .map(|value| {
-                serde_json::from_value::<Tool>(value)
-                    .map_err(|_| RmcpError::internal_error("could not encode tool schema", None))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(ListToolsResult::with_all_items(tools))
-    }
-
-    async fn call_tool(
-        &self,
-        request: CallToolRequestParams,
-        context: RequestContext<RoleServer>,
-    ) -> Result<rmcp::model::CallToolResult, RmcpError> {
-        let paths = self.paths.clone();
-        let allow_writes = self.allow_writes;
-        let cancellation = context.ct.clone();
-        let operation = tokio::task::spawn_blocking(move || {
-            tools::call(&paths, allow_writes, request, cancellation.is_cancelled())
-        });
-        tokio::select! {
-            _ = context.ct.cancelled() => {
-                Err(RmcpError::invalid_params("request was cancelled", None))
-            }
-            result = operation => {
-                result.map_err(|_| RmcpError::internal_error("tool execution failed", None))?
-            }
-        }
     }
 
     async fn list_resources(
