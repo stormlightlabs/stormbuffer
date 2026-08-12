@@ -10,6 +10,7 @@ mod echo;
 mod index;
 mod protocol;
 mod records;
+mod skill;
 mod store;
 
 use command::*;
@@ -92,6 +93,9 @@ fn run_command(cli: Cli, output: Echo) -> i32 {
         CliCommand::Gc(arguments) => index::run_gc(scope, arguments, &output),
         CliCommand::Export(arguments) => backup::run_export(scope, arguments, &output),
         CliCommand::Import(arguments) => backup::run_import(scope, arguments, &output),
+        CliCommand::Skill(arguments) => match arguments.command {
+            SkillCommand::Install(arguments) => skill::run_install(scope, arguments, &output),
+        },
     }
 }
 

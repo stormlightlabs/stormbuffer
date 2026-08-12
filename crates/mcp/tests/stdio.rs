@@ -44,6 +44,88 @@ fn exchange(stdin: &mut impl Write, stdout: &mut impl BufRead, message: &str) ->
 }
 
 #[test]
+fn command_line_accepts_explicit_global_scope_and_rejects_mixed_scopes() {
+    let help = Command::new(env!("CARGO_BIN_EXE_stormbuffer-mcp"))
+        .arg("--help")
+        .output()
+        .expect("run help");
+    assert!(help.status.success());
+    assert!(String::from_utf8_lossy(&help.stdout).contains("--global | --project"));
+
+    let root = temporary_project();
+    let global_paths = stormbuffer_core::resolve_store_with_dirs(
+        StoreScope::Global,
+        &root,
+        &PlatformDirs::new(root.join("data"), root.join("cache")),
+    )
+    .expect("resolve global store");
+    stormbuffer_core::initialize_store(&global_paths, StoreInitMode::Default)
+        .expect("initialize global store");
+    let mut global = Command::new(env!("CARGO_BIN_EXE_stormbuffer-mcp"))
+        .args(["--stdio", "--global"])
+        .current_dir(&root)
+        .env("HOME", root.join("home"))
+        .env("USERPROFILE", root.join("home"))
+        .env("LOCALAPPDATA", root.join("data"))
+        .env("APPDATA", root.join("data"))
+        .env("XDG_DATA_HOME", root.join("data"))
+        .env("XDG_CACHE_HOME", root.join("cache"))
+        .env("STORMBUFFER_TEST_MODE", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run explicit global scope");
+    let input = [
+        request(
+            1,
+            "initialize",
+            json!({
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "stormbuffer-test", "version": "0.1.0"}
+            }),
+        ),
+        json!({"jsonrpc":"2.0","method":"notifications/initialized"}).to_string(),
+    ]
+    .join("\n");
+    global
+        .stdin
+        .take()
+        .expect("global stdin")
+        .write_all(format!("{input}\n").as_bytes())
+        .expect("write global requests");
+    let global = global.wait_with_output().expect("wait for global scope");
+    assert!(
+        global.status.success(),
+        "{}",
+        String::from_utf8_lossy(&global.stderr)
+    );
+    let response: Value = serde_json::from_slice(
+        global
+            .stdout
+            .split(|byte| *byte == b'\n')
+            .next()
+            .expect("global initialization response"),
+    )
+    .expect("global response is JSON");
+    assert!(
+        response["result"]["instructions"]
+            .as_str()
+            .expect("server instructions")
+            .contains("global store")
+    );
+
+    let conflict = Command::new(env!("CARGO_BIN_EXE_stormbuffer-mcp"))
+        .args(["--stdio", "--global", "--project"])
+        .output()
+        .expect("run conflicting scopes");
+    assert_eq!(conflict.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&conflict.stderr).contains("conflicts"));
+    fs::remove_dir_all(root).expect("remove test directory");
+}
+
+#[test]
 fn stdio_lists_surface_and_closes_cleanly_at_eof() {
     let project = temporary_project();
     let mut child = Command::new(env!("CARGO_BIN_EXE_stormbuffer-mcp"))
@@ -99,6 +181,12 @@ fn stdio_lists_surface_and_closes_cleanly_at_eof() {
     assert_eq!(
         responses[0]["result"]["serverInfo"]["name"],
         "stormbuffer-mcp"
+    );
+    assert!(
+        responses[0]["result"]["instructions"]
+            .as_str()
+            .expect("server instructions")
+            .contains("project store")
     );
     let mut tool_names = responses[1]["result"]["tools"]
         .as_array()

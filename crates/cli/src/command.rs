@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -25,6 +27,10 @@ pub struct Cli {
     /// Use the nearest project store instead of the global store.
     #[arg(long, global = true)]
     pub project: bool,
+
+    /// Select the global store explicitly.
+    #[arg(long, global = true, conflicts_with = "project")]
+    pub global: bool,
 
     #[command(subcommand)]
     pub command: CliCommand,
@@ -84,6 +90,31 @@ pub enum CliCommand {
     Evaluate,
     /// Run the MCP adapter over stdio.
     Mcp(McpArgs),
+    /// Manage agent skills shipped with Stormbuffer.
+    Skill(SkillArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct SkillArgs {
+    #[command(subcommand)]
+    pub command: SkillCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SkillCommand {
+    /// Install the selected scope's memory skill into an agent skill directory.
+    Install(SkillInstallArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct SkillInstallArgs {
+    /// Agent skill directory in which to create the Stormbuffer skill.
+    #[arg(long, value_name = "DIRECTORY")]
+    pub directory: PathBuf,
+
+    /// Replace different existing skill content atomically.
+    #[arg(long)]
+    pub force: bool,
 }
 
 #[derive(Args, Debug)]

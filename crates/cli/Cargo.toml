@@ -27,6 +27,9 @@ stormbuffer-core = { package = "stormbuffer-core", version = "=0.1.0", path = ".
 tracing.workspace = true
 tracing-subscriber.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+
 [build-dependencies]
 clap.workspace = true
 clap_complete.workspace = true

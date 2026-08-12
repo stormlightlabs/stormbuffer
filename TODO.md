@@ -153,40 +153,11 @@ configuration.
 
 ### SB-503 — Add the agent memory decision tree
 
-**What to build:** Give the agent skill one small routing tree for recall and
-capture. Before work, it should retrieve memory only when prior decisions,
-conventions, procedures, or unfinished context may affect the task. During
-work, it should evaluate capture only after a user correction or explicit
-request, an accepted decision, a surprising confirmed root cause, an
-undocumented constraint, a needed cross-session handoff, or the discovery of
-stale memory. Every other path ends without a memory action.
-
-**Acceptance criteria:**
-
-- [ ] Without a capture event, the skill does not evaluate or propose memory.
-      An event starts evaluation but does not guarantee a proposal.
-- [ ] The tree routes to one of five visible outcomes: continue without a
-      memory action, recall and cite, propose one candidate, update or
-      supersede stale memory, or create a necessary checkpoint.
-- [ ] An agent-identified event produces at most one atomic candidate. The
-      candidate must outlive the session, change future behavior, cite
-      attributable evidence, avoid duplicating an authoritative project source,
-      and have a correction or supersession path.
-- [ ] An explicit request to remember something still follows safety,
-      validation, candidate review, and approval policy.
-- [ ] The skill rejects routine success, current progress, transient failures
-      and workarounds, tentative choices, brainstorming, generic knowledge,
-      duplicated documentation, transcripts, unsupported user inferences,
-      source dumps, and secrets.
-- [ ] Fleeting working state is rejected. A sourced project checkpoint is
-      allowed only when another session needs it to resume work.
-- [ ] Subjective admission judgment stays in the skill. Core validation,
-      scope, lifecycle, and approval policy remain authoritative, and the
-      skill does not introduce a separate worthiness classifier.
-
-**Verification:** Run positive and negative skill fixtures for every listed
-capture event and rejection class. Include routine task completion with nothing
-durable established as a no-proposal case.
+Added a five-outcome recall and capture tree to the canonical agent skill.
+Capture evaluation now starts only after a named event, admits at most one
+sourced candidate, and leaves lifecycle and approval policy to core. Contract
+fixtures cover every capture event and rejection class, including ordinary
+completion with no proposal.
 
 ### SB-504 — Validate project-scoped continuity
 
@@ -256,35 +227,11 @@ feedback and compare the reported metrics.
 
 ### SB-507 — Install the global agent skill from the CLI
 
-**What to build:** Add an `sbuf skill install` flow that installs the maintained
-global-memory skill into a caller-selected agent skill directory. Ship the skill
-with the CLI so installation does not depend on a source checkout, configuration
-repository, or network request.
-
-**Blocked by:** SB-503
-
-**Acceptance criteria:**
-
-- [ ] CLI help documents how to select global scope and the destination skill
-      directory, and successful output reports the installed path.
-- [ ] The installed skill selects the global store explicitly and applies the
-      retrieval, citation, event-driven capture, and human-review policy from
-      the canonical skill source.
-- [ ] Global and project variants share one maintained policy source. Scope-
-      specific commands are generated or substituted rather than copied into
-      two independently edited skills.
-- [ ] Installation works from a packaged binary in a directory that contains no
-      Stormbuffer checkout and with network access disabled.
-- [ ] Reinstalling identical content is idempotent. Different existing content
-      is preserved unless the user explicitly authorizes replacement, and the
-      replacement uses an atomic write.
-- [ ] Process tests install only into temporary directories and cover first
-      install, identical reinstall, conflict, and explicit replacement.
-- [ ] User documentation describes the implemented command without requiring a
-      dotfiles repository, symlinks, or host-specific personal paths.
-
-**Verification:** Run `cargo test -p stormbuffer` and exercise the documented
-install command from a temporary directory with an empty target.
+Added `sbuf skill install` for offline installation into a caller-selected agent
+skill directory. Global and project variants are generated from one canonical
+policy according to the CLI's selected scope. Identical reinstalls are no-ops,
+conflicting files are preserved by default, and `--force` replaces them
+atomically. Process tests cover both scopes and every installation outcome.
 
 **Milestone exit:** Agents can propose candidates after high-signal capture
 events without sweeping routine work, resume project work from sourced

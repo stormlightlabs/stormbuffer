@@ -846,6 +846,99 @@ fn sbuf_exposes_version_help_and_commands() {
 }
 
 #[test]
+fn skill_install_is_offline_idempotent_and_requires_force_for_conflicts() {
+    let root = temporary_directory("skill-install");
+    let skills = root.join(".agents").join("skills");
+    let skills_argument = skills.to_string_lossy().into_owned();
+    let destination = skills.join("stormbuffer-global-memory").join("SKILL.md");
+
+    let first = run(
+        &root,
+        [
+            "--global",
+            "skill",
+            "install",
+            "--directory",
+            &skills_argument,
+        ],
+    );
+    assert_eq!(
+        first.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert!(String::from_utf8_lossy(&first.stdout).contains(&destination.display().to_string()));
+    let installed = fs::read(&destination).expect("read installed skill");
+    let installed_text = String::from_utf8_lossy(&installed);
+    assert!(installed_text.contains("name: stormbuffer-global-memory"));
+    assert!(installed_text.contains("sbuf --global invoke search"));
+    assert!(installed_text.contains("stormbuffer-mcp --stdio --global"));
+    assert!(installed_text.contains("Global retrieval stays within the global store"));
+    assert!(!installed_text.contains("--project"));
+
+    let second = run(&root, ["skill", "install", "--directory", &skills_argument]);
+    assert_eq!(second.status.code(), Some(0));
+    assert_eq!(
+        fs::read(&destination).expect("read reinstalled skill"),
+        installed
+    );
+
+    fs::write(&destination, "locally customized\n").expect("write conflicting skill");
+    let conflict = run(&root, ["skill", "install", "--directory", &skills_argument]);
+    assert_eq!(conflict.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&conflict.stderr).contains("--force"));
+    assert_eq!(
+        fs::read_to_string(&destination).expect("read conflict"),
+        "locally customized\n"
+    );
+
+    let replacement = run(
+        &root,
+        [
+            "skill",
+            "install",
+            "--directory",
+            &skills_argument,
+            "--force",
+        ],
+    );
+    assert_eq!(replacement.status.code(), Some(0));
+    assert_eq!(fs::read(&destination).expect("read replacement"), installed);
+
+    let project_skills = root.join("project-agent-skills");
+    let project_argument = project_skills.to_string_lossy().into_owned();
+    let project = run(
+        &root,
+        [
+            "--project",
+            "skill",
+            "install",
+            "--directory",
+            &project_argument,
+        ],
+    );
+    assert_eq!(project.status.code(), Some(0));
+    let project_skill =
+        fs::read_to_string(project_skills.join("stormbuffer-memory").join("SKILL.md"))
+            .expect("read project skill");
+    assert!(project_skill.contains("name: stormbuffer-memory"));
+    assert!(project_skill.contains("sbuf --project invoke search"));
+    assert!(project_skill.contains("Project retrieval can also return global records"));
+    assert!(!project_skill.contains("--global"));
+
+    let help = run(&root, ["skill", "install", "--help"]);
+    assert_eq!(help.status.code(), Some(0));
+    let help = String::from_utf8_lossy(&help.stdout);
+    assert!(help.contains("selected scope's memory skill"));
+    assert!(help.contains("--directory <DIRECTORY>"));
+    assert!(help.contains("--force"));
+    assert!(help.contains("--global"));
+
+    fs::remove_dir_all(root).expect("remove test directory");
+}
+
+#[test]
 fn color_modes_no_color_and_json_output_follow_the_contract() {
     let root = temporary_directory("color");
     let init = run(&root, ["--project", "init"]);

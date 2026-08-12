@@ -18,6 +18,37 @@ directory instead:
 sbuf --project root
 ```
 
+Use `--global` when an agent configuration should show the global scope
+explicitly.
+
+## Install an agent skill
+
+Install the maintained global-memory skill into your agent's skill directory:
+
+```sh
+sbuf skill install --directory .agents/skills
+```
+
+The command creates `.agents/skills/stormbuffer-global-memory/SKILL.md` without a
+network request. An identical reinstall succeeds without changing the file. If
+different content already exists, it is preserved unless `--force` explicitly
+authorizes atomic replacement.
+
+The destination controls where an agent discovers the skill, not which memory
+store the skill uses. A global-memory skill may therefore live in a
+repository-local skill directory.
+Pass another conventional or vendor-specific skill directory when needed. The
+command does not auto-detect a destination.
+
+Add `--project` to install the project-scoped variant instead:
+
+```sh
+sbuf --project skill install --directory .agents/skills
+```
+
+The project variant uses the same policy and selects the nearest project store
+in every command.
+
 ## Initialize a store
 
 Initialize the global store with:
