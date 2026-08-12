@@ -1,4 +1,0 @@
-interface:
-  display_name: "Orchestrate with Pi"
-  short_description: "Explicitly delegate work to Pi in Herdr"
-  default_prompt: "Use $orchestrate for this explicitly delegated task and run paired standard and adversarial Pi review when the delegated change warrants it."

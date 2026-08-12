@@ -57,6 +57,7 @@ where
         .env("XDG_DATA_HOME", &data)
         .env("XDG_CACHE_HOME", &cache)
         .env("STORMBUFFER_TEST_MODE", "1")
+        .env_remove("NO_COLOR")
         .output()
         .expect("run CLI process")
 }
@@ -871,6 +872,32 @@ fn color_modes_no_color_and_json_output_follow_the_contract() {
     let no_color = no_color_command.output().expect("run NO_COLOR status");
     assert_eq!(no_color.status.code(), Some(0));
     assert!(!no_color.stdout.contains(&0x1b));
+
+    let mut forced_no_color_command = Command::new(binary());
+    forced_no_color_command
+        .current_dir(&root)
+        .args(["--project", "--color", "always", "status"])
+        .env("NO_COLOR", "1");
+    let forced_no_color = forced_no_color_command
+        .output()
+        .expect("run forced NO_COLOR status");
+    assert_eq!(forced_no_color.status.code(), Some(0));
+    assert!(!forced_no_color.stdout.contains(&0x1b));
+
+    let colored_error = run(&root, ["--project", "--color", "always", "mcp"]);
+    assert_eq!(colored_error.status.code(), Some(1));
+    assert!(colored_error.stderr.contains(&0x1b));
+
+    let mut no_color_error_command = Command::new(binary());
+    no_color_error_command
+        .current_dir(&root)
+        .args(["--project", "--color", "always", "mcp"])
+        .env("NO_COLOR", "1");
+    let no_color_error = no_color_error_command
+        .output()
+        .expect("run forced NO_COLOR error");
+    assert_eq!(no_color_error.status.code(), Some(1));
+    assert!(!no_color_error.stderr.contains(&0x1b));
 
     let json = run(
         &root,
