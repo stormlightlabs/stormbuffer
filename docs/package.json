@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && pagefind --site build --output-path static/pagefind --quiet && vite build",
+		"deploy": "pnpm run build && wrangler pages deploy",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -46,6 +47,7 @@
 		"unocss": "^66.7.5",
 		"vite": "^8.0.16",
 		"vitest": "^4.1.8",
-		"vitest-browser-svelte": "^2.1.1"
+		"vitest-browser-svelte": "^2.1.1",
+		"wrangler": "^4.121.0"
 	}
 }
