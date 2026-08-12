@@ -13,12 +13,11 @@ Defined the public command tree in Clap and implemented `--help`, `--version`,
 `init`, `root`, and `status`. Unfinished commands report that they are not
 implemented and make no changes.
 
-### SB-003 — Apply the CLI output, color, and alias contract
+### SB-003 — Apply the CLI output and color contract
 
 Added consistent stdout/stderr behavior, documented exit statuses, and
 `owo-colors` styling that respects terminals, `NO_COLOR`, and
-`--color auto|always|never`. Made `stormbuffer`, `stormbuf`, and `sbuf`
-equivalent entry points.
+`--color auto|always|never`. Made `sbuf` the single public entry point.
 
 ### SB-004 — Generate man pages and shell completions
 
@@ -152,53 +151,75 @@ core context, writes retain core review and scope policy, and forget only
 archives. Protocol tests cover all five mappings and the documented stdio host
 configuration.
 
-### SB-503 — Add capture checks to the agent skill
+### SB-503 — Add the agent memory decision tree
 
-**What to build:** Teach the agent skill to check for durable memory after user
-corrections, accepted decisions, surprising confirmed root causes, undocumented
-constraints, resumable project state, and discoveries of stale memory.
-
-**Blocked by:** SB-501, SB-602
+**What to build:** Give the agent skill one small routing tree for recall and
+capture. Before work, it should retrieve memory only when prior decisions,
+conventions, procedures, or unfinished context may affect the task. During
+work, it should evaluate capture only after a user correction or explicit
+request, an accepted decision, a surprising confirmed root cause, an
+undocumented constraint, a needed cross-session handoff, or the discovery of
+stale memory. Every other path ends without a memory action.
 
 **Acceptance criteria:**
 
-- [ ] Each high-signal event produces at most one proposal with attributable
-      evidence, a future trigger, a future behavior change, and a correction
-      path.
-- [ ] The skill rejects routine success, generic knowledge, and material owned
-      by authoritative project documentation.
+- [ ] Without a capture event, the skill does not evaluate or propose memory.
+      An event starts evaluation but does not guarantee a proposal.
+- [ ] The tree routes to one of five visible outcomes: continue without a
+      memory action, recall and cite, propose one candidate, update or
+      supersede stale memory, or create a necessary checkpoint.
+- [ ] An agent-identified event produces at most one atomic candidate. The
+      candidate must outlive the session, change future behavior, cite
+      attributable evidence, avoid duplicating an authoritative project source,
+      and have a correction or supersession path.
+- [ ] An explicit request to remember something still follows safety,
+      validation, candidate review, and approval policy.
+- [ ] The skill rejects routine success, current progress, transient failures
+      and workarounds, tentative choices, brainstorming, generic knowledge,
+      duplicated documentation, transcripts, unsupported user inferences,
+      source dumps, and secrets.
 - [ ] Fleeting working state is rejected. A sourced project checkpoint is
-      allowed when another session needs it to resume work.
+      allowed only when another session needs it to resume work.
+- [ ] Subjective admission judgment stays in the skill. Core validation,
+      scope, lifecycle, and approval policy remain authoritative, and the
+      skill does not introduce a separate worthiness classifier.
 
-**Verification:** Run the skill examples against accepted and rejected capture
-cases.
+**Verification:** Run positive and negative skill fixtures for every listed
+capture event and rejection class. Include routine task completion with nothing
+durable established as a no-proposal case.
 
 ### SB-504 — Validate project-scoped continuity
 
-**What to build:** Dogfood project-scoped checkpoints across sessions and record
-any discovery or presentation gap before designing a separate brief primitive.
+**What to build:** Dogfood project-scoped checkpoints across sessions. Create a
+checkpoint only when another session needs state that normal project artifacts
+do not preserve well enough, and record any discovery or presentation gap
+before designing a separate brief primitive.
 
-**Blocked by:** SB-406, SB-503
+**Blocked by:** SB-503
 
 **Acceptance criteria:**
 
-- [ ] A later session can find and cite the checkpoint needed to resume work.
-- [ ] Checkpoints omit transient detail that does not affect later work.
+- [ ] A checkpoint contains completed work, the exact unresolved state, settled
+      decisions, the next meaningful action, and relevant references.
+- [ ] A later session can find and cite the checkpoint and resume the work.
+- [ ] Checkpoints omit chronology, routine commands, dead ends, and transient
+      detail that does not affect later work.
+- [ ] No checkpoint is created when normal project artifacts provide enough
+      state for another session to resume.
 - [ ] Any failed handoff records whether capture, retrieval, or presentation
       caused the failure.
 - [ ] A separate brief primitive is proposed only when the observed gap cannot
       be solved through checkpoints and recall.
 
-**Verification:** Complete a cross-session dogfood scenario and inspect the
-captured sources, retrieval result, and resumed work.
+**Verification:** Complete cross-session dogfood scenarios that do and do not
+require a checkpoint. Inspect the captured sources, retrieval result, and
+resumed work.
 
 ### SB-505 — Record disposable receipt feedback
 
 **What to build:** Record whether retrieved evidence was included, cited,
 ignored, or corrected and whether the answer led to an approved, edited,
 rejected, or superseding proposal.
-
-**Blocked by:** SB-402
 
 **Acceptance criteria:**
 
@@ -214,24 +235,61 @@ projection from the checked-in judgments.
 ### SB-506 — Measure memory usefulness
 
 **What to build:** Join aggregate receipt feedback to the offline corpus so
-evaluations distinguish absent memory from failed retrieval and report whether
-retrieved memory affected later work.
+evaluations distinguish absent memory, retrieval misses, ignored results, and
+stale or incorrect memory. Report whether retrieved memory affected later work
+and whether proposed memory survived human review.
 
-**Blocked by:** SB-304, SB-505
+**Blocked by:** SB-505
 
 **Acceptance criteria:**
 
-- [ ] Reports distinguish missing memory from retrieval failure.
+- [ ] Reports distinguish knowledge that was never captured, memory that
+      retrieval missed, retrieved memory the agent ignored, and retrieved
+      memory that was stale or incorrect.
 - [ ] Reports include retrieved-and-used rate, stale corrections, context cost
       per used memory, and time to later reuse.
+- [ ] Reports include proposal approval, edit, rejection, and duplicate rates.
 - [ ] Evaluation output contains no raw prompts or transcripts.
 
 **Verification:** Run the retrieval evaluation corpus with and without receipt
 feedback and compare the reported metrics.
 
-**Milestone exit:** Agents can capture high-signal memory through the intent API,
-resume project work from sourced checkpoints, and measure whether recalled
-memory was used.
+### SB-507 — Install the global agent skill from the CLI
+
+**What to build:** Add an `sbuf skill install` flow that installs the maintained
+global-memory skill into a caller-selected agent skill directory. Ship the skill
+with the CLI so installation does not depend on a source checkout, configuration
+repository, or network request.
+
+**Blocked by:** SB-503
+
+**Acceptance criteria:**
+
+- [ ] CLI help documents how to select global scope and the destination skill
+      directory, and successful output reports the installed path.
+- [ ] The installed skill selects the global store explicitly and applies the
+      retrieval, citation, event-driven capture, and human-review policy from
+      the canonical skill source.
+- [ ] Global and project variants share one maintained policy source. Scope-
+      specific commands are generated or substituted rather than copied into
+      two independently edited skills.
+- [ ] Installation works from a packaged binary in a directory that contains no
+      Stormbuffer checkout and with network access disabled.
+- [ ] Reinstalling identical content is idempotent. Different existing content
+      is preserved unless the user explicitly authorizes replacement, and the
+      replacement uses an atomic write.
+- [ ] Process tests install only into temporary directories and cover first
+      install, identical reinstall, conflict, and explicit replacement.
+- [ ] User documentation describes the implemented command without requiring a
+      dotfiles repository, symlinks, or host-specific personal paths.
+
+**Verification:** Run `cargo test -p stormbuffer` and exercise the documented
+install command from a temporary directory with an empty target.
+
+**Milestone exit:** Agents can propose candidates after high-signal capture
+events without sweeping routine work, resume project work from sourced
+checkpoints, install global-memory behavior without maintaining a separate skill
+copy, and distinguish capture, retrieval, and use failures.
 
 ## Milestone 6: MCP and releases
 
@@ -247,15 +305,17 @@ durable memory, report conflicts, and avoid storing unsuitable material.
 
 ### SB-603 — Harden packaging and releases
 
-**What to build:** Produce cross-platform releases with all executable names,
-verified model setup, man pages, completions, docs, and an installation smoke
-test on a machine without Stormbuffer.
+**What to build:** Produce cross-platform releases with `sbuf`,
+`stormbuffer-mcp`, verified model setup, generated `sbuf` man pages and
+completions, docs, and an installation smoke test on a machine without
+Stormbuffer.
 
 **Blocked by:** SB-003, SB-004, SB-006, SB-304, SB-402, SB-405, SB-406, SB-601
 
 **Acceptance criteria:**
 
-- [x] Supported platform artifacts prove all three CLI names work.
+- [x] Supported platform artifacts prove `sbuf` and `stormbuffer-mcp` start and
+      report the packaged version.
 - [x] Package uninstall does not delete canonical user data.
 - [x] Release checks cover generated artifacts, licenses, checksums, and docs.
 - [x] An offline/online install matrix documents model behavior.

@@ -34,8 +34,10 @@
 					<span>{doc.section}</span>
 				</div>
 				<h1>{doc.title}</h1>
-				<p class="doc-description">{doc.description}</p>
-				<CopyMarkdown markdown={doc.markdown} slug={doc.slug} />
+				<div class="doc-meta__secondary">
+					<CopyMarkdown markdown={doc.markdown} slug={doc.slug} />
+					<p class="doc-description">{doc.description}</p>
+				</div>
 			</header>
 			<div class="doc-content">
 				{@render content()}
@@ -86,6 +88,12 @@
 		font-size: 0.76rem;
 	}
 
+	.doc-meta__secondary {
+		display: flex;
+		gap: 1rem;
+		align-items: center;
+	}
+
 	.doc-heading h1 {
 		max-width: 20ch;
 		margin: 0;
@@ -96,7 +104,7 @@
 
 	.doc-description {
 		max-width: 42rem;
-		margin: 1.25rem 0 0;
+		margin: 1rem 0 0;
 		color: var(--muted);
 		font-size: 1.12rem;
 		line-height: 1.55;

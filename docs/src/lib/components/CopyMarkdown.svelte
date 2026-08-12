@@ -26,7 +26,7 @@
 	.copy-markdown {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.4rem;
+		gap: 0.5rem;
 		min-height: 2.5rem;
 		padding: 0.45rem 0.75rem;
 		border: 1px solid var(--line);

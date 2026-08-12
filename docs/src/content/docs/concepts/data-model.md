@@ -18,21 +18,9 @@ and retrieval. The body contains the user-authored content.
 | `procedure`  | Reusable instructions or workflows.          |
 | `checkpoint` | Current state of an ongoing project.         |
 
-## What belongs in memory
-
-A memory should make sense on its own, apply to its user or project, cite a
-source, and cover one claim or procedure. Record it when it can change a future
-decision or action and can be corrected when the source changes.
-
-Good candidates often come from a user correction, an accepted decision and its
-rationale, a confirmed surprising root cause, an undocumented constraint, or
-the discovery that a stored memory is stale. Raw transcripts, generic
-knowledge, routine task progress, unsupported inference, duplicate
-documentation, and secrets do not belong in the store.
-
-The agent host owns recent conversation and fleeting task state. A checkpoint
-is appropriate when another session needs a sourced account of the current
-state to resume the work.
+Use [The memory loop](/docs/concepts/memory-workflow/) to decide whether
+knowledge belongs in Stormbuffer and which store should own it. This page covers
+the record shape and lifecycle after that decision.
 
 ## Canonical record shape
 

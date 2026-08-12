@@ -233,40 +233,19 @@ a fresh projection before replacing the old one. If a watch or reindex process i
 canonical Markdown remains authoritative and the previous projection is preserved. Run `sync`
 or `reindex` again to recover.
 
-## Model setup and evaluation
+## Evaluate retrieval
 
-The pinned fastembed `AllMiniLML6V2` manifest records its model and tokenizer paths, URLs,
-BLAKE3 checksums, dimension, and maximum token count. Artifacts live under the platform cache
-`stormbuffer/models`. `ModelManifest::acquire` writes downloads to `.part` files, resumes HTTP
-Range downloads when possible, and installs files only after checksum verification. It never
-executes a downloaded file. Corrupt or missing files fail before fastembed loads them.
-
-The checked-in retrieval corpus compares FTS-only, vector-only, and hybrid results using the
-pinned All-MiniLM-L6-v2 FastEmbed pipeline:
+`evaluate` runs the checked-in retrieval corpus against lexical, semantic, and
+hybrid search:
 
 ```sh
 sbuf evaluate
 ```
 
-The JSON report includes recall at 5, mean reciprocal rank, wrong-scope retrieval,
-superseded-memory retrieval, duplicate/conflicting retrieval, and context tokens per used
-memory. Wrong-scope results are measured with an unscoped ranking probe instead of being hidden
-by the normal scope filter. The probe is diagnostic; normal policy still filters returned
-results. The duplicate/conflicting fixture contains more competing
-memories than the top-five window, so its coverage is not tautologically 100%. Release
-thresholds are in the report and the corpus revision is fixed. Update expected IDs and the
-revision in `crates/core/tests/fixtures/evaluation/` together in a reviewed change. If the
-pinned artifacts are missing or offline, the command reports the model cache and the `sbuf init`
-repair command.
-
-Grounded-answer evaluation is provider-neutral. Configure a host model to consume the
-`context` contract, save one answer artifact per question with its claims and cited record IDs,
-then pass those artifacts and the run metadata to `HostModelEvaluationAdapter`. Record the
-generator, model and version, prompt-contract version, parameters, and corpus revision. Inspect
-the returned per-question claim report before accepting a run. It separates retrieval,
-context-assembly, and generation failures and reports citation and abstention quality. The
-checked-in deterministic artifacts exercise the adapter without contacting a model.
-Model-assisted judgments never rewrite fixtures or thresholds.
+The JSON report includes recall, ranking, scope and lifecycle errors, conflicts,
+and context cost. It also reports whether the pinned model is unavailable and
+how to acquire it. This command is for maintainers evaluating retrieval changes;
+normal use does not require it.
 
 ## Permanently delete a record
 

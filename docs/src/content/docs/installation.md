@@ -29,18 +29,9 @@ archive's `share` directory contains optional man pages and shell completions.
 
 ## Build from a checkout
 
-Install Rust, clone the repository, and install both programs from the workspace root:
-
-```sh
-git clone https://github.com/stormlightlabs/stormbuffer.git
-cd stormbuffer
-cargo install --path crates/cli --locked
-cargo install --path crates/mcp --locked
-```
-
-These commands install the programs. Man pages and shell completions are available in the
-GitHub release archives. See [MCP](/docs/reference/mcp/) to connect the source-installed
-adapter to Codex, Pi, or another MCP host.
+Follow [Build from source](/docs/workflows/source-build/) to install the CLI and
+MCP adapter from a checkout. Man pages and shell completions are available in
+the GitHub release archives.
 
 ## Confirm the installation
 
@@ -67,47 +58,23 @@ If a global `init` cannot acquire the model, it still initializes the store and
 does not change its canonical Markdown. Re-run `sbuf init` after network access
 is restored.
 
-## Choose a store
-
-Stormbuffer uses a global store by default. Add `--project` to use the nearest
-`.sbuf/` directory instead:
-
-```sh
-sbuf --project init
-sbuf --project status
-```
-
-If project memory should stay out of version control, add `.sbuf/` to the project's ignore
-rules before creating the store:
-
-```sh
-printf '%s\n' '.sbuf/' >> .gitignore
-```
+Continue with the [quick start](/docs/quick-start/) to choose and initialize a
+store.
 
 ## Upgrade
 
-Installing a release replaces programs and support files, not stores. Before an upgrade,
-locate the selected store and create a JSON backup. For example, for a project store:
-
-```sh
-sbuf --project root
-sbuf --project export stormbuffer-backup.json
-```
-
-Replace the installed programs, then run `sbuf --project status` and
-`sbuf --project doctor`. Run `sbuf --project sync` if the disposable index needs to be
-rebuilt. Omit `--project` from these commands when upgrading the global store.
+Before an upgrade, export the selected store as described in
+[Backup and recovery](/docs/workflows/backup-recovery/). Replace the installed
+programs, then run `sbuf status` and `sbuf doctor`. Add `--project` when checking
+a project store.
 
 ## Roll back
 
-To roll back, restore the previous programs and repeat those checks. Read the newer release
-notes before rolling back across a record-format change.
+Restore the previous programs and repeat the status and doctor checks. Read the
+newer release notes before rolling back across a record-format change.
 
 ## Uninstall
 
-Remove `sbuf`, `stormbuffer-mcp`, and any man pages or completions you installed. Removing
-the programs does not remove canonical records. `sbuf root` reports the global data location;
-project data is stored in `.sbuf/`.
-
-Delete either location only when you separately intend to delete those records.
-The cached embedding model is disposable and can be removed independently.
+Remove `sbuf`, `stormbuffer-mcp`, and any man pages or completions you installed.
+This leaves stores and their records in place. Use `sbuf root` before uninstalling
+if you need to locate the global store; project stores live in `.sbuf/`.

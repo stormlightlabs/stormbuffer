@@ -1,39 +1,12 @@
 # Stormbuffer
 
-Stormbuffer is a local-first memory store for developers and agents to hold sourced
-facts, decisions, procedures, and project checkpoints, written in Rust.
+Stormbuffer is a local-first memory store for sourced facts, decisions,
+procedures, and project checkpoints, keeping memories as human readable
+Markdown.
 
-## Development CLI
+## Get Started
 
-Build and run the primary CLI with Cargo:
-
-```sh
-cargo run -p stormbuffer -- --help
-cargo run -p stormbuffer -- --version
-```
-
-Stores are global by default. Add `--project` to use the nearest
-`.sbuf/` directory instead:
-
-```sh
-sbuf --project init
-sbuf --project root
-sbuf --project status
-sbuf status --json
-```
-
-Documentation for common workflows:
-
-- [Quick start](docs/src/content/docs/quick-start.md) for private and shared project stores.
-- [Backup and recovery](docs/src/content/docs/workflows/backup-recovery.md) for JSON
-  export/import, collision policies, garbage collection, privacy, and merges.
-- [MCP reference](docs/src/content/docs/reference/mcp.md) for source installation, Codex and
-  Pi setup, resources and tools, write grants, and its equivalence with CLI JSON.
-
-The checked-in agent skill uses public interfaces only. Verify by building the CLI and
-MCP binary, then running its end-to-end verification script:
-
-```sh
-cargo build -p stormbuffer -p stormbuffer-mcp
-python3 .agents/skills/stormbuffer-memory/verify.py
-```
+Start with the [installation guide](docs/src/content/docs/installation.md) and
+[quick start](docs/src/content/docs/quick-start.md). The
+[memory loop](docs/src/content/docs/concepts/memory-workflow.md) explains what
+belongs in Stormbuffer and what should remain temporary agent context.

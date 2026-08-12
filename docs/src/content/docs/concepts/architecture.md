@@ -36,19 +36,15 @@ A project store belongs to one repository and lives under `.sbuf/`.
 
 Commands use the global store by default. Add `--project` to select project memory.
 
-Use `--project init --shared` when the repository should carry the store. Otherwise, add `.sbuf/`
-to the repository's ignore rules before creating project memory.
+See [Backup and recovery](/docs/workflows/backup-recovery/) when a project store
+must be shared or kept out of version control.
 
 ## Retrieval projections
 
-Lexical indexing runs during `sync`. Global `init` acquires the pinned fastembed
-`AllMiniLML6V2` artifacts into the platform cache at `stormbuffer/models`. Project stores reuse
-the platform cache.
-
-Downloads are verified with pinned BLAKE3 checksums before fastembed loads them.
-Search and context rebuild the versioned vector projection before use. A missing,
-corrupt, or mismatched model fails with a repair instruction instead of falling
-back silently.
+Lexical indexing runs during `sync`. Semantic retrieval uses a pinned local
+model shared by global and project stores. Stormbuffer verifies downloaded
+artifacts before loading them and reports how to repair a missing or corrupt
+model instead of silently changing retrieval behavior.
 
 ## Retrieval and context
 

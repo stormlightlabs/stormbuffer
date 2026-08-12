@@ -11,27 +11,11 @@ order: 4
 server and stdio transport features). It calls the public core repository and retrieval
 operations. It does not open SQLite, edit arbitrary files, or run a model.
 
-## Install from source
+## Before connecting
 
-Install Rust, then install the CLI and adapter from a checkout:
-
-```sh
-git clone https://github.com/stormlightlabs/stormbuffer.git
-cd stormbuffer
-cargo install --path crates/cli --locked
-cargo install --path crates/mcp --locked
-```
-
-Confirm that both programs are available:
-
-```sh
-sbuf --version
-stormbuffer-mcp --version
-```
-
-The adapter must use an initialized store. Initialize the global store with `sbuf init`,
-or run `sbuf --project init` from a project to create its `.sbuf/` store. Connecting an
-MCP host never initializes a store or creates canonical records as a side effect.
+Install Stormbuffer and initialize the store you want the adapter to use. See
+[Installation](/docs/installation/) and the [quick start](/docs/quick-start/).
+Connecting an MCP host never initializes a store or creates records.
 
 ## Choose access and store scope
 

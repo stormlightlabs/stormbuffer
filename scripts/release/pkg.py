@@ -11,7 +11,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-CLI_NAMES = ("stormbuffer", "stormbuf", "sbuf")
+PROGRAMS = ("sbuf", "stormbuffer-mcp")
 
 
 def copy_tree(source: Path, destination: Path) -> None:
@@ -37,7 +37,7 @@ def main() -> None:
         root = Path(temporary) / archive_name
         binary_directory = root / "bin"
         binary_directory.mkdir(parents=True)
-        for name in (*CLI_NAMES, "stormbuffer-mcp"):
+        for name in PROGRAMS:
             source = build_directory / f"{name}{executable_suffix}"
             if not source.is_file():
                 raise FileNotFoundError(f"required release binary is missing: {source}")

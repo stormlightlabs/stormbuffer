@@ -10,15 +10,20 @@ order: 7
   import CopySkill from '$lib/components/CopySkill.svelte';
 </script>
 
-The Stormbuffer skill teaches a coding agent to retrieve project memory, cite what it used,
-and propose sourced memories for human approval. The copy below comes from the canonical
-skill shipped in this repository.
+The Stormbuffer skill teaches a coding agent to retrieve project memory, cite
+what it used, and propose sourced memories for human approval. The copy below
+comes from the canonical skill shipped in this repository.
 
 <CopySkill />
 
 Place the copied `SKILL.md` in the skill directory used by your agent.
 
 The skill expects `sbuf` to be installed and a store to be initialized.
+
+## Project scope
+
+The downloadable skill uses `--project` to select the nearest `.sbuf/` store.
+Install it only for repositories where the agent should use project memory.
 
 ## Verification
 
@@ -30,5 +35,5 @@ sbuf --project status
 sbuf --project search "project conventions" --json
 ```
 
-`status` should identify the intended project store. The search should return an empty JSON array
-without prompting when the store has no matching memories.
+`status` should identify the intended project store. The search should return an
+empty JSON array without prompting when the store has no matching memories.

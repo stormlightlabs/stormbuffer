@@ -12,8 +12,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-CLI_NAMES = ("stormbuffer", "stormbuf", "sbuf")
-
 
 def run(
     binary: Path,
@@ -64,12 +62,11 @@ def main() -> None:
             "LICENSE",
             "README.md",
             "RELEASE.md",
-            "share/man/man1/stormbuffer.1",
-            "share/man/man1/stormbuffer-mcp.1",
-            "share/completions/stormbuffer.bash",
-            "share/completions/stormbuffer.zsh",
-            "share/completions/stormbuffer.fish",
-            "share/completions/stormbuffer.ps1",
+            "share/man/man1/sbuf.1",
+            "share/completions/sbuf.bash",
+            "share/completions/sbuf.zsh",
+            "share/completions/sbuf.fish",
+            "share/completions/sbuf.ps1",
         )
         missing_files = [
             name for name in required_files if not (package_root / name).is_file()
@@ -96,22 +93,21 @@ def main() -> None:
 
         binaries = {
             name: package_root / "bin" / f"{name}{suffix}"
-            for name in (*CLI_NAMES, "stormbuffer-mcp")
+            for name in ("sbuf", "stormbuffer-mcp")
         }
-        for name in CLI_NAMES:
-            version = run(
-                binaries[name],
-                ["--version"],
-                directory=project,
-                environment=environment,
-            )
-            if args.version not in version.stdout:
-                raise RuntimeError(f"{name} did not report version {args.version}")
-            help_output = run(
-                binaries[name], ["--help"], directory=project, environment=environment
-            )
-            if f"Usage: {name}" not in help_output.stdout:
-                raise RuntimeError(f"{name} help did not use its invoked name")
+        version = run(
+            binaries["sbuf"],
+            ["--version"],
+            directory=project,
+            environment=environment,
+        )
+        if args.version not in version.stdout:
+            raise RuntimeError(f"sbuf did not report version {args.version}")
+        help_output = run(
+            binaries["sbuf"], ["--help"], directory=project, environment=environment
+        )
+        if "Usage: sbuf" not in help_output.stdout:
+            raise RuntimeError("sbuf help did not use its public name")
 
         mcp_version = run(
             binaries["stormbuffer-mcp"],
@@ -123,7 +119,7 @@ def main() -> None:
             raise RuntimeError("stormbuffer-mcp reported the wrong version")
 
         run(
-            binaries["stormbuffer"],
+            binaries["sbuf"],
             ["--project", "init"],
             directory=project,
             environment=environment,
@@ -171,7 +167,7 @@ def main() -> None:
             != "stormbuffer-mcp"
         ):
             raise RuntimeError("packaged MCP server failed initialization")
-        if len(mcp_responses[1].get("result", {}).get("tools", [])) != 6:
+        if len(mcp_responses[1].get("result", {}).get("tools", [])) != 5:
             raise RuntimeError("packaged MCP server exposed an unexpected tool surface")
         proposal = {
             "version": 1,
@@ -188,7 +184,7 @@ def main() -> None:
             ],
         }
         response = run(
-            binaries["stormbuffer"],
+            binaries["sbuf"],
             ["--project", "invoke", "propose"],
             directory=project,
             environment=environment,
@@ -202,7 +198,7 @@ def main() -> None:
             raise RuntimeError("release smoke test did not create one canonical record")
         canonical = records[0].read_bytes()
         run(
-            binaries["stormbuf"],
+            binaries["sbuf"],
             ["--project", "sync"],
             directory=project,
             environment=environment,
