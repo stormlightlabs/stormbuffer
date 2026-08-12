@@ -192,6 +192,39 @@ fn init_root_and_status_work_for_project_and_global_stores() {
 }
 
 #[test]
+fn doctor_reports_readiness_and_an_actionable_semantic_setup() {
+    let root = temporary_directory("doctor");
+    let init = run(&root, ["--project", "init"]);
+    assert_eq!(init.status.code(), Some(0));
+
+    let doctor = run(&root, ["--project", "--color", "always", "doctor"]);
+    assert_eq!(doctor.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&doctor.stdout);
+    assert!(
+        stdout.contains(
+            "\u{1b}[1m\u{1b}[36mSemantic retrieval\u{1b}[39m\u{1b}[0m: \u{1b}[1m\u{1b}[33mlexical fallback"
+        ),
+        "{stdout}"
+    );
+    assert!(stdout.contains("0 failure(s), 1 warning(s)"), "{stdout}");
+    assert!(
+        stdout.contains("semantic retrieval is not ready; search is using lexical matching only"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("run `sbuf init` while online to download and verify the local model"),
+        "{stdout}"
+    );
+    assert!(
+        doctor.stdout.contains(&0x1b),
+        "warning should use Echo color"
+    );
+    assert!(!stdout.contains("(repair:"), "{stdout}");
+
+    fs::remove_dir_all(root).expect("remove test directory");
+}
+
+#[test]
 fn shared_project_init_is_explicit_and_global_shared_is_rejected() {
     let root = temporary_directory("shared");
     let project = root.join("project");
@@ -955,7 +988,19 @@ fn color_modes_no_color_and_json_output_follow_the_contract() {
 
     let always = run(&root, ["--project", "--color", "always", "status"]);
     assert_eq!(always.status.code(), Some(0));
-    assert!(always.stdout.contains(&0x1b));
+    let always_stdout = String::from_utf8_lossy(&always.stdout);
+    assert!(
+        always_stdout.contains("\u{1b}[1m\u{1b}[36mScope\u{1b}[39m\u{1b}[0m: project"),
+        "{always_stdout}"
+    );
+    assert!(
+        always_stdout.contains("\u{1b}[1m\u{1b}[32minitialized\u{1b}[39m\u{1b}[0m"),
+        "{always_stdout}"
+    );
+    assert!(
+        always_stdout.contains("\u{1b}[4m\u{1b}[96m"),
+        "root path should have its own underlined color: {always_stdout}"
+    );
 
     let mut no_color_command = Command::new(binary());
     no_color_command

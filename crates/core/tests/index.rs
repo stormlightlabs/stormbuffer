@@ -127,6 +127,29 @@ fn sync_is_incremental_and_search_returns_attributable_results() {
 }
 
 #[test]
+fn doctor_explains_how_to_enable_semantic_retrieval() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    sync_store(&paths).expect("sync");
+
+    let report = doctor_store(&paths).expect("diagnose index");
+    assert!(!report.semantic_model_ready);
+    let semantic = report
+        .issues
+        .iter()
+        .find(|issue| issue.message.contains("semantic retrieval"))
+        .expect("semantic readiness warning");
+
+    assert_eq!(semantic.severity, "warning");
+    assert!(semantic.message.contains("lexical matching"));
+    assert_eq!(
+        semantic.repair,
+        "run `sbuf init` while online to download and verify the local model"
+    );
+}
+
+#[test]
 fn sync_removes_deleted_records_and_reindex_switches_projection() {
     let store = TempStore::new();
     let paths = store.paths();

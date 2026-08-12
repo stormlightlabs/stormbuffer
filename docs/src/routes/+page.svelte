@@ -7,7 +7,7 @@
 </script>
 
 <svelte:head>
-	<title>Stormbuffer documentation</title>
+	<title>stormbuffer</title>
 	<meta name="description" content="Documentation for Stormbuffer, a local-first memory store for people and agents." />
 </svelte:head>
 
@@ -31,7 +31,7 @@
 		<figure class="terminal" aria-labelledby="terminal-caption">
 			<figcaption id="terminal-caption">
 				<span class="terminal-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-				<span>Example session · output abridged</span>
+				<span>sbuf · your terminal emulator</span>
 			</figcaption>
 			<pre><code
 					><span class="prompt">$</span> sbuf --project init --shared
@@ -105,7 +105,7 @@ Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildab
 	}
 
 	.text-link:hover {
-		color: var(--coral);
+		color: var(--gold);
 	}
 
 	.terminal {
@@ -141,11 +141,11 @@ Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildab
 		width: 0.55rem;
 		height: 0.55rem;
 		border-radius: 50%;
-		background: var(--coral);
+		background: var(--gold);
 	}
 
 	.terminal-dots i:nth-child(2) {
-		background: var(--yellow);
+		background: var(--mark-ink);
 	}
 
 	.terminal-dots i:nth-child(3) {
@@ -164,7 +164,7 @@ Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildab
 
 	.prompt,
 	.result {
-		color: var(--yellow);
+		color: var(--gold-bright);
 	}
 
 	.result {
@@ -208,7 +208,7 @@ Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildab
 
 	.doc-number,
 	.doc-arrow {
-		color: var(--coral);
+		color: var(--gold);
 		font-family: 'Google Sans Code Variable', 'Google Sans Code', monospace;
 		font-size: 0.72rem;
 	}

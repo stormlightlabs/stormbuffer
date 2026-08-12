@@ -60,8 +60,12 @@ and fail soft when Stormbuffer is unavailable or has no useful evidence.
 ## CLI and protocols
 
 - `sbuf` is the only public CLI executable.
+- Semantic retrieval is the expected default. Keep lexical retrieval available
+  when the local model is missing and give the user one concrete setup command.
 - Follow clig.dev conventions. Keep results on stdout, diagnostics on stderr,
   prompts TTY-only, errors actionable, and exit codes stable.
+- Style human-readable CLI labels and states through `Echo`. Keep raw and
+  machine-readable output unstyled, and let `NO_COLOR` override `--color`.
 - JSON invocation is versioned, bounded, non-interactive, and JSON-only on
   stdin/stdout. Logs stay on stderr. MCP exposes the same core semantics. Keep version
   at 1 until the initial release.

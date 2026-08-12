@@ -239,7 +239,7 @@
 
 	.dialog-kicker {
 		margin: 0 0 0.3rem;
-		color: var(--coral);
+		color: var(--gold);
 		font-family: 'Google Sans Code Variable', 'Google Sans Code', monospace;
 		font-size: 0.68rem;
 		font-weight: 650;

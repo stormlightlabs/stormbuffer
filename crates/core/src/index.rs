@@ -11,7 +11,7 @@ use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, Transaction, params, params_from_iter};
 use serde::Serialize;
 
-use crate::embedder::Embedder;
+use crate::embedder::{Embedder, default_model_is_ready};
 use crate::record::Access;
 use crate::repository::replace_file;
 use crate::vector::{
@@ -319,6 +319,7 @@ pub struct DoctorIssue {
 #[derive(Clone, Debug, Serialize)]
 pub struct DoctorReport {
     pub index_path: String,
+    pub semantic_model_ready: bool,
     pub failures: usize,
     pub warnings: usize,
     pub issues: Vec<DoctorIssue>,
@@ -1032,8 +1033,10 @@ pub fn watch_store(paths: &StorePaths, options: WatchOptions) -> crate::Result<W
 
 pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
     let destination = active_index_path(paths)?;
+    let semantic_model_ready = default_model_is_ready(paths);
     let mut report = DoctorReport {
         index_path: destination.display().to_string(),
+        semantic_model_ready,
         failures: 0,
         warnings: 0,
         issues: Vec::new(),
@@ -1139,12 +1142,14 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
         }
     }
 
-    issue(
-        &mut report,
-        "warning",
-        "semantic model is not configured; lexical search is available".to_owned(),
-        "no repair is needed for lexical search; configure semantic retrieval when available",
-    );
+    if !report.semantic_model_ready {
+        issue(
+            &mut report,
+            "warning",
+            "semantic retrieval is not ready; search is using lexical matching only".to_owned(),
+            "run `sbuf init` while online to download and verify the local model",
+        );
+    }
     Ok(report)
 }
 

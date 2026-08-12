@@ -125,7 +125,7 @@
 
 	.primary-nav a.active {
 		text-decoration: underline;
-		text-decoration-color: var(--coral);
+		text-decoration-color: var(--gold);
 		text-decoration-thickness: 2px;
 	}
 

@@ -32,7 +32,8 @@ pub(super) fn run_init(scope: StoreScope, shared: bool, output: &Echo) -> i32 {
     } else {
         "Already initialized"
     };
-    if scope == StoreScope::Global && semantic_model_enabled() {
+    let model_ready = scope == StoreScope::Global && semantic_model_enabled();
+    if model_ready {
         if let Err(error) = core::ensure_default_model(&paths) {
             return report_error(
                 anyhow::Error::new(error).context(
@@ -47,8 +48,11 @@ pub(super) fn run_init(scope: StoreScope, shared: bool, output: &Echo) -> i32 {
         "{} {} store at {}{visibility}",
         output.success(action),
         scope,
-        paths.root.display()
+        output.path(paths.root.display())
     ));
+    if model_ready {
+        output.field("Embedding model", output.success("ready"));
+    }
     0
 }
 
@@ -89,12 +93,12 @@ pub(super) fn run_status(scope: StoreScope, json: bool, output: &Echo) -> i32 {
     } else {
         output.warning("not initialized")
     };
-    output.line(&format!("Scope: {}", status.scope));
-    output.line(&format!("Root: {}", status.root.display()));
-    output.line(&format!("State: {state}"));
+    output.field("Scope", status.scope);
+    output.field("Root", output.path(status.root.display()));
+    output.field("State", state);
     if let Some(visibility) = status.visibility {
-        output.line(&format!("Visibility: {visibility}"));
+        output.field("Visibility", visibility);
     }
-    output.line(&format!("Records: {}", status.record_count));
+    output.field("Records", status.record_count);
     0
 }

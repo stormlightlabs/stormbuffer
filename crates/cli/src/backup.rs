@@ -29,8 +29,10 @@ pub(super) fn run_export(scope: StoreScope, arguments: PathArgs, output: &Echo) 
         Some(path) => match core::write_export_archive(&paths, Path::new(path), encoded.as_bytes())
         {
             Ok(()) => output.line(&format!(
-                "Exported {} records to {path}",
-                bundle.records.len()
+                "{} {} records to {}",
+                output.success("Exported"),
+                bundle.records.len(),
+                output.path(path)
             )),
             Err(error) => {
                 return report_error(
@@ -81,10 +83,10 @@ pub(super) fn run_import(scope: StoreScope, arguments: ImportArgs, output: &Echo
         .context("could not import canonical records")
     {
         Ok(report) => {
-            output.line(&format!(
-                "Imported: {}\nSkipped: {}\nOverwritten: {}\nRemapped: {}",
-                report.imported, report.skipped, report.overwritten, report.remapped
-            ));
+            output.field("Imported", report.imported);
+            output.field("Skipped", report.skipped);
+            output.field("Overwritten", report.overwritten);
+            output.field("Remapped", report.remapped);
             0
         }
         Err(error) => report_error(error, output),

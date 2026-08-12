@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-	<title>Search · Stormbuffer docs</title>
+	<title>Search · stormbuffer</title>
 	<meta name="description" content="Search the Stormbuffer documentation." />
 </svelte:head>
 

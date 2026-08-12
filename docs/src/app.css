@@ -18,8 +18,8 @@
 	--on-teal: #fffdf8;
 	--teal: #0b6b5e;
 	--teal-dark: #075044;
-	--coral: #a94f32;
-	--yellow: #f1c96b;
+	--gold: #9a6500;
+	--gold-bright: #efb21e;
 	--header-surface: rgb(247 245 239 / 94%);
 	--code-line: #234d43;
 	--code-surface: #163b34;
@@ -44,8 +44,8 @@
 		--on-teal: #0b2520;
 		--teal: #61c4ad;
 		--teal-dark: #8bd8c5;
-		--coral: #f1a084;
-		--yellow: #f0cf7a;
+		--gold: #f0bd46;
+		--gold-bright: #efb21e;
 		--header-surface: rgb(16 33 29 / 96%);
 		--code-line: #367e6d;
 		--code-surface: #0d2923;
@@ -70,8 +70,8 @@
 	--on-teal: #0b2520;
 	--teal: #61c4ad;
 	--teal-dark: #8bd8c5;
-	--coral: #f1a084;
-	--yellow: #f0cf7a;
+	--gold: #f0bd46;
+	--gold-bright: #efb21e;
 	--header-surface: rgb(16 33 29 / 96%);
 	--code-line: #367e6d;
 	--code-surface: #0d2923;
@@ -124,11 +124,11 @@ a {
 }
 
 a:hover {
-	color: var(--coral);
+	color: var(--gold);
 }
 
 ::selection {
-	background: var(--yellow);
+	background: var(--gold-bright);
 	color: var(--selection-ink);
 }
 
@@ -141,7 +141,7 @@ h3 {
 }
 
 :focus-visible {
-	outline: 3px solid var(--coral);
+	outline: 3px solid var(--gold);
 	outline-offset: 3px;
 }
 
@@ -163,7 +163,7 @@ h3 {
 	left: 1rem;
 	z-index: 20;
 	padding: 0.5rem 0.75rem;
-	background: var(--yellow);
+	background: var(--gold-bright);
 	color: var(--ink);
 	transform: translateY(-180%);
 }
@@ -174,7 +174,7 @@ h3 {
 
 .eyebrow {
 	margin: 0 0 0.85rem;
-	color: var(--coral);
+	color: var(--gold);
 	font-family: 'Google Sans Code Variable', 'Google Sans Code', monospace;
 	font-size: 0.7rem;
 	font-weight: 650;

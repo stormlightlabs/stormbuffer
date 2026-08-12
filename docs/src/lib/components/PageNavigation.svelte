@@ -41,7 +41,7 @@
 
 	.page-nav-link:hover {
 		border-color: var(--teal);
-		box-shadow: 0.25rem 0.25rem 0 var(--yellow);
+		box-shadow: 0.25rem 0.25rem 0 var(--gold-bright);
 	}
 
 	.page-nav-link > span {

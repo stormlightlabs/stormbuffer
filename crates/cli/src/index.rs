@@ -67,14 +67,20 @@ pub(super) fn run_search(scope: StoreScope, arguments: SearchArgs, output: &Echo
             .map(|source| source.reference.as_str())
             .unwrap_or("");
         output.line(&format!(
-            "{}\n  ID: {}\n  Kind: {}  Scope: {}\n  {}\n  Source: {}\n  Path: {}\n  Score: {:.4} ({})",
-            human_text(&result.title),
+            "{}\n  {}: {}\n  {}: {}  {}: {}\n  {}\n  {}: {}\n  {}: {}\n  {}: {:.4} ({})",
+            output.success(&human_text(&result.title)),
+            output.label("ID"),
             result.record_id,
+            output.label("Kind"),
             result.kind,
+            output.label("Scope"),
             result.scope,
             human_text(&result.excerpt),
+            output.label("Source"),
             human_text(source),
-            human_text(&result.path),
+            output.label("Path"),
+            output.path(human_text(&result.path)),
+            output.label("Score"),
             result.score,
             human_text(&result.lexical_match_reason),
         ));
@@ -141,17 +147,24 @@ pub(super) fn run_gc(scope: StoreScope, arguments: GcArgs, output: &Echo) -> i32
     } else {
         "Reclaimed"
     };
-    output.line(&format!(
-        "{action}: {} files, {} bytes",
-        if report.dry_run {
-            report.candidates.len()
-        } else {
-            report.removed
-        },
-        report.reclaimed_bytes
-    ));
+    output.field(
+        action,
+        format!(
+            "{} files, {} bytes",
+            if report.dry_run {
+                report.candidates.len()
+            } else {
+                report.removed
+            },
+            report.reclaimed_bytes
+        ),
+    );
     for entry in report.candidates {
-        output.line(&format!("{}\t{} bytes", entry.path, entry.bytes));
+        output.line(&format!(
+            "{}\t{} bytes",
+            output.path(entry.path),
+            entry.bytes
+        ));
     }
     0
 }
@@ -179,13 +192,10 @@ pub(super) fn run_sync(scope: StoreScope, output: &Echo) -> i32 {
     };
     match core::sync_store(&paths) {
         Ok(report) => {
-            output.line(&format!(
-                "Indexed: {}\nSkipped: {}\nRemoved: {}\nInvalid: {}",
-                report.indexed,
-                report.skipped,
-                report.removed,
-                report.invalid_files.len()
-            ));
+            output.field("Indexed", report.indexed);
+            output.field("Skipped", report.skipped);
+            output.field("Removed", report.removed);
+            output.field("Invalid", report.invalid_files.len());
             report_invalid_files(&report.invalid_files, output);
             if report.is_complete() { 0 } else { FAILURE }
         }
@@ -204,7 +214,7 @@ pub(super) fn run_watch(scope: StoreScope, arguments: WatchArgs, output: &Echo) 
     };
     match core::watch_store(&paths, options) {
         Ok(report) => {
-            output.line(&format!("Watch cycles: {}", report.cycles));
+            output.field("Watch cycles", report.cycles);
             report_invalid_files(&report.invalid_files, output);
             if report.is_complete() { 0 } else { FAILURE }
         }
@@ -224,7 +234,7 @@ pub(super) fn run_reindex(scope: StoreScope, output: &Echo) -> i32 {
     match core::reindex_store_with_embedder(&paths, embedder.as_deref()) {
         Ok(report) => {
             let mut complete = report.is_complete();
-            output.line(&format!("Reindexed: {}", report.indexed));
+            output.field("Reindexed", report.indexed);
             report_invalid_files(&report.invalid_files, output);
             if let Some(ref error) = model_error {
                 output.error(&format!("semantic index unavailable: {error}"));
@@ -240,7 +250,7 @@ pub(super) fn run_reindex(scope: StoreScope, output: &Echo) -> i32 {
                     ));
                     complete = false;
                 } else if let Some(version) = semantic.model_version {
-                    output.line(&format!("Semantic index: {} ({version})", semantic.status));
+                    output.field("Semantic index", format!("{} ({version})", semantic.status));
                 }
             }
             if complete { 0 } else { FAILURE }
@@ -258,12 +268,36 @@ pub(super) fn run_doctor(scope: StoreScope, output: &Echo) -> i32 {
         Ok(report) => report,
         Err(error) => return report_error(anyhow::Error::new(error), output),
     };
-    output.line(&format!("Index: {}", report.index_path));
+    output.field("Store", scope);
+    output.field("Index", output.path(&report.index_path));
+    let semantic_state = if report.semantic_model_ready {
+        output.success("ready")
+    } else {
+        output.warning("lexical fallback")
+    };
+    output.field("Semantic retrieval", semantic_state);
+    if report.issues.is_empty() {
+        output.field("Status", output.success("healthy"));
+        return 0;
+    }
+    let status = format!(
+        "{} failure(s), {} warning(s)",
+        report.failures, report.warnings
+    );
+    let status = if report.failures == 0 {
+        output.warning(&status)
+    } else {
+        output.failure(&status)
+    };
+    output.field("Status", status);
+    output.line("");
     for issue in &report.issues {
-        output.line(&format!(
-            "{}: {} (repair: {})",
-            issue.severity, issue.message, issue.repair
-        ));
+        let severity = match issue.severity.as_str() {
+            "failure" => output.failure("failure"),
+            _ => output.warning("warning"),
+        };
+        output.line(&format!("{severity}: {}", issue.message));
+        output.line(&format!("  {}: {}", output.label("Repair"), issue.repair));
     }
     if report.failures == 0 { 0 } else { FAILURE }
 }

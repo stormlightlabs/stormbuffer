@@ -36,7 +36,7 @@
 
 	.sidebar-kicker {
 		margin: 0 0 0.85rem;
-		color: var(--coral);
+		color: var(--gold);
 		font-family: 'Google Sans Code Variable', 'Google Sans Code', monospace;
 		font-size: 0.7rem;
 		font-weight: 650;
@@ -71,7 +71,7 @@
 
 	.sidebar-section a:hover,
 	.sidebar-section a.active {
-		border-left-color: var(--coral);
+		border-left-color: var(--gold);
 		background: var(--paper-deep);
 		color: var(--teal-dark);
 	}

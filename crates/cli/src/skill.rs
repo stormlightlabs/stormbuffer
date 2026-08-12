@@ -16,7 +16,11 @@ const SKILL_FILE: &str = "SKILL.md";
 pub(crate) fn run_install(scope: StoreScope, arguments: SkillInstallArgs, output: &Echo) -> i32 {
     match install(scope, &arguments.directory, arguments.force) {
         Ok(path) => {
-            output.line(&output.success(&format!("Installed {}", path.display())));
+            output.line(&format!(
+                "{} {}",
+                output.success("Installed"),
+                output.path(path.display())
+            ));
             0
         }
         Err(error) => report_error(error, output),

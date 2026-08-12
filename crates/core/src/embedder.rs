@@ -122,6 +122,15 @@ pub fn ensure_default_model(paths: &StorePaths) -> Result<()> {
     default_model_manifest().acquire(&model_cache_dir(paths))
 }
 
+pub(crate) fn default_model_is_ready(paths: &StorePaths) -> bool {
+    let cache = model_cache_dir(paths);
+    if !cache.is_dir() {
+        return false;
+    }
+    let manifest = default_model_manifest();
+    with_model_cache_lock(&cache, false, || manifest.verify_files(&cache)).is_ok()
+}
+
 impl ModelManifest {
     pub fn validate(&self) -> Result<()> {
         if self.format_version != MODEL_MANIFEST_VERSION {

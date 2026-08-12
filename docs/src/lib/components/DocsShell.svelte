@@ -158,7 +158,7 @@
 	}
 
 	.doc-content :global(li)::marker {
-		color: var(--coral);
+		color: var(--gold);
 	}
 
 	.doc-content :global(strong) {
@@ -184,7 +184,7 @@
 		border-radius: 0.35rem;
 		background: var(--code-surface);
 		color: var(--code-ink);
-		box-shadow: 0.35rem 0.35rem 0 var(--yellow);
+		box-shadow: 0.35rem 0.35rem 0 var(--gold-bright);
 	}
 
 	.doc-content :global(pre.shiki span) {
@@ -211,7 +211,7 @@
 	}
 
 	.doc-content :global(.copy-code:hover) {
-		border-color: var(--yellow);
+		border-color: var(--gold-bright);
 	}
 
 	:global(:root[data-theme='dark']) .doc-content :global(pre.shiki span) {
@@ -236,7 +236,7 @@
 	.doc-content :global(blockquote) {
 		margin: 1.5rem 0;
 		padding: 0.8rem 1.1rem;
-		border-left: 4px solid var(--yellow);
+		border-left: 4px solid var(--gold-bright);
 		background: var(--callout-surface);
 	}
 
@@ -307,7 +307,7 @@
 		.doc-content :global(pre) {
 			margin-right: -0.25rem;
 			margin-left: -0.25rem;
-			box-shadow: 0.2rem 0.2rem 0 var(--yellow);
+			box-shadow: 0.2rem 0.2rem 0 var(--gold-bright);
 		}
 	}
 </style>
