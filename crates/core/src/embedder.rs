@@ -67,6 +67,7 @@ impl Embedding {
 }
 
 pub trait Embedder: Send + Sync {
+    fn model_id(&self) -> &str;
     fn model_version(&self) -> &str;
     fn model_checksum(&self) -> &str;
     fn dimension(&self) -> usize;
@@ -289,6 +290,10 @@ impl LocalEmbedder {
 }
 
 impl Embedder for LocalEmbedder {
+    fn model_id(&self) -> &str {
+        &self.manifest.model_id
+    }
+
     fn model_version(&self) -> &str {
         &self.manifest.model_version
     }
@@ -352,6 +357,10 @@ impl DeterministicEmbedder {
 }
 
 impl Embedder for DeterministicEmbedder {
+    fn model_id(&self) -> &str {
+        "stormbuffer/deterministic"
+    }
+
     fn model_version(&self) -> &str {
         &self.version
     }

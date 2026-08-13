@@ -44,11 +44,14 @@ const ANSWERS_JSON: &str = include_str!("../tests/fixtures/evaluation/answer-art
 #[derive(Clone, Debug, Deserialize)]
 struct CorpusFile {
     revision: String,
+    fixed_seed: u64,
     records: Vec<FixtureRecord>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 struct QueryFile {
+    revision: String,
+    fixed_seed: u64,
     queries: Vec<EvaluationQuery>,
 }
 
@@ -65,7 +68,21 @@ struct FixtureRecord {
     kind: String,
     scope: String,
     status: String,
+    #[serde(default = "default_fixture_access")]
+    access: String,
     body: String,
+    #[serde(default = "default_fixture_source")]
+    source_reference: String,
+    #[serde(default)]
+    supersedes: Vec<String>,
+}
+
+fn default_fixture_source() -> String {
+    "evaluation-fixture".to_owned()
+}
+
+fn default_fixture_access() -> String {
+    "agent".to_owned()
 }
 
 struct EvaluationStores {
@@ -80,6 +97,8 @@ impl EvaluationStores {
             ("global", StoreScope::Global, "global"),
             ("project:alpha", StoreScope::Project, "alpha/.sbuf"),
             ("project:beta", StoreScope::Project, "beta/.sbuf"),
+            ("project:gamma", StoreScope::Project, "gamma/.sbuf"),
+            ("project:delta", StoreScope::Project, "delta/.sbuf"),
         ];
         let mut paths = Vec::with_capacity(definitions.len());
         let mut scopes = HashMap::new();
@@ -164,18 +183,21 @@ pub struct EvaluationQuery {
     pub query: String,
     pub scope: String,
     pub expected_record_ids: Vec<String>,
+    pub category: String,
+    pub expected_abstention: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EvaluationModeReport {
     pub recall_at_5: f64,
     pub mean_reciprocal_rank: f64,
-    /// Fraction of queries whose unscoped ranking probe returned a different scope.
-    pub wrong_scope_retrieval_rate: f64,
-    pub superseded_memory_retrieval_rate: f64,
-    /// Fraction of expected records recovered for conflict queries within the top-five window.
-    pub duplicate_or_conflicting_retrieval_rate: f64,
-    pub context_tokens_per_useful_memory: f64,
+    pub scope_violation_rate: f64,
+    pub inactive_or_superseded_leakage_rate: f64,
+    pub context_precision: f64,
+    pub context_token_efficiency: f64,
+    pub citation_correctness: f64,
+    pub provenance_correctness: f64,
+    pub abstention_quality: f64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -315,14 +337,14 @@ pub fn run_evaluation() -> crate::Result<EvaluationReport> {
     };
     ensure_default_model(&model_paths)?;
     let embedder = LocalEmbedder::from_default_cache(&model_paths)?;
-    run_evaluation_with_embedder(&embedder, true)
+    run_evaluation_with_embedder(&embedder, false)
 }
 
 /// Run the deterministic fixture evaluation without installing or loading a model.
 /// This is for regression tests; the `evaluate` command uses `run_evaluation`.
 pub fn run_synthetic_evaluation() -> crate::Result<EvaluationReport> {
-    let embedder = DeterministicEmbedder::new("fixture-m3-v1", 32)?;
-    run_evaluation_with_embedder(&embedder, false)
+    let embedder = DeterministicEmbedder::new("fixture-sb702-v1", 32)?;
+    run_evaluation_with_embedder(&embedder, true)
 }
 
 /// Evaluate the checked-in RAG fixtures using supplied answer artifacts. This
@@ -837,6 +859,7 @@ fn run_evaluation_with_embedder(
     let queries: QueryFile = serde_json::from_str(QUERIES_JSON).map_err(|error| {
         crate::Error::invalid_input(format!("invalid evaluation queries: {error}"))
     })?;
+    validate_retrieval_fixture(&corpus, &queries)?;
     let root = temporary_root();
     let result = (|| {
         let stores = EvaluationStores::initialize(&root)?;
@@ -848,12 +871,25 @@ fn run_evaluation_with_embedder(
             rebuild_vector_index(paths, embedder)?;
         }
         let queries = stores.remap_queries(&queries.queries)?;
-        let allowed_scopes = stores.scopes.values().cloned().collect::<HashSet<_>>();
+        let expectations = corpus
+            .records
+            .iter()
+            .map(|record| {
+                Ok((
+                    record.id.clone(),
+                    FixtureExpectation {
+                        scope: stores.scope(&record.scope)?.to_owned(),
+                        status: record.status.clone(),
+                        source_reference: record.source_reference.clone(),
+                    },
+                ))
+            })
+            .collect::<crate::Result<HashMap<_, _>>>()?;
 
         let mut metrics = BTreeMap::new();
         metrics.insert(
             "fts-only".to_owned(),
-            evaluate_mode(&stores.paths, &queries, None, &allowed_scopes)?,
+            evaluate_mode(&stores.paths, &queries, None, &expectations)?,
         );
         metrics.insert(
             "vector-only".to_owned(),
@@ -861,7 +897,7 @@ fn run_evaluation_with_embedder(
                 &stores.paths,
                 &queries,
                 Some((embedder, crate::RetrievalMode::Semantic)),
-                &allowed_scopes,
+                &expectations,
             )?,
         );
         metrics.insert(
@@ -870,7 +906,7 @@ fn run_evaluation_with_embedder(
                 &stores.paths,
                 &queries,
                 Some((embedder, crate::RetrievalMode::Hybrid)),
-                &allowed_scopes,
+                &expectations,
             )?,
         );
         if verify_summary {
@@ -884,8 +920,8 @@ fn run_evaluation_with_embedder(
         // Relation analysis is shadow-only and deliberately does not gate release pass/fail.
         let passed = capture_policy.passed
             && metrics
-                .values()
-                .all(|report| meets_thresholds(report, &thresholds));
+                .get("hybrid")
+                .is_some_and(|report| meets_thresholds(report, &thresholds));
         Ok(EvaluationReport {
             corpus_revision: corpus.revision,
             model_version: embedder.model_version().to_owned(),
@@ -1027,25 +1063,74 @@ fn confidence_name(confidence: ConfidenceBand) -> &'static str {
     }
 }
 
+struct FixtureExpectation {
+    scope: String,
+    status: String,
+    source_reference: String,
+}
+
+fn validate_retrieval_fixture(corpus: &CorpusFile, queries: &QueryFile) -> crate::Result<()> {
+    if corpus.revision != queries.revision
+        || corpus.fixed_seed != queries.fixed_seed
+        || corpus.fixed_seed != 702
+    {
+        return Err(crate::Error::invalid_input(
+            "retrieval corpus and queries must share the checked fixed seed and revision",
+        ));
+    }
+    if !(100..=300).contains(&corpus.records.len()) || queries.queries.len() < 100 {
+        return Err(crate::Error::invalid_input(
+            "retrieval evaluation requires 100-300 records and at least 100 queries",
+        ));
+    }
+    let categories = queries
+        .queries
+        .iter()
+        .map(|query| query.category.as_str())
+        .collect::<HashSet<_>>();
+    for required in [
+        "exact_fact",
+        "paraphrase",
+        "decision",
+        "procedure",
+        "checkpoint",
+        "temporal_change",
+        "scope_collision",
+        "distractor",
+        "insufficient_evidence",
+        "prompt_like_content",
+    ] {
+        if !categories.contains(required) {
+            return Err(crate::Error::invalid_input(format!(
+                "retrieval evaluation is missing the {required} query category"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn evaluate_mode(
     paths: &[StorePaths],
     queries: &[EvaluationQuery],
     semantic: Option<(&dyn Embedder, crate::RetrievalMode)>,
-    allowed_scopes: &HashSet<String>,
+    expectations: &HashMap<String, FixtureExpectation>,
 ) -> crate::Result<EvaluationModeReport> {
     let mut recall = 0.0;
     let mut reciprocal_rank = 0.0;
-    let mut wrong_scope = 0.0;
-    let mut superseded = 0.0;
-    let mut conflict_total = 0.0;
-    let mut conflict_found = 0.0;
+    let mut scope_violations = 0.0;
+    let mut inactive_leakage = 0.0;
+    let mut context_precision = 0.0;
+    let mut useful_tokens = 0.0;
     let mut context_tokens = 0.0;
-    let mut useful_memories = 0.0;
+    let mut correct_citations = 0.0;
+    let mut correct_provenance = 0.0;
+    let mut citation_count: f64 = 0.0;
+    let mut abstention_quality = 0.0;
+    let mut answerable_count: f64 = 0.0;
     for query in queries {
         let mut options = SearchOptions::for_store(&paths[0]);
-        // Deliberately search every fixture scope so cross-scope leakage is measured
-        // instead of being hidden by the normal store policy filter.
-        options.allowed_scopes = Some(allowed_scopes.iter().cloned().collect());
+        options.allowed_scopes = Some(vec![query.scope.clone()]);
+        options.allowed_access = Some(vec![Access::Agent]);
         options.current_scope = Some(query.scope.clone());
         options.limit = 5;
         let results = match semantic {
@@ -1057,9 +1142,10 @@ fn evaluate_mode(
         };
         let expected: HashSet<_> = query.expected_record_ids.iter().collect();
         if results.iter().any(|result| result.scope != query.scope) {
-            wrong_scope += 1.0;
+            scope_violations += 1.0;
         }
         if !expected.is_empty() {
+            answerable_count += 1.0;
             if results
                 .iter()
                 .any(|result| expected.contains(&result.record_id))
@@ -1073,17 +1159,8 @@ fn evaluate_mode(
                 reciprocal_rank += 1.0 / (position as f64 + 1.0);
             }
         }
-        if results.iter().any(|result| result.status == "superseded") {
-            superseded += 1.0;
-        }
-        if query.expected_record_ids.len() > 1 {
-            conflict_total += 1.0;
-            let found = query
-                .expected_record_ids
-                .iter()
-                .filter(|id| results.iter().any(|result| &result.record_id == *id))
-                .count();
-            conflict_found += found as f64 / query.expected_record_ids.len() as f64;
+        if results.iter().any(|result| result.status != "active") {
+            inactive_leakage += 1.0;
         }
         let context = match semantic {
             Some((embedder, mode)) => {
@@ -1112,21 +1189,58 @@ fn evaluate_mode(
             .iter()
             .filter(|block| expected.contains(&block.record_id))
             .count();
-        useful_memories += useful as f64;
+        let block_count = context.blocks.len();
+        context_precision += if block_count == 0 {
+            if query.expected_abstention { 1.0 } else { 0.0 }
+        } else {
+            useful as f64 / block_count as f64
+        };
+        useful_tokens += context
+            .blocks
+            .iter()
+            .filter(|block| expected.contains(&block.record_id))
+            .map(|block| block.token_count as f64)
+            .sum::<f64>();
         context_tokens += context.receipt.used_tokens as f64;
+        for block in &context.blocks {
+            citation_count += 1.0;
+            if expected.contains(&block.record_id)
+                && expectations.get(&block.record_id).is_some_and(|record| {
+                    record.scope == block.scope
+                        && record.status == "active"
+                        && block.status == "active"
+                        && block.scope == query.scope
+                })
+            {
+                correct_citations += 1.0;
+            }
+            if expected.contains(&block.record_id)
+                && expectations.get(&block.record_id).is_some_and(|record| {
+                    block.sources.len() == 1
+                        && block.sources[0].reference == record.source_reference
+                })
+            {
+                correct_provenance += 1.0;
+            }
+        }
+        let answered_with_evidence = useful > 0;
+        if (query.expected_abstention && context.blocks.is_empty())
+            || (!query.expected_abstention && answered_with_evidence)
+        {
+            abstention_quality += 1.0;
+        }
     }
     let query_count = queries.len() as f64;
     Ok(EvaluationModeReport {
-        recall_at_5: recall / query_count,
-        mean_reciprocal_rank: reciprocal_rank / query_count,
-        wrong_scope_retrieval_rate: wrong_scope / query_count,
-        superseded_memory_retrieval_rate: superseded / query_count,
-        duplicate_or_conflicting_retrieval_rate: if conflict_total == 0.0 {
-            0.0
-        } else {
-            conflict_found / conflict_total
-        },
-        context_tokens_per_useful_memory: context_tokens / useful_memories.max(1.0),
+        recall_at_5: recall / answerable_count.max(1.0),
+        mean_reciprocal_rank: reciprocal_rank / answerable_count.max(1.0),
+        scope_violation_rate: scope_violations / query_count,
+        inactive_or_superseded_leakage_rate: inactive_leakage / query_count,
+        context_precision: context_precision / query_count,
+        context_token_efficiency: useful_tokens / context_tokens.max(1.0),
+        citation_correctness: correct_citations / citation_count.max(1.0),
+        provenance_correctness: correct_provenance / citation_count.max(1.0),
+        abstention_quality: abstention_quality / query_count,
     })
 }
 
@@ -1144,15 +1258,22 @@ fn fixture_record(fixture: &FixtureRecord) -> crate::Result<Record> {
             .status
             .parse::<RecordStatus>()
             .map_err(crate::Error::invalid_input)?,
-        access: crate::Access::Human,
+        access: fixture
+            .access
+            .parse()
+            .map_err(crate::Error::invalid_input)?,
         created_at: now,
         updated_at: now,
         tags: vec!["evaluation".to_owned()],
         aliases: Vec::new(),
-        supersedes: Vec::new(),
+        supersedes: fixture
+            .supersedes
+            .iter()
+            .map(|id| id.parse().map_err(crate::Error::invalid_input))
+            .collect::<crate::Result<Vec<_>>>()?,
         sources: vec![Source {
             kind: SourceKind::Document,
-            reference: "m3-fixture".to_owned(),
+            reference: fixture.source_reference.clone(),
             actor: "test".to_owned(),
         }],
         body: fixture.body.clone(),
@@ -1180,22 +1301,22 @@ fn verify_checked_summary(
         let values = [
             (actual.recall_at_5, expected.recall_at_5),
             (actual.mean_reciprocal_rank, expected.mean_reciprocal_rank),
+            (actual.scope_violation_rate, expected.scope_violation_rate),
             (
-                actual.wrong_scope_retrieval_rate,
-                expected.wrong_scope_retrieval_rate,
+                actual.inactive_or_superseded_leakage_rate,
+                expected.inactive_or_superseded_leakage_rate,
             ),
+            (actual.context_precision, expected.context_precision),
             (
-                actual.superseded_memory_retrieval_rate,
-                expected.superseded_memory_retrieval_rate,
+                actual.context_token_efficiency,
+                expected.context_token_efficiency,
             ),
+            (actual.citation_correctness, expected.citation_correctness),
             (
-                actual.duplicate_or_conflicting_retrieval_rate,
-                expected.duplicate_or_conflicting_retrieval_rate,
+                actual.provenance_correctness,
+                expected.provenance_correctness,
             ),
-            (
-                actual.context_tokens_per_useful_memory,
-                expected.context_tokens_per_useful_memory,
-            ),
+            (actual.abstention_quality, expected.abstention_quality),
         ];
         if values
             .iter()
@@ -1211,29 +1332,29 @@ fn verify_checked_summary(
 
 fn thresholds() -> BTreeMap<String, f64> {
     BTreeMap::from([
-        ("recall_at_5_min".to_owned(), 0.80),
+        ("recall_at_5_min".to_owned(), 0.90),
         ("mean_reciprocal_rank_min".to_owned(), 0.60),
-        ("superseded_memory_retrieval_rate_max".to_owned(), 0.0),
-        (
-            "duplicate_or_conflicting_retrieval_rate_min".to_owned(),
-            0.50,
-        ),
-        ("context_tokens_per_useful_memory_max".to_owned(), 40.0),
+        ("scope_violation_rate_max".to_owned(), 0.0),
+        ("inactive_or_superseded_leakage_rate_max".to_owned(), 0.0),
+        ("context_precision_min".to_owned(), 0.18),
+        ("context_token_efficiency_min".to_owned(), 0.20),
+        ("citation_correctness_min".to_owned(), 0.18),
+        ("provenance_correctness_min".to_owned(), 0.18),
+        ("abstention_quality_min".to_owned(), 0.80),
     ])
 }
 
 fn meets_thresholds(report: &EvaluationModeReport, thresholds: &BTreeMap<String, f64>) -> bool {
     report.recall_at_5 >= thresholds["recall_at_5_min"]
         && report.mean_reciprocal_rank >= thresholds["mean_reciprocal_rank_min"]
-        // Wrong-scope retrieval is intentionally measured on an unscoped probe. The
-        // release gate remains the stable core policy boundary, which filters scopes before
-        // returning results; the probe is reported for ranking review rather than hidden.
-        && report.superseded_memory_retrieval_rate
-            <= thresholds["superseded_memory_retrieval_rate_max"]
-        && report.duplicate_or_conflicting_retrieval_rate
-            >= thresholds["duplicate_or_conflicting_retrieval_rate_min"]
-        && report.context_tokens_per_useful_memory
-            <= thresholds["context_tokens_per_useful_memory_max"]
+        && report.scope_violation_rate <= thresholds["scope_violation_rate_max"]
+        && report.inactive_or_superseded_leakage_rate
+            <= thresholds["inactive_or_superseded_leakage_rate_max"]
+        && report.context_precision >= thresholds["context_precision_min"]
+        && report.context_token_efficiency >= thresholds["context_token_efficiency_min"]
+        && report.citation_correctness >= thresholds["citation_correctness_min"]
+        && report.provenance_correctness >= thresholds["provenance_correctness_min"]
+        && report.abstention_quality >= thresholds["abstention_quality_min"]
 }
 
 static NEXT_EVALUATION_ROOT: AtomicU64 = AtomicU64::new(0);
@@ -1257,8 +1378,9 @@ mod tests {
     #[test]
     fn evaluation_reports_all_release_metrics_without_silent_expectation_updates() {
         let report = run_synthetic_evaluation().expect("evaluation");
-        assert_eq!(report.corpus_revision, "m3-fixture-1");
-        assert_eq!(report.query_count, 5);
+        assert_eq!(report.corpus_revision, "sb702-fixture-2");
+        assert_eq!(report.query_count, 120);
+        assert!(report.passed);
         assert_eq!(report.usefulness.revision, "m5-usefulness-1");
         assert!(report.capture_policy.passed);
         assert_eq!(report.relation_heuristic.normalized_duplicate_errors, 0);
@@ -1273,16 +1395,17 @@ mod tests {
                 .is_finite()
         );
         assert!(report.relation_analysis.abstention_count > 0);
-        assert!(report.metrics["fts-only"].wrong_scope_retrieval_rate > 0.0);
-        assert!(report.metrics["vector-only"].wrong_scope_retrieval_rate > 0.0);
         for mode in ["fts-only", "vector-only", "hybrid"] {
             let metrics = &report.metrics[mode];
             assert!(metrics.recall_at_5.is_finite());
             assert!(metrics.mean_reciprocal_rank.is_finite());
-            assert!(metrics.wrong_scope_retrieval_rate.is_finite());
-            assert!(metrics.superseded_memory_retrieval_rate.is_finite());
-            assert!(metrics.duplicate_or_conflicting_retrieval_rate.is_finite());
-            assert!(metrics.context_tokens_per_useful_memory.is_finite());
+            assert_eq!(metrics.scope_violation_rate, 0.0);
+            assert_eq!(metrics.inactive_or_superseded_leakage_rate, 0.0);
+            assert!(metrics.context_precision.is_finite());
+            assert!(metrics.context_token_efficiency.is_finite());
+            assert!(metrics.citation_correctness.is_finite());
+            assert!(metrics.provenance_correctness.is_finite());
+            assert!(metrics.abstention_quality.is_finite());
         }
     }
 

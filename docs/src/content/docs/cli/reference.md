@@ -322,13 +322,21 @@ corpora:
 sbuf evaluate
 ```
 
-The JSON report includes recall, ranking, scope and lifecycle errors, reviewed
-relation pairs, and context cost. Relation analysis runs in shadow mode: the
-hybrid index selects candidates, then a local analyzer reports its advisory
-relation, evidence, confidence band, and fingerprint. The report includes
-candidate recall, all-pairs analyzer accuracy, false contradictions, and
-abstentions. These shadow metrics are reported for review and do not affect the
-evaluation's release pass/fail result.
+The retrieval corpus contains 120 agent-readable records and 120 fixed queries
+across five scopes. It covers exact facts, paraphrases, decisions, procedures,
+checkpoints, temporal changes, scope collisions, distractors, insufficient
+evidence, and prompt-like record text. The report compares FTS, vector, and
+hybrid retrieval using recall@k, MRR, scope and lifecycle violations, context
+precision, token efficiency, citation and provenance correctness, and
+abstention quality. Hybrid results determine the checked release result; FTS
+and vector results remain visible as comparison baselines.
+
+Relation analysis runs in shadow mode: the hybrid index selects candidates,
+then a local analyzer reports its advisory relation, evidence, confidence band,
+and fingerprint. The report includes candidate recall, all-pairs analyzer
+accuracy, false contradictions, and abstentions. These shadow metrics are
+reported for review and do not affect the evaluation's release pass/fail
+result.
 
 Embeddings never determine contradiction, and advisory results never change a
 record.

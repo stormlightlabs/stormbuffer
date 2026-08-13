@@ -10,16 +10,16 @@ lexical retrieval.
 
 **Acceptance criteria:**
 
-- [ ] An MCP integration test returns the expected record through hybrid
+- [x] An MCP integration test returns the expected record through hybrid
       retrieval without downloading the production embedding model.
-- [ ] The receipt identifies hybrid retrieval, the embedding model and version,
+- [x] The receipt identifies hybrid retrieval, the embedding model and version,
       and semantic/vector ranking evidence where applicable.
-- [ ] Receipts, status, or diagnostics distinguish an intentionally unavailable
+- [x] Receipts, status, or diagnostics distinguish an intentionally unavailable
       embedder, a missing model, an unavailable or busy vector projection, and
       an embedding execution failure without exposing record contents or paths.
-- [ ] Each semantic failure mode falls back to lexical retrieval with a valid
+- [x] Each semantic failure mode falls back to lexical retrieval with a valid
       receipt.
-- [ ] A transient embedder initialization failure does not silently disable
+- [x] A transient embedder initialization failure does not silently disable
       semantic retrieval for the process lifetime unless that behavior is
       intentional and documented.
 
@@ -34,15 +34,15 @@ simulated projects and historical revisions.
 
 **Acceptance criteria:**
 
-- [ ] Fixtures cover exact facts, paraphrases, decisions, procedures,
+- [x] Fixtures cover exact facts, paraphrases, decisions, procedures,
       checkpoints, temporal changes, scope collisions, distractors,
       insufficient evidence, and prompt-like text inside records.
-- [ ] Project knowledge does not leak across project stores, and inactive or
+- [x] Project knowledge does not leak across project stores, and inactive or
       superseded records do not displace applicable active records.
-- [ ] Evaluation reports recall@k, MRR, scope violations, inactive or
+- [x] Evaluation reports recall@k, MRR, scope violations, inactive or
       superseded leakage, context precision, context token efficiency,
       citation and provenance correctness, and abstention quality.
-- [ ] The corpus and queries are deterministic, checked into the repository,
+- [x] The corpus and queries are deterministic, checked into the repository,
       and large enough that ranking cannot be tuned to a few hand-picked cases.
 
 **Verification:** Run the retrieval evaluation with a fixed seed and confirm

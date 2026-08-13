@@ -84,10 +84,28 @@ pub fn invoke_operation_with_embedder(
     map: &Map<String, Value>,
     embedder: Option<&dyn crate::Embedder>,
 ) -> Result<Value, InvokeFailure> {
+    invoke_operation_with_semantic_status(
+        paths,
+        operation,
+        map,
+        embedder,
+        embedder
+            .is_none()
+            .then_some(crate::SemanticFallbackReason::IntentionallyUnavailable),
+    )
+}
+
+pub fn invoke_operation_with_semantic_status(
+    paths: &crate::StorePaths,
+    operation: &str,
+    map: &Map<String, Value>,
+    embedder: Option<&dyn crate::Embedder>,
+    unavailable_reason: Option<crate::SemanticFallbackReason>,
+) -> Result<Value, InvokeFailure> {
     request_map(map, operation)?;
     match operation {
-        "search" => invoke_search(paths, map, embedder),
-        "context" => invoke_context(paths, map, embedder),
+        "search" => invoke_search(paths, map, embedder, unavailable_reason),
+        "context" => invoke_context(paths, map, embedder, unavailable_reason),
         "get" => invoke_get(paths, map),
         "remember" => invoke_remember(paths, map),
         "update" => invoke_update(paths, map),
@@ -263,7 +281,14 @@ fn invocation_stores(
     paths: &crate::StorePaths,
     allowed_scopes: &[String],
     embedder: Option<&dyn crate::Embedder>,
-) -> Result<(Vec<crate::StorePaths>, bool), InvokeFailure> {
+    unavailable_reason: Option<crate::SemanticFallbackReason>,
+) -> Result<
+    (
+        Vec<crate::StorePaths>,
+        Option<crate::SemanticFallbackReason>,
+    ),
+    InvokeFailure,
+> {
     let cwd = std::env::current_dir()
         .map_err(|_| InvokeFailure::new("internal_error", "could not resolve selected stores"))?;
     let mut stores =
@@ -272,9 +297,20 @@ fn invocation_stores(
         store.scope != crate::StoreScope::Global
             || allowed_scopes.iter().any(|scope| scope == "global")
     });
-    let mut semantic_ready = embedder.is_some();
+    let mut fallback = if embedder.is_none() {
+        Some(unavailable_reason.unwrap_or(crate::SemanticFallbackReason::IntentionallyUnavailable))
+    } else {
+        None
+    };
     for store in &stores {
-        let report = crate::sync_store(store).map_err(|error| map_core_error(&error))?;
+        let report = match crate::sync_store(store) {
+            Ok(report) => report,
+            Err(crate::Error::IndexBusy) => {
+                fallback = Some(crate::SemanticFallbackReason::VectorProjectionBusy);
+                continue;
+            }
+            Err(error) => return Err(map_core_error(&error)),
+        };
         if !report.is_complete() {
             return Err(InvokeFailure::new(
                 "invalid_record",
@@ -282,25 +318,33 @@ fn invocation_stores(
             ));
         }
         if let Some(embedder) = embedder {
+            if fallback.is_some() {
+                continue;
+            }
             if let Err(error) = crate::rebuild_vector_index(store, embedder) {
-                if matches!(
-                    error,
-                    crate::Error::Embedding { .. } | crate::Error::IndexBusy
-                ) {
-                    semantic_ready = false;
-                } else {
-                    return Err(map_core_error(&error));
-                }
+                fallback = match error {
+                    crate::Error::Embedding { .. } => {
+                        Some(crate::SemanticFallbackReason::EmbeddingExecutionFailed)
+                    }
+                    crate::Error::IndexBusy => {
+                        Some(crate::SemanticFallbackReason::VectorProjectionBusy)
+                    }
+                    crate::Error::IndexUnavailable { .. } => {
+                        Some(crate::SemanticFallbackReason::VectorProjectionUnavailable)
+                    }
+                    _ => return Err(map_core_error(&error)),
+                };
             }
         }
     }
-    Ok((stores, semantic_ready))
+    Ok((stores, fallback))
 }
 
 fn invoke_search(
     paths: &crate::StorePaths,
     map: &Map<String, Value>,
     embedder: Option<&dyn crate::Embedder>,
+    unavailable_reason: Option<crate::SemanticFallbackReason>,
 ) -> Result<Value, InvokeFailure> {
     ensure_keys(map, &["query", "limit", "scope", "scopes", "access"])?;
     let query = required_string(map, "query")?;
@@ -310,12 +354,12 @@ fn invoke_search(
     let limit = bounded_number(map, "limit", 20, MAX_INVOKE_LIMIT)?;
     let scopes = invocation_scope(paths, map)?;
     let access = invocation_access(map)?;
-    let (stores, semantic_ready) = invocation_stores(paths, &scopes, embedder)?;
+    let (stores, fallback) = invocation_stores(paths, &scopes, embedder, unavailable_reason)?;
     let mut options = crate::SearchOptions::for_store(paths);
     options.limit = limit;
     options.allowed_scopes = Some(scopes);
     options.allowed_access = Some(access);
-    let results = if let Some(embedder) = embedder.filter(|_| semantic_ready) {
+    let results = if let Some(embedder) = embedder.filter(|_| fallback.is_none()) {
         options.mode = crate::RetrievalMode::Hybrid;
         match crate::search_stores_with_embedder(&stores, query, options.clone(), embedder) {
             Ok(results) => Ok(results),
@@ -339,6 +383,7 @@ fn invoke_context(
     paths: &crate::StorePaths,
     map: &Map<String, Value>,
     embedder: Option<&dyn crate::Embedder>,
+    unavailable_reason: Option<crate::SemanticFallbackReason>,
 ) -> Result<Value, InvokeFailure> {
     ensure_keys(
         map,
@@ -352,18 +397,19 @@ fn invoke_context(
     let budget = bounded_number(map, "budget", 512, MAX_INVOKE_BUDGET)?;
     let scopes = invocation_scope(paths, map)?;
     let access = invocation_access(map)?;
-    let (stores, semantic_ready) = invocation_stores(paths, &scopes, embedder)?;
+    let (stores, mut fallback) = invocation_stores(paths, &scopes, embedder, unavailable_reason)?;
     let mut search = crate::SearchOptions::for_store(paths);
     search.limit = limit;
     search.allowed_scopes = Some(scopes);
     search.allowed_access = Some(access);
     let options = crate::ContextOptions { budget, search };
-    let result = if let Some(embedder) = embedder.filter(|_| semantic_ready) {
+    let mut result = if let Some(embedder) = embedder.filter(|_| fallback.is_none()) {
         let mut options = options;
         options.search.mode = crate::RetrievalMode::Hybrid;
         match crate::context_stores_with_embedder(&stores, query, options.clone(), embedder) {
             Ok(result) => Ok(result),
             Err(crate::Error::Embedding { .. }) => {
+                fallback = Some(crate::SemanticFallbackReason::EmbeddingExecutionFailed);
                 let mut options = options;
                 options.search.mode = crate::RetrievalMode::Lexical;
                 crate::context_stores(&stores, query, options)
@@ -376,6 +422,7 @@ fn invoke_context(
         crate::context_stores(&stores, query, options)
     }
     .map_err(|error| map_core_error(&error))?;
+    result.receipt.semantic_fallback = fallback;
     serde_json::to_value(result)
         .map_err(|_| InvokeFailure::new("internal_error", "could not encode context result"))
 }
@@ -385,7 +432,7 @@ fn invoke_get(paths: &crate::StorePaths, map: &Map<String, Value>) -> Result<Val
     let id = parse_protocol_id(required_string(map, "id")?)?;
     let scopes = invocation_scope(paths, map)?;
     let access = invocation_access(map)?;
-    let (stores, _) = invocation_stores(paths, &scopes, None)?;
+    let (stores, _) = invocation_stores(paths, &scopes, None, None)?;
     let mut denied = None;
     for store in stores {
         match crate::RecordRepository::new(store).find_allowed(id, &scopes, &access) {
@@ -1054,7 +1101,7 @@ pub fn invoke_scope_records(
     }
     let request = Map::from_iter([(String::from("scope"), Value::String(scope.to_owned()))]);
     let scopes = invocation_scope(paths, &request)?;
-    let (stores, _) = invocation_stores(paths, &scopes, None)?;
+    let (stores, _) = invocation_stores(paths, &scopes, None, None)?;
     let mut records = Vec::new();
     for store in stores {
         for stored in crate::RecordRepository::new(store)

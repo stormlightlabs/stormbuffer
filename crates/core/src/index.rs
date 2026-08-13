@@ -233,9 +233,22 @@ pub struct ContextReceipt {
     pub truncated: bool,
     pub omitted_results: usize,
     pub index_version: u32,
+    pub embedding_model: Option<String>,
     pub embedding_version: Option<String>,
+    pub semantic_fallback: Option<SemanticFallbackReason>,
     pub retrieval_mode: String,
     pub contract_version: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SemanticFallbackReason {
+    IntentionallyUnavailable,
+    ModelUnavailable,
+    EmbedderInitializationFailed,
+    VectorProjectionUnavailable,
+    VectorProjectionBusy,
+    EmbeddingExecutionFailed,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -962,7 +975,7 @@ pub fn context_stores(
         hits.extend(index.search_hits(paths, query, &options.search)?);
     }
     sort_hits(&mut hits, options.search.current_scope.as_deref());
-    context_from_hits(query, &options, hits, None)
+    context_from_hits(query, &options, hits, None, None)
 }
 
 /// Compiles context from current lexical and semantic projections.
@@ -996,6 +1009,7 @@ pub fn context_stores_with_embedder(
         query,
         &options,
         hits,
+        Some(embedder.model_id().to_owned()),
         Some(embedder.model_version().to_owned()),
     )
 }
@@ -1004,6 +1018,7 @@ fn context_from_hits(
     query: &str,
     options: &ContextOptions,
     hits: Vec<SearchHit>,
+    embedding_model: Option<String>,
     embedding_version: Option<String>,
 ) -> crate::Result<ContextResult> {
     let omitted_by_limit = hits.len().saturating_sub(options.search.bounded_limit());
@@ -1095,7 +1110,9 @@ fn context_from_hits(
             truncated,
             omitted_results: omitted_by_limit + hits.len().saturating_sub(blocks.len()),
             index_version: INDEX_SCHEMA_VERSION,
+            embedding_model,
             embedding_version,
+            semantic_fallback: None,
             retrieval_mode: retrieval_mode_name(options.search.mode).to_owned(),
             contract_version: contract.version.clone(),
         },

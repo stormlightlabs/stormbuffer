@@ -1,29 +1,38 @@
 {
-  "corpus_revision": "m3-fixture-1",
+  "corpus_revision": "sb702-fixture-2",
   "metrics": {
     "fts-only": {
-      "recall_at_5": 0.8,
-      "mean_reciprocal_rank": 0.7,
-      "wrong_scope_retrieval_rate": 0.4,
-      "superseded_memory_retrieval_rate": 0.0,
-      "duplicate_or_conflicting_retrieval_rate": 0.9166666666666667,
-      "context_tokens_per_useful_memory": 14.777777777777779
-    },
-    "vector-only": {
-      "recall_at_5": 0.8,
-      "mean_reciprocal_rank": 0.8,
-      "wrong_scope_retrieval_rate": 0.8,
-      "superseded_memory_retrieval_rate": 0.0,
-      "duplicate_or_conflicting_retrieval_rate": 0.9166666666666667,
-      "context_tokens_per_useful_memory": 21.88888888888889
+      "recall_at_5": 0.5,
+      "mean_reciprocal_rank": 0.13999999999999996,
+      "scope_violation_rate": 0.0,
+      "inactive_or_superseded_leakage_rate": 0.0,
+      "context_precision": 0.25,
+      "context_token_efficiency": 0.07458563535911603,
+      "citation_correctness": 0.08108108108108109,
+      "provenance_correctness": 0.08108108108108109,
+      "abstention_quality": 0.4166666666666667
     },
     "hybrid": {
-      "recall_at_5": 0.8,
-      "mean_reciprocal_rank": 0.7,
-      "wrong_scope_retrieval_rate": 0.8,
-      "superseded_memory_retrieval_rate": 0.0,
-      "duplicate_or_conflicting_retrieval_rate": 0.9166666666666667,
-      "context_tokens_per_useful_memory": 21.88888888888889
+      "recall_at_5": 0.98,
+      "mean_reciprocal_rank": 0.6526666666666668,
+      "scope_violation_rate": 0.0,
+      "inactive_or_superseded_leakage_rate": 0.0,
+      "context_precision": 0.19111111111111095,
+      "context_token_efficiency": 0.21451037953449362,
+      "citation_correctness": 0.19215686274509805,
+      "provenance_correctness": 0.19215686274509805,
+      "abstention_quality": 0.8166666666666667
+    },
+    "vector-only": {
+      "recall_at_5": 0.98,
+      "mean_reciprocal_rank": 0.8053333333333331,
+      "scope_violation_rate": 0.0,
+      "inactive_or_superseded_leakage_rate": 0.0,
+      "context_precision": 0.19111111111111098,
+      "context_token_efficiency": 0.21480709071949947,
+      "citation_correctness": 0.19207920792079208,
+      "provenance_correctness": 0.19207920792079208,
+      "abstention_quality": 0.8083333333333333
     }
   }
 }

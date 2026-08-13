@@ -1,18 +1,17 @@
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{Value, json};
 use stormbuffer_core::{PlatformDirs, StoreInitMode, StoreScope};
 
 fn temporary_project() -> PathBuf {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock is after the Unix epoch")
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!("stormbuffer-mcp-{suffix}"));
+    static NEXT_PROJECT: AtomicU64 = AtomicU64::new(0);
+    let suffix = NEXT_PROJECT.fetch_add(1, Ordering::Relaxed);
+    let root =
+        std::env::temp_dir().join(format!("stormbuffer-mcp-{}-{suffix}", std::process::id()));
     fs::create_dir_all(&root).expect("create temporary project");
     let paths = stormbuffer_core::resolve_store_with_dirs(
         StoreScope::Project,
@@ -23,6 +22,19 @@ fn temporary_project() -> PathBuf {
     stormbuffer_core::initialize_store(&paths, StoreInitMode::Default)
         .expect("initialize temporary store");
     root
+}
+
+fn isolated_mcp_command(project: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_stormbuffer-mcp"));
+    command
+        .current_dir(project)
+        .env("HOME", project.join("home"))
+        .env("USERPROFILE", project.join("home"))
+        .env("LOCALAPPDATA", project.join("data"))
+        .env("APPDATA", project.join("data"))
+        .env("XDG_DATA_HOME", project.join("data"))
+        .env("XDG_CACHE_HOME", project.join("cache"));
+    command
 }
 
 fn request(id: u64, method: &str, params: Value) -> String {
@@ -128,10 +140,9 @@ fn command_line_lists_store_views_and_rejects_mixed_scopes() {
 #[test]
 fn stdio_lists_surface_and_closes_cleanly_at_eof() {
     let project = temporary_project();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_stormbuffer-mcp"))
+    let mut child = isolated_mcp_command(&project)
         .arg("--stdio")
         .arg("--project")
-        .current_dir(project)
         .env("STORMBUFFER_TEST_MODE", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -216,6 +227,83 @@ fn stdio_lists_surface_and_closes_cleanly_at_eof() {
 }
 
 #[test]
+fn stdio_recall_uses_hybrid_retrieval_when_an_embedder_is_available() {
+    let project = temporary_project();
+    let paths = stormbuffer_core::resolve_store_with_dirs(
+        StoreScope::Project,
+        &project,
+        &PlatformDirs::new(project.join("data"), project.join("cache")),
+    )
+    .expect("resolve project store");
+    let remembered = stormbuffer_core::invoke_request(
+        &paths,
+        "remember",
+        br#"{"version":1,"title":"Hybrid stdio fixture","kind":"fact","body":"A magnetar powers the stdio fixture.","source":{"kind":"document","reference":"mcp-stdio-test","actor":"test"}}"#,
+    )
+    .expect("remember fixture");
+    stormbuffer_core::RecordRepository::new(paths)
+        .approve(
+            remembered["record_id"]
+                .as_str()
+                .expect("fixture id")
+                .parse()
+                .expect("parse fixture id"),
+        )
+        .expect("approve fixture");
+    let mut child = isolated_mcp_command(&project)
+        .arg("--stdio")
+        .arg("--project")
+        .env("STORMBUFFER_TEST_EMBEDDER", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn stormbuffer-mcp");
+    let mut stdin = child.stdin.take().expect("child stdin");
+    let mut stdout = BufReader::new(child.stdout.take().expect("child stdout"));
+    exchange(
+        &mut stdin,
+        &mut stdout,
+        &request(
+            1,
+            "initialize",
+            json!({
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "stormbuffer-test", "version": "0.1.0"}
+            }),
+        ),
+    );
+    writeln!(
+        stdin,
+        "{}",
+        json!({"jsonrpc":"2.0","method":"notifications/initialized"})
+    )
+    .expect("write initialized notification");
+    let recall = exchange(
+        &mut stdin,
+        &mut stdout,
+        &request(
+            2,
+            "tools/call",
+            json!({
+                "name": "memory_recall",
+                "arguments": {"query": "magnetar stdio", "budget": 128}
+            }),
+        ),
+    );
+    let receipt = &recall["result"]["structuredContent"]["result"]["receipt"];
+    assert_eq!(receipt["retrieval_mode"], "hybrid", "{recall}");
+    assert_eq!(receipt["embedding_model"], "stormbuffer/deterministic");
+    assert_eq!(receipt["embedding_version"], "mcp-stdio-test-v1");
+    assert!(receipt["semantic_fallback"].is_null());
+
+    drop(stdin);
+    assert!(child.wait().expect("wait for MCP shutdown").success());
+    fs::remove_dir_all(project).expect("remove test directory");
+}
+
+#[test]
 fn stdio_exercises_each_documented_memory_tool() {
     let project = temporary_project();
     let paths = stormbuffer_core::resolve_store_with_dirs(
@@ -235,11 +323,10 @@ fn stdio_exercises_each_documented_memory_tool() {
         .approve(id.parse().expect("parse fixture id"))
         .expect("approve fixture");
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_stormbuffer-mcp"))
+    let mut child = isolated_mcp_command(&project)
         .arg("--stdio")
         .arg("--project")
         .arg("--allow-writes")
-        .current_dir(project)
         .env("STORMBUFFER_TEST_MODE", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -329,7 +416,9 @@ fn stdio_exercises_each_documented_memory_tool() {
     }
     let receipt = &responses[0]["result"]["structuredContent"]["result"]["receipt"];
     assert_eq!(receipt["retrieval_mode"], "lexical");
+    assert_eq!(receipt["embedding_model"], Value::Null);
     assert_eq!(receipt["embedding_version"], Value::Null);
+    assert_eq!(receipt["semantic_fallback"], "intentionally_unavailable");
     stormbuffer_core::ReceiptId::parse(receipt["receipt_id"].as_str().expect("receipt id"))
         .expect("valid receipt id");
     stormbuffer_core::Timestamp::parse(receipt["retrieved_at"].as_str().expect("retrieval time"))

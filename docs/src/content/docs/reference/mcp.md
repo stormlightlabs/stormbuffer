@@ -147,11 +147,16 @@ paths and refuse records outside the selected scope or access class.
 `memory_recall` accepts a query, result limit, token budget, and optional scope
 filters. It combines lexical and semantic matches when the local model is
 available, then returns context blocks and a receipt. If semantic retrieval is
-unavailable, it falls back to lexical matches. The receipt's `retrieval_mode`
-and `embedding_version` fields show which path ran. MCP has no separate search
-tool. `memory_get` reads one record by ID. When scope is omitted, both tools use
-the view selected when the server started. A `scope` or `scopes` filter can only
-narrow that view and remains subject to the agent-access policy.
+unavailable, it returns lexical matches rather than failing the recall. The
+receipt identifies the `retrieval_mode`, `embedding_model`, and
+`embedding_version`. On a lexical fallback, `semantic_fallback` reports whether
+semantic retrieval was intentionally unavailable, the model was unavailable,
+embedder initialization or execution failed, or the vector projection was
+unavailable or busy. These reasons do not include record contents or host
+paths. MCP has no separate search tool. `memory_get` reads one record by ID.
+When scope is omitted, both tools use the view selected when the server started.
+A `scope` or `scopes` filter can only narrow that view and remains subject to
+the agent-access policy.
 
 `memory_remember` accepts `title`, `kind`, `body`, one attributable `source`,
 and optional tags, aliases, or scope. `memory_update` accepts the active record's

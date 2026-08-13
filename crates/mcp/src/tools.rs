@@ -14,6 +14,7 @@ pub fn call(
     mut arguments: JsonObject,
     cancelled: bool,
     embedder: Option<&dyn core::Embedder>,
+    unavailable_reason: Option<core::SemanticFallbackReason>,
 ) -> Result<CallToolResult, RmcpError> {
     if cancelled {
         return Err(RmcpError::invalid_params("request was cancelled", None));
@@ -32,7 +33,13 @@ pub fn call(
         arguments.insert("operation".to_owned(), Value::String(operation.to_owned()));
         core::invoke_envelope(
             operation,
-            core::invoke_operation_with_embedder(paths, operation, &arguments, embedder),
+            core::invoke_operation_with_semantic_status(
+                paths,
+                operation,
+                &arguments,
+                embedder,
+                unavailable_reason,
+            ),
         )
     };
     let encoded = serde_json::to_string(&envelope)

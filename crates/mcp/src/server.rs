@@ -8,12 +8,12 @@ use rmcp::{
     service::{RequestContext, RoleServer},
     tool, tool_handler, tool_router,
 };
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex};
 use stormbuffer_core as core;
 
 use crate::{config, resources, schemas, tools};
 
-type EmbedderCache = Arc<OnceLock<Option<Arc<dyn core::Embedder>>>>;
+type EmbedderCache = Arc<Mutex<Option<Arc<dyn core::Embedder>>>>;
 
 #[derive(Clone)]
 pub struct McpServer {
@@ -38,7 +38,7 @@ impl McpServer {
             paths,
             allow_writes,
             embedder: None,
-            default_embedder: Some(Arc::new(OnceLock::new())),
+            default_embedder: Some(Arc::new(Mutex::new(None))),
         }
     }
 
@@ -61,6 +61,37 @@ impl McpServer {
 
     pub fn allow_writes(&self) -> bool {
         self.allow_writes
+    }
+
+    pub(crate) fn call_sync(
+        &self,
+        operation: &'static str,
+        arguments: JsonObject,
+        cancelled: bool,
+    ) -> Result<CallToolResult, RmcpError> {
+        let (embedder, unavailable_reason) = if operation == "context" {
+            if let Some(embedder) = self.embedder.clone() {
+                (Some(embedder), None)
+            } else if let Some(cache) = self.default_embedder.as_ref() {
+                resolve_default_embedder(&self.paths, cache)
+            } else {
+                (
+                    None,
+                    Some(core::SemanticFallbackReason::IntentionallyUnavailable),
+                )
+            }
+        } else {
+            (None, None)
+        };
+        tools::call(
+            &self.paths,
+            self.allow_writes,
+            operation,
+            arguments,
+            cancelled,
+            embedder.as_deref(),
+            unavailable_reason,
+        )
     }
 }
 
@@ -167,35 +198,10 @@ impl McpServer {
         arguments: JsonObject,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, RmcpError> {
-        let paths = self.paths.clone();
-        let allow_writes = self.allow_writes;
-        let embedder = self.embedder.clone();
-        let default_embedder = self.default_embedder.clone();
+        let server = self.clone();
         let cancellation = context.ct.clone();
         let operation_task = tokio::task::spawn_blocking(move || {
-            let embedder = if operation == "context" {
-                embedder.or_else(|| {
-                    default_embedder.and_then(|slot| {
-                        slot.get_or_init(|| {
-                            core::ensure_default_model(&paths).ok()?;
-                            core::LocalEmbedder::from_default_cache(&paths)
-                                .ok()
-                                .map(|embedder| Arc::new(embedder) as Arc<dyn core::Embedder>)
-                        })
-                        .clone()
-                    })
-                })
-            } else {
-                None
-            };
-            tools::call(
-                &paths,
-                allow_writes,
-                operation,
-                arguments,
-                cancellation.is_cancelled(),
-                embedder.as_deref(),
-            )
+            server.call_sync(operation, arguments, cancellation.is_cancelled())
         });
         tokio::select! {
             _ = context.ct.cancelled() => {
@@ -276,5 +282,121 @@ impl ServerHandler for McpServer {
         Ok(ReadResourceResult::new(vec![
             ResourceContents::text(text, request.uri).with_mime_type("application/json"),
         ]))
+    }
+}
+
+fn resolve_default_embedder(
+    paths: &core::StorePaths,
+    cache: &EmbedderCache,
+) -> (
+    Option<Arc<dyn core::Embedder>>,
+    Option<core::SemanticFallbackReason>,
+) {
+    resolve_cached_embedder(cache, || {
+        if core::ensure_default_model(paths).is_err() {
+            return Err(core::SemanticFallbackReason::ModelUnavailable);
+        }
+        core::LocalEmbedder::from_default_cache(paths)
+            .map(|embedder| Arc::new(embedder) as Arc<dyn core::Embedder>)
+            .map_err(|_| core::SemanticFallbackReason::EmbedderInitializationFailed)
+    })
+}
+
+fn resolve_cached_embedder(
+    cache: &EmbedderCache,
+    initialize: impl FnOnce() -> Result<Arc<dyn core::Embedder>, core::SemanticFallbackReason>,
+) -> (
+    Option<Arc<dyn core::Embedder>>,
+    Option<core::SemanticFallbackReason>,
+) {
+    let mut slot = match cache.lock() {
+        Ok(slot) => slot,
+        Err(_) => {
+            return (
+                None,
+                Some(core::SemanticFallbackReason::EmbedderInitializationFailed),
+            );
+        }
+    };
+    if let Some(embedder) = slot.as_ref() {
+        return (Some(embedder.clone()), None);
+    }
+    let embedder = match initialize() {
+        Ok(embedder) => embedder,
+        Err(reason) => return (None, Some(reason)),
+    };
+    *slot = Some(embedder.clone());
+    (Some(embedder), None)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Barrier};
+
+    use super::*;
+
+    #[test]
+    fn failed_embedder_initialization_is_retried_and_success_is_cached() {
+        let cache = Arc::new(Mutex::new(None));
+        let attempts = AtomicUsize::new(0);
+        let initialize = || {
+            let attempt = attempts.fetch_add(1, Ordering::SeqCst);
+            if attempt == 0 {
+                Err(core::SemanticFallbackReason::ModelUnavailable)
+            } else {
+                Ok(Arc::new(
+                    core::DeterministicEmbedder::new("retry-test", 8).expect("test embedder"),
+                ) as Arc<dyn core::Embedder>)
+            }
+        };
+
+        let first = resolve_cached_embedder(&cache, initialize);
+        assert!(first.0.is_none());
+        assert_eq!(
+            first.1,
+            Some(core::SemanticFallbackReason::ModelUnavailable)
+        );
+        let second = resolve_cached_embedder(&cache, initialize);
+        assert!(second.0.is_some());
+        assert_eq!(second.1, None);
+        let third = resolve_cached_embedder(&cache, initialize);
+        assert!(third.0.is_some());
+        assert_eq!(third.1, None);
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn concurrent_embedder_resolution_initializes_once() {
+        let cache = Arc::new(Mutex::new(None));
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let entered = Arc::new(Barrier::new(2));
+        let first_cache = cache.clone();
+        let first_attempts = attempts.clone();
+        let first_entered = entered.clone();
+        let first = std::thread::spawn(move || {
+            resolve_cached_embedder(&first_cache, || {
+                first_attempts.fetch_add(1, Ordering::SeqCst);
+                first_entered.wait();
+                Ok(Arc::new(
+                    core::DeterministicEmbedder::new("single-flight", 8).expect("test embedder"),
+                ) as Arc<dyn core::Embedder>)
+            })
+        });
+        entered.wait();
+        let second_cache = cache.clone();
+        let second_attempts = attempts.clone();
+        let second = std::thread::spawn(move || {
+            resolve_cached_embedder(&second_cache, || {
+                second_attempts.fetch_add(1, Ordering::SeqCst);
+                Ok(Arc::new(
+                    core::DeterministicEmbedder::new("duplicate", 8).expect("test embedder"),
+                ) as Arc<dyn core::Embedder>)
+            })
+        });
+
+        assert!(first.join().expect("first resolution").0.is_some());
+        assert!(second.join().expect("second resolution").0.is_some());
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
     }
 }

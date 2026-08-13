@@ -1,9 +1,1166 @@
 {
+  "revision": "sb702-fixture-2",
+  "fixed_seed": 702,
   "queries": [
-    {"id":"exact-command","query":"cargo test --workspace","scope":"project:alpha","expected_record_ids":["01989af2-4305-7b19-88b1-e8ae4ea9a101"]},
-    {"id":"paraphrase-release","query":"publishing version checks","scope":"project:alpha","expected_record_ids":["01989af2-4305-7b19-88b1-e8ae4ea9a103"]},
-    {"id":"scope-collision","query":"release procedure","scope":"project:alpha","expected_record_ids":["01989af2-4305-7b19-88b1-e8ae4ea9a101","01989af2-4305-7b19-88b1-e8ae4ea9a103"]},
-    {"id":"superseded","query":"old release procedure","scope":"project:alpha","expected_record_ids":[]},
-    {"id":"conflict","query":"retention disposable projections","scope":"global","expected_record_ids":["01989af2-4305-7b19-88b1-e8ae4ea9a106","01989af2-4305-7b19-88b1-e8ae4ea9a107","01989af2-4305-7b19-88b1-e8ae4ea9a108","01989af2-4305-7b19-88b1-e8ae4ea9a109","01989af2-4305-7b19-88b1-e8ae4ea9a10a","01989af2-4305-7b19-88b1-e8ae4ea9a10b"]}
+    {
+      "id": "q-global-01",
+      "query": "verified workspace setting value 1",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000001"
+      ],
+      "category": "exact_fact",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-02",
+      "query": "chosen gateway route 2",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000002"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-03",
+      "query": "team chose option 3 after review",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000003"
+      ],
+      "category": "decision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-04",
+      "query": "validate input 4 checks publish",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000004"
+      ],
+      "category": "procedure",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-05",
+      "query": "milestone 5 complete verified",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000005"
+      ],
+      "category": "checkpoint",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-06",
+      "query": "current setting revision 6",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000006"
+      ],
+      "category": "temporal_change",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-07",
+      "query": "shared collision topic 3 resolved project",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000007"
+      ],
+      "category": "scope_collision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-08",
+      "query": "topic 3 branch 8 authoritative",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000008"
+      ],
+      "category": "distractor",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-09",
+      "query": "quoted evidence value 9 untrusted",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000009"
+      ],
+      "category": "prompt_like_content",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-10",
+      "query": "chosen gateway route 10",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000000a"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-11",
+      "query": "verified workspace setting value 11",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000000b"
+      ],
+      "category": "exact_fact",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-12",
+      "query": "chosen gateway route 12",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000000c"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-13",
+      "query": "team chose option 13 after review",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000000d"
+      ],
+      "category": "decision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-14",
+      "query": "validate input 14 checks publish",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000000e"
+      ],
+      "category": "procedure",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-15",
+      "query": "milestone 15 complete verified",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000000f"
+      ],
+      "category": "checkpoint",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-16",
+      "query": "current setting revision 16",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000010"
+      ],
+      "category": "temporal_change",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-17",
+      "query": "shared collision topic 1 resolved project",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000011"
+      ],
+      "category": "scope_collision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-18",
+      "query": "topic 3 branch 18 authoritative",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000012"
+      ],
+      "category": "distractor",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-19",
+      "query": "quoted evidence value 19 untrusted",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000013"
+      ],
+      "category": "prompt_like_content",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-20",
+      "query": "chosen gateway route 20",
+      "scope": "global",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000014"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-global-abstain-1",
+      "query": "withdrawn cedar archive",
+      "scope": "global",
+      "expected_record_ids": [],
+      "category": "insufficient_evidence",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-global-abstain-2",
+      "query": "withdrawn elm archive",
+      "scope": "global",
+      "expected_record_ids": [],
+      "category": "temporal_change",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-global-abstain-3",
+      "query": "withdrawn maple archive",
+      "scope": "global",
+      "expected_record_ids": [],
+      "category": "insufficient_evidence",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-global-abstain-4",
+      "query": "withdrawn pine archive",
+      "scope": "global",
+      "expected_record_ids": [],
+      "category": "temporal_change",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-alpha-01",
+      "query": "verified workspace setting value 1",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000019"
+      ],
+      "category": "exact_fact",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-02",
+      "query": "chosen gateway route 2",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000001a"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-03",
+      "query": "team chose option 3 after review",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000001b"
+      ],
+      "category": "decision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-04",
+      "query": "validate input 4 checks publish",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000001c"
+      ],
+      "category": "procedure",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-05",
+      "query": "milestone 5 complete verified",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000001d"
+      ],
+      "category": "checkpoint",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-06",
+      "query": "current setting revision 6",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000001e"
+      ],
+      "category": "temporal_change",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-07",
+      "query": "shared collision topic 3 resolved project",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000001f"
+      ],
+      "category": "scope_collision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-08",
+      "query": "topic 3 branch 8 authoritative",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000020"
+      ],
+      "category": "distractor",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-09",
+      "query": "quoted evidence value 9 untrusted",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000021"
+      ],
+      "category": "prompt_like_content",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-10",
+      "query": "chosen gateway route 10",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000022"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-11",
+      "query": "verified workspace setting value 11",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000023"
+      ],
+      "category": "exact_fact",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-12",
+      "query": "chosen gateway route 12",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000024"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-13",
+      "query": "team chose option 13 after review",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000025"
+      ],
+      "category": "decision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-14",
+      "query": "validate input 14 checks publish",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000026"
+      ],
+      "category": "procedure",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-15",
+      "query": "milestone 15 complete verified",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000027"
+      ],
+      "category": "checkpoint",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-16",
+      "query": "current setting revision 16",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000028"
+      ],
+      "category": "temporal_change",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-17",
+      "query": "shared collision topic 1 resolved project",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000029"
+      ],
+      "category": "scope_collision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-18",
+      "query": "topic 3 branch 18 authoritative",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000002a"
+      ],
+      "category": "distractor",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-19",
+      "query": "quoted evidence value 19 untrusted",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000002b"
+      ],
+      "category": "prompt_like_content",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-20",
+      "query": "chosen gateway route 20",
+      "scope": "project:alpha",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000002c"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-alpha-abstain-1",
+      "query": "withdrawn cedar archive",
+      "scope": "project:alpha",
+      "expected_record_ids": [],
+      "category": "insufficient_evidence",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-alpha-abstain-2",
+      "query": "withdrawn elm archive",
+      "scope": "project:alpha",
+      "expected_record_ids": [],
+      "category": "temporal_change",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-alpha-abstain-3",
+      "query": "withdrawn maple archive",
+      "scope": "project:alpha",
+      "expected_record_ids": [],
+      "category": "insufficient_evidence",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-alpha-abstain-4",
+      "query": "withdrawn pine archive",
+      "scope": "project:alpha",
+      "expected_record_ids": [],
+      "category": "temporal_change",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-beta-01",
+      "query": "verified workspace setting value 1",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000031"
+      ],
+      "category": "exact_fact",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-02",
+      "query": "chosen gateway route 2",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000032"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-03",
+      "query": "team chose option 3 after review",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000033"
+      ],
+      "category": "decision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-04",
+      "query": "validate input 4 checks publish",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000034"
+      ],
+      "category": "procedure",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-05",
+      "query": "milestone 5 complete verified",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000035"
+      ],
+      "category": "checkpoint",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-06",
+      "query": "current setting revision 6",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000036"
+      ],
+      "category": "temporal_change",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-07",
+      "query": "shared collision topic 3 resolved project",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000037"
+      ],
+      "category": "scope_collision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-08",
+      "query": "topic 3 branch 8 authoritative",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000038"
+      ],
+      "category": "distractor",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-09",
+      "query": "quoted evidence value 9 untrusted",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000039"
+      ],
+      "category": "prompt_like_content",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-10",
+      "query": "chosen gateway route 10",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000003a"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-11",
+      "query": "verified workspace setting value 11",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000003b"
+      ],
+      "category": "exact_fact",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-12",
+      "query": "chosen gateway route 12",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000003c"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-13",
+      "query": "team chose option 13 after review",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000003d"
+      ],
+      "category": "decision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-14",
+      "query": "validate input 14 checks publish",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000003e"
+      ],
+      "category": "procedure",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-15",
+      "query": "milestone 15 complete verified",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000003f"
+      ],
+      "category": "checkpoint",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-16",
+      "query": "current setting revision 16",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000040"
+      ],
+      "category": "temporal_change",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-17",
+      "query": "shared collision topic 1 resolved project",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000041"
+      ],
+      "category": "scope_collision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-18",
+      "query": "topic 3 branch 18 authoritative",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000042"
+      ],
+      "category": "distractor",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-19",
+      "query": "quoted evidence value 19 untrusted",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000043"
+      ],
+      "category": "prompt_like_content",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-20",
+      "query": "chosen gateway route 20",
+      "scope": "project:beta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000044"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-beta-abstain-1",
+      "query": "withdrawn cedar archive",
+      "scope": "project:beta",
+      "expected_record_ids": [],
+      "category": "insufficient_evidence",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-beta-abstain-2",
+      "query": "withdrawn elm archive",
+      "scope": "project:beta",
+      "expected_record_ids": [],
+      "category": "temporal_change",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-beta-abstain-3",
+      "query": "withdrawn maple archive",
+      "scope": "project:beta",
+      "expected_record_ids": [],
+      "category": "insufficient_evidence",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-beta-abstain-4",
+      "query": "withdrawn pine archive",
+      "scope": "project:beta",
+      "expected_record_ids": [],
+      "category": "temporal_change",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-gamma-01",
+      "query": "verified workspace setting value 1",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000049"
+      ],
+      "category": "exact_fact",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-02",
+      "query": "chosen gateway route 2",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000004a"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-03",
+      "query": "team chose option 3 after review",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000004b"
+      ],
+      "category": "decision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-04",
+      "query": "validate input 4 checks publish",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000004c"
+      ],
+      "category": "procedure",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-05",
+      "query": "milestone 5 complete verified",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000004d"
+      ],
+      "category": "checkpoint",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-06",
+      "query": "current setting revision 6",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000004e"
+      ],
+      "category": "temporal_change",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-07",
+      "query": "shared collision topic 3 resolved project",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000004f"
+      ],
+      "category": "scope_collision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-08",
+      "query": "topic 3 branch 8 authoritative",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000050"
+      ],
+      "category": "distractor",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-09",
+      "query": "quoted evidence value 9 untrusted",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000051"
+      ],
+      "category": "prompt_like_content",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-10",
+      "query": "chosen gateway route 10",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000052"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-11",
+      "query": "verified workspace setting value 11",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000053"
+      ],
+      "category": "exact_fact",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-12",
+      "query": "chosen gateway route 12",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000054"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-13",
+      "query": "team chose option 13 after review",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000055"
+      ],
+      "category": "decision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-14",
+      "query": "validate input 14 checks publish",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000056"
+      ],
+      "category": "procedure",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-15",
+      "query": "milestone 15 complete verified",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000057"
+      ],
+      "category": "checkpoint",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-16",
+      "query": "current setting revision 16",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000058"
+      ],
+      "category": "temporal_change",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-17",
+      "query": "shared collision topic 1 resolved project",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000059"
+      ],
+      "category": "scope_collision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-18",
+      "query": "topic 3 branch 18 authoritative",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000005a"
+      ],
+      "category": "distractor",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-19",
+      "query": "quoted evidence value 19 untrusted",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000005b"
+      ],
+      "category": "prompt_like_content",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-20",
+      "query": "chosen gateway route 20",
+      "scope": "project:gamma",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000005c"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-gamma-abstain-1",
+      "query": "withdrawn cedar archive",
+      "scope": "project:gamma",
+      "expected_record_ids": [],
+      "category": "insufficient_evidence",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-gamma-abstain-2",
+      "query": "withdrawn elm archive",
+      "scope": "project:gamma",
+      "expected_record_ids": [],
+      "category": "temporal_change",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-gamma-abstain-3",
+      "query": "withdrawn maple archive",
+      "scope": "project:gamma",
+      "expected_record_ids": [],
+      "category": "insufficient_evidence",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-gamma-abstain-4",
+      "query": "withdrawn pine archive",
+      "scope": "project:gamma",
+      "expected_record_ids": [],
+      "category": "temporal_change",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-delta-01",
+      "query": "verified workspace setting value 1",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000061"
+      ],
+      "category": "exact_fact",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-02",
+      "query": "chosen gateway route 2",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000062"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-03",
+      "query": "team chose option 3 after review",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000063"
+      ],
+      "category": "decision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-04",
+      "query": "validate input 4 checks publish",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000064"
+      ],
+      "category": "procedure",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-05",
+      "query": "milestone 5 complete verified",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000065"
+      ],
+      "category": "checkpoint",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-06",
+      "query": "current setting revision 6",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000066"
+      ],
+      "category": "temporal_change",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-07",
+      "query": "shared collision topic 3 resolved project",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000067"
+      ],
+      "category": "scope_collision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-08",
+      "query": "topic 3 branch 8 authoritative",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000068"
+      ],
+      "category": "distractor",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-09",
+      "query": "quoted evidence value 9 untrusted",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000069"
+      ],
+      "category": "prompt_like_content",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-10",
+      "query": "chosen gateway route 10",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000006a"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-11",
+      "query": "verified workspace setting value 11",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000006b"
+      ],
+      "category": "exact_fact",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-12",
+      "query": "chosen gateway route 12",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000006c"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-13",
+      "query": "team chose option 13 after review",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000006d"
+      ],
+      "category": "decision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-14",
+      "query": "validate input 14 checks publish",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000006e"
+      ],
+      "category": "procedure",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-15",
+      "query": "milestone 15 complete verified",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-00000000006f"
+      ],
+      "category": "checkpoint",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-16",
+      "query": "current setting revision 16",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000070"
+      ],
+      "category": "temporal_change",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-17",
+      "query": "shared collision topic 1 resolved project",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000071"
+      ],
+      "category": "scope_collision",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-18",
+      "query": "topic 3 branch 18 authoritative",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000072"
+      ],
+      "category": "distractor",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-19",
+      "query": "quoted evidence value 19 untrusted",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000073"
+      ],
+      "category": "prompt_like_content",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-20",
+      "query": "chosen gateway route 20",
+      "scope": "project:delta",
+      "expected_record_ids": [
+        "01989af2-4305-7b19-88b1-000000000074"
+      ],
+      "category": "paraphrase",
+      "expected_abstention": false
+    },
+    {
+      "id": "q-delta-abstain-1",
+      "query": "withdrawn cedar archive",
+      "scope": "project:delta",
+      "expected_record_ids": [],
+      "category": "insufficient_evidence",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-delta-abstain-2",
+      "query": "withdrawn elm archive",
+      "scope": "project:delta",
+      "expected_record_ids": [],
+      "category": "temporal_change",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-delta-abstain-3",
+      "query": "withdrawn maple archive",
+      "scope": "project:delta",
+      "expected_record_ids": [],
+      "category": "insufficient_evidence",
+      "expected_abstention": true
+    },
+    {
+      "id": "q-delta-abstain-4",
+      "query": "withdrawn pine archive",
+      "scope": "project:delta",
+      "expected_record_ids": [],
+      "category": "temporal_change",
+      "expected_abstention": true
+    }
   ]
 }

@@ -1,13 +1,16 @@
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use fs2::FileExt;
 use stormbuffer_core::{
     Access, ContextOptions, DeterministicEmbedder, Embedder, Embedding, Error, RetrievalMode,
-    SearchOptions, StoreInitMode, StorePaths, StoreScope, context_stores_with_embedder, index_path,
-    initialize_store, invoke_request, invoke_request_with_embedder, rebuild_vector_index,
-    record_scope, reindex_store_with_embedder, search_stores_with_embedder, sync_store,
+    SearchOptions, SemanticFallbackReason, StoreInitMode, StorePaths, StoreScope,
+    context_stores_with_embedder, index_path, initialize_store,
+    invoke_operation_with_semantic_status, invoke_request, invoke_request_with_embedder,
+    rebuild_vector_index, record_scope, reindex_store_with_embedder, search_stores_with_embedder,
+    sync_store,
 };
 
 struct TempStore {
@@ -111,12 +114,21 @@ fn invoke_search_and_context_use_hybrid_retrieval_when_an_embedder_is_supplied()
     )
     .expect("hybrid invocation context");
     assert_eq!(context["receipt"]["retrieval_mode"], "hybrid");
+    assert_eq!(
+        context["receipt"]["embedding_model"],
+        "stormbuffer/deterministic"
+    );
     assert_eq!(context["receipt"]["embedding_version"], "semantic-v1");
+    assert!(context["receipt"]["semantic_fallback"].is_null());
 }
 
 struct UnavailableEmbedder;
 
 impl Embedder for UnavailableEmbedder {
+    fn model_id(&self) -> &str {
+        "test/unavailable"
+    }
+
     fn model_version(&self) -> &str {
         "unavailable-v1"
     }
@@ -165,8 +177,62 @@ fn invoke_context_falls_back_to_lexical_when_semantic_indexing_is_unavailable() 
     )
     .expect("lexical fallback");
     assert_eq!(context["receipt"]["retrieval_mode"], "lexical");
+    assert!(context["receipt"]["embedding_model"].is_null());
     assert!(context["receipt"]["embedding_version"].is_null());
+    assert_eq!(
+        context["receipt"]["semantic_fallback"],
+        "embedding_execution_failed"
+    );
     assert_eq!(context["blocks"][0]["title"], "Fallback memory");
+}
+
+#[test]
+fn invoke_context_returns_a_lexical_receipt_for_every_semantic_failure_status() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    let request = serde_json::json!({
+        "version": 1,
+        "query": "no matching memory required",
+        "budget": 128
+    });
+    let request = request.as_object().expect("request object");
+    let cases = [
+        (
+            SemanticFallbackReason::IntentionallyUnavailable,
+            "intentionally_unavailable",
+        ),
+        (
+            SemanticFallbackReason::ModelUnavailable,
+            "model_unavailable",
+        ),
+        (
+            SemanticFallbackReason::EmbedderInitializationFailed,
+            "embedder_initialization_failed",
+        ),
+        (
+            SemanticFallbackReason::VectorProjectionUnavailable,
+            "vector_projection_unavailable",
+        ),
+        (
+            SemanticFallbackReason::VectorProjectionBusy,
+            "vector_projection_busy",
+        ),
+        (
+            SemanticFallbackReason::EmbeddingExecutionFailed,
+            "embedding_execution_failed",
+        ),
+    ];
+
+    for (reason, expected) in cases {
+        let context =
+            invoke_operation_with_semantic_status(&paths, "context", request, None, Some(reason))
+                .expect("lexical fallback context");
+        assert_eq!(context["receipt"]["retrieval_mode"], "lexical");
+        assert_eq!(context["receipt"]["semantic_fallback"], expected);
+        assert!(context["receipt"]["embedding_model"].is_null());
+        assert!(context["receipt"]["embedding_version"].is_null());
+    }
 }
 
 fn write_record(paths: &StorePaths, id: &str, scope: &str, kind: &str, status: &str, body: &str) {
@@ -428,6 +494,10 @@ fn rebuilding_vectors_rejects_invalid_canonical_records() {
 
 struct FilteredEmbedder;
 impl Embedder for FilteredEmbedder {
+    fn model_id(&self) -> &str {
+        "test/filtered"
+    }
+
     fn model_version(&self) -> &str {
         "filtered-v1"
     }
@@ -484,6 +554,10 @@ fn filtered_vector_search_adapts_beyond_the_initial_candidate_window() {
 
 struct FailingEmbedder;
 impl Embedder for FailingEmbedder {
+    fn model_id(&self) -> &str {
+        "test/failing"
+    }
+
     fn model_version(&self) -> &str {
         "semantic-v2"
     }
@@ -524,4 +598,55 @@ fn failed_model_backfill_keeps_the_previous_active_index_available() {
         .expect("old vector search");
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].title, "fact memory");
+}
+
+#[test]
+fn busy_projection_returns_lexical_context_with_an_explicit_receipt() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    let remembered = invoke_request(
+        &paths,
+        "remember",
+        br#"{"version":1,"title":"Busy projection fixture","kind":"fact","body":"Lexical evidence remains available while vectors are busy.","source":{"kind":"document","reference":"semantic-test","actor":"test"}}"#,
+    )
+    .expect("remember fixture");
+    stormbuffer_core::RecordRepository::new(paths.clone())
+        .approve(
+            remembered["record_id"]
+                .as_str()
+                .expect("record id")
+                .parse()
+                .expect("valid record id"),
+        )
+        .expect("approve fixture");
+    sync_store(&paths).expect("initial sync");
+    let lock_path = index_path(&paths)
+        .parent()
+        .expect("index parent")
+        .join("projection.lock");
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(lock_path)
+        .expect("open projection lock");
+    lock.try_lock_exclusive().expect("hold projection lock");
+    let embedder = DeterministicEmbedder::new("semantic-v1", 24).expect("embedder");
+
+    let context = invoke_request_with_embedder(
+        &paths,
+        "context",
+        br#"{"version":1,"query":"lexical evidence","budget":128}"#,
+        Some(&embedder),
+    )
+    .expect("lexical fallback context");
+
+    assert_eq!(context["receipt"]["retrieval_mode"], "lexical");
+    assert_eq!(
+        context["receipt"]["semantic_fallback"],
+        "vector_projection_busy"
+    );
+    assert_eq!(context["blocks"][0]["title"], "Busy projection fixture");
 }

@@ -1,10 +1,5 @@
 # Changelog
 
-All notable changes to Stormbuffer are documented in this file.
-
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
 ## [0.1.0] - Unreleased
 
 ### Added
@@ -31,7 +26,9 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   context, record lookup, and memory lifecycle operations.
 - Added an MCP adapter with intent-level recall, lookup, remember, update, and
   forget tools that use the same core storage, retrieval, scope, and review
-  rules as the CLI.
+  rules as the CLI. Recall receipts identify the embedding model and version
+  and report explicit reasons when semantic retrieval falls back to lexical
+  matches.
 - Added offline-installable global and project agent skills with a tested
   decision tree for recall, capture, correction, and necessary handoffs.
 - Added lossless import and export, import previews, export verification,
@@ -49,5 +46,3 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Treat records with the same normalized title, kind, and scope but different
   bodies as possible overlaps for human review. Only normalized body equality
   is considered a deterministic duplicate.
-
-[0.1.0]: https://github.com/stormlightlabs/stormbuffer/releases/tag/v0.1.0

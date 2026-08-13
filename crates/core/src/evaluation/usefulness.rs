@@ -15,6 +15,8 @@ const USEFULNESS_JSON: &str = include_str!("../../tests/fixtures/evaluation/usef
 #[serde(deny_unknown_fields)]
 struct CorpusFile {
     revision: String,
+    #[serde(rename = "fixed_seed")]
+    _fixed_seed: u64,
     records: Vec<CorpusRecord>,
 }
 

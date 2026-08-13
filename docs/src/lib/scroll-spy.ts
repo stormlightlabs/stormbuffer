@@ -1,16 +1,8 @@
 const HEADING_OFFSET_TOLERANCE = 4;
 
-export type HeadingPosition = {
-	id: string;
-	top: number;
-	scrollMarginTop: number;
-}
+export type HeadingPosition = { id: string; top: number; scrollMarginTop: number };
 
-export type ViewportPosition = {
-	scrollY: number;
-	height: number;
-	documentHeight: number;
-}
+export type ViewportPosition = { scrollY: number; height: number; documentHeight: number };
 
 export function findActiveHeading(headings: HeadingPosition[], viewport: ViewportPosition): string | null {
 	if (headings.length === 0) return null;

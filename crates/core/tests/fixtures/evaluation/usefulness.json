@@ -1,6 +1,6 @@
 {
   "revision": "m5-usefulness-1",
-  "corpus_revision": "m3-fixture-1",
+  "corpus_revision": "sb702-fixture-2",
   "feedback_revision": "m5-receipt-feedback-2",
   "observations": [
     {
@@ -16,57 +16,57 @@
     },
     {
       "id": "retrieval-miss",
-      "target_record_ids": ["01989af2-4305-7b19-88b1-e8ae4ea9a102"],
+      "target_record_ids": ["01989af2-4305-7b19-88b1-000000000002"],
       "captured_at": "2026-08-10T14:00:00Z",
       "receipt": {
         "receipt_id": "019c1e10-0002-7000-8000-000000000002",
         "retrieved_at": "2026-08-12T14:01:00Z",
         "used_tokens": 12,
-        "retrieved_record_ids": ["01989af2-4305-7b19-88b1-e8ae4ea9a104"]
+        "retrieved_record_ids": ["01989af2-4305-7b19-88b1-000000000004"]
       }
     },
     {
       "id": "retrieved-ignored",
-      "target_record_ids": ["01989af2-4305-7b19-88b1-e8ae4ea9a105"],
+      "target_record_ids": ["01989af2-4305-7b19-88b1-000000000005"],
       "captured_at": "2026-08-09T14:00:00Z",
       "receipt": {
         "receipt_id": "019c1e10-0003-7000-8000-000000000003",
         "retrieved_at": "2026-08-12T14:02:00Z",
         "used_tokens": 16,
-        "retrieved_record_ids": ["01989af2-4305-7b19-88b1-e8ae4ea9a105"]
+        "retrieved_record_ids": ["01989af2-4305-7b19-88b1-000000000005"]
       }
     },
     {
       "id": "stale-memory",
-      "target_record_ids": ["01989af2-4305-7b19-88b1-e8ae4ea9a103"],
+      "target_record_ids": ["01989af2-4305-7b19-88b1-000000000003"],
       "captured_at": "2026-08-08T14:00:00Z",
       "receipt": {
         "receipt_id": "019c1e10-0004-7000-8000-000000000004",
         "retrieved_at": "2026-08-12T14:03:00Z",
         "used_tokens": 20,
-        "retrieved_record_ids": ["01989af2-4305-7b19-88b1-e8ae4ea9a103"]
+        "retrieved_record_ids": ["01989af2-4305-7b19-88b1-000000000003"]
       }
     },
     {
       "id": "cited-memory",
-      "target_record_ids": ["01989af2-4305-7b19-88b1-e8ae4ea9a101"],
+      "target_record_ids": ["01989af2-4305-7b19-88b1-000000000001"],
       "captured_at": "2026-08-11T14:00:00Z",
       "receipt": {
         "receipt_id": "019c1e10-0005-7000-8000-000000000005",
         "retrieved_at": "2026-08-12T14:04:00Z",
         "used_tokens": 24,
-        "retrieved_record_ids": ["01989af2-4305-7b19-88b1-e8ae4ea9a101"]
+        "retrieved_record_ids": ["01989af2-4305-7b19-88b1-000000000001"]
       }
     },
     {
       "id": "included-memory",
-      "target_record_ids": ["01989af2-4305-7b19-88b1-e8ae4ea9a104"],
+      "target_record_ids": ["01989af2-4305-7b19-88b1-000000000004"],
       "captured_at": "2026-08-12T12:00:00Z",
       "receipt": {
         "receipt_id": "019c1e10-0006-7000-8000-000000000006",
         "retrieved_at": "2026-08-12T14:05:00Z",
         "used_tokens": 10,
-        "retrieved_record_ids": ["01989af2-4305-7b19-88b1-e8ae4ea9a104"]
+        "retrieved_record_ids": ["01989af2-4305-7b19-88b1-000000000004"]
       }
     }
   ]

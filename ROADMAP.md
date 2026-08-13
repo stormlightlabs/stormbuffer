@@ -3,17 +3,7 @@
 Stormbuffer is a local-first memory store for people and AI agents. It stores
 sourced project knowledge as readable files under human control.
 
-This roadmap covers the remaining work for version 0.1.0 and later releases.
-See [CHANGELOG.md](CHANGELOG.md) for completed work, the
-[documentation site](docs/src/content/docs/) for current behavior, and
-[TODO.md](TODO.md) for implementation details and dependencies.
-
 ## Version 0.1.0 hardening
-
-Before the first release, finish the hybrid MCP boundary and make semantic
-fallbacks visible. Build a realistic software-agent memory benchmark and
-measure retrieval latency and scale before changing ranking or storage
-architecture.
 
 The release also needs core rejection of high-confidence secrets in agent
 writes, tokenizer-aware embedding chunks, optional source revision metadata,
