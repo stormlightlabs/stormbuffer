@@ -4,8 +4,14 @@
 	"packageManager": "pnpm@10.15.1",
 	"scripts": {
 		"check": "node scripts/sync-plugin-skill.mjs && pnpm --recursive check",
+		"format": "prettier --write --ignore-unknown package.json pnpm-workspace.yaml packages",
+		"format:check": "prettier --check --ignore-unknown package.json pnpm-workspace.yaml packages",
 		"prepare": "node scripts/sync-plugin-skill.mjs",
 		"sync:plugin-skill": "node scripts/sync-plugin-skill.mjs",
 		"test": "node scripts/sync-plugin-skill.mjs && pnpm --recursive test"
+	},
+	"devDependencies": {
+		"prettier": "^3.8.3",
+		"prettier-plugin-svelte": "^4.1.0"
 	}
 }

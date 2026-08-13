@@ -2,8 +2,6 @@
 	"name": "stormbuffer",
 	"version": "0.1.0",
 	"description": "Recall Stormbuffer context and consider durable memory at turn boundaries",
-	"author": {
-		"name": "Stormlight Labs"
-	},
+	"author": { "name": "Stormlight Labs" },
 	"license": "MIT"
 }

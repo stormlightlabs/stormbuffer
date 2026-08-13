@@ -1,0 +1,14 @@
+# Package managers
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+
+# Generated files
+/packages/codex-plugin-stormbuffer/skills/
+/packages/docs/.svelte-kit/
+/packages/docs/.wrangler/
+/packages/docs/build/
+/packages/docs/static/
+/packages/pi-plugin-stormbuffer/skills/

@@ -2,15 +2,21 @@
 	"name": "pi-plugin-stormbuffer",
 	"version": "0.1.0",
 	"description": "Stormbuffer lifecycle recall and capture consideration for Pi",
-	"keywords": ["pi-package"],
+	"keywords": [
+		"pi-package"
+	],
 	"type": "module",
 	"files": [
 		"src",
 		"skills"
 	],
 	"pi": {
-		"extensions": ["./src/index.js"],
-		"skills": ["./skills"]
+		"extensions": [
+			"./src/index.js"
+		],
+		"skills": [
+			"./skills"
+		]
 	},
 	"dependencies": {
 		"@stormlightlabs/codex-plugin-stormbuffer": "workspace:*"

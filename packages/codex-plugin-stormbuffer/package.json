@@ -2,7 +2,9 @@
 	"name": "@stormlightlabs/codex-plugin-stormbuffer",
 	"version": "0.1.0",
 	"description": "Stormbuffer lifecycle recall and capture consideration for Codex",
-	"keywords": ["codex-plugin"],
+	"keywords": [
+		"codex-plugin"
+	],
 	"type": "module",
 	"files": [
 		".codex-plugin",

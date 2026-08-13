@@ -5,8 +5,8 @@ import {
 	captureInstruction,
 	contextInvocation,
 	retrieveContext,
-	selectedScope,
-} from "@stormlightlabs/codex-plugin-stormbuffer";
+	selectedScope
+} from '@stormlightlabs/codex-plugin-stormbuffer';
 
 export function createLifecycle(pi, options = {}) {
 	let captureTurn = false;
@@ -15,7 +15,7 @@ export function createLifecycle(pi, options = {}) {
 	return {
 		async beforeAgentStart(event, ctx) {
 			const prompt = event?.prompt;
-			captureTurn = typeof prompt === "string" && prompt.includes(CAPTURE_MARKER);
+			captureTurn = typeof prompt === 'string' && prompt.includes(CAPTURE_MARKER);
 			captureScheduled = false;
 			if (captureTurn) return undefined;
 
@@ -24,9 +24,7 @@ export function createLifecycle(pi, options = {}) {
 			try {
 				const recall = options.retrieveContext || retrieveContext;
 				const context = await recall(invocation, { cwd: ctx?.cwd, timeout: 5_000 });
-				return context
-					? { message: { customType: CONTEXT_CUSTOM_TYPE, content: context, display: false } }
-					: undefined;
+				return context ? { message: { customType: CONTEXT_CUSTOM_TYPE, content: context, display: false } } : undefined;
 			} catch {
 				return undefined;
 			}
@@ -36,19 +34,15 @@ export function createLifecycle(pi, options = {}) {
 			if (captureTurn || captureScheduled) return;
 			captureScheduled = true;
 			pi.sendMessage(
-				{
-					customType: CAPTURE_CUSTOM_TYPE,
-					content: captureInstruction(selectedScope(options.scope)),
-					display: false,
-				},
-				{ triggerTurn: true, deliverAs: "followUp" },
+				{ customType: CAPTURE_CUSTOM_TYPE, content: captureInstruction(selectedScope(options.scope)), display: false },
+				{ triggerTurn: true, deliverAs: 'followUp' }
 			);
-		},
+		}
 	};
 }
 
 export default function stormbufferExtension(pi) {
 	const lifecycle = createLifecycle(pi);
-	pi.on("before_agent_start", lifecycle.beforeAgentStart);
-	pi.on("agent_settled", lifecycle.agentSettled);
+	pi.on('before_agent_start', lifecycle.beforeAgentStart);
+	pi.on('agent_settled', lifecycle.agentSettled);
 }

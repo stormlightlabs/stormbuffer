@@ -1,8 +1,1 @@
-{
-	"mcpServers": {
-		"stormbuffer": {
-			"command": "node",
-			"args": ["${PLUGIN_ROOT}/hooks/mcp.mjs"]
-		}
-	}
-}
+{ "mcpServers": { "stormbuffer": { "command": "node", "args": ["${PLUGIN_ROOT}/hooks/mcp.mjs"] } } }

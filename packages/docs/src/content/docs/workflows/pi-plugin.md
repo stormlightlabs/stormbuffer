@@ -1,7 +1,7 @@
 ---
 title: Pi plugin
 description: Install the Stormbuffer Pi plugin from a source checkout.
-section: Get started
+section: Integrations
 group: Agent plugins
 order: 5
 ---

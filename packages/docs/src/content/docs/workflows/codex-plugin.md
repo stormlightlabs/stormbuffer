@@ -1,7 +1,7 @@
 ---
 title: Codex plugin
 description: Install the Stormbuffer Codex plugin from a source checkout.
-section: Get started
+section: Integrations
 group: Agent plugins
 order: 4
 ---
