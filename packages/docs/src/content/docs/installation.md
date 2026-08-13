@@ -61,7 +61,7 @@ Before updating, export the selected store as described in
 repeat the Cargo install commands, then run `sbuf status` and `sbuf doctor`. Add
 `--project` when checking a project store.
 
-## Roll back
+## Rollback
 
 Check out the previous source revision, reinstall both programs, and repeat the
 status and doctor checks. Read the newer changelog entry before rolling back

@@ -7,7 +7,7 @@
 </script>
 
 <svelte:head>
-	<title>stormbuffer</title>
+	<title>Stormbuffer</title>
 	<meta name="description" content="Documentation for Stormbuffer, a local-first memory store for people and agents." />
 </svelte:head>
 

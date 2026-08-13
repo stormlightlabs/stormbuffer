@@ -1,5 +1,5 @@
 ---
-title: The memory loop
+title: The Memory Loop
 description: Decide what the agent host, project store, and global store should remember.
 section: Concepts
 group: Core concepts

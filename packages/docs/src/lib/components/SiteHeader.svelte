@@ -8,8 +8,8 @@
 
 	const primaryLinks = [
 		{ label: 'Intro', href: '/docs/installation/', slug: 'installation' },
-		{ label: 'CLI', href: '/docs/cli/reference/', slug: 'cli/reference' },
-		{ label: 'Concepts', href: '/docs/concepts/architecture/', slug: 'concepts/architecture' }
+		{ label: 'Manual', href: '/docs/cli/reference/', slug: 'cli/reference' },
+		{ label: 'Architecture', href: '/docs/concepts/architecture/', slug: 'concepts/architecture' }
 	] as const;
 
 	function isCurrent(slug: string): boolean {
@@ -24,7 +24,7 @@
 	<div class="header-inner">
 		<a class="brand" href={resolve('/')} aria-label="Stormbuffer documentation home">
 			<span class="brand-mark" aria-hidden="true"></span>
-			<span>stormbuffer</span>
+			<span>Stormbuffer</span>
 		</a>
 
 		<nav class="primary-nav" aria-label="Primary navigation">

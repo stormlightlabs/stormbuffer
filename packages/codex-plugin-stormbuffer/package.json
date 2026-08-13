@@ -17,7 +17,7 @@
 	},
 	"scripts": {
 		"benchmark": "node test/latency.mjs",
-		"check": "node --check hooks/lifecycle.mjs && node --check hooks/codex.mjs && node --check hooks/mcp.mjs && node --check test/latency.mjs",
+		"check": "node --check hooks/capture-state.mjs && node --check hooks/lifecycle.mjs && node --check hooks/codex.mjs && node --check hooks/mcp.mjs && node --check test/latency.mjs",
 		"prepack": "node ../../scripts/sync-plugin-skill.mjs",
 		"test": "node --test test/lifecycle.test.mjs"
 	},

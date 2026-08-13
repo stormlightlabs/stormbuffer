@@ -1,5 +1,5 @@
 ---
-title: Data model
+title: Data Model
 description: Store sourced memories as Markdown with typed TOML frontmatter.
 section: Concepts
 group: Core concepts

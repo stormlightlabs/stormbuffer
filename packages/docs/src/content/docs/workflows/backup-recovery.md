@@ -1,6 +1,6 @@
 ---
 title: Backup and Recovery
-description: Export canonical memory, rebuild disposable data, and choose what a project shares.
+description: Export memories, rebuild indexes, and choose what's shared.
 section: Reference
 group: Workflows
 order: 8

@@ -1,5 +1,5 @@
 ---
-title: Agent skill
+title: SKILL.md
 description: Give an agent the Stormbuffer workflow while keeping memory changes visible.
 section: Reference
 group: Agent setup

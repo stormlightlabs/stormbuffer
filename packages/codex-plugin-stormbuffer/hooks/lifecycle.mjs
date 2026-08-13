@@ -158,7 +158,7 @@ export function captureInstruction(scope = selectedScope()) {
 		scope === 'global'
 			? 'Use the global Stormbuffer scope.'
 			: `Use the selected ${scope} scope (the CLI flag is --${scope}).`;
-	return `${CAPTURE_MARKER}\nEvaluate the completed turn once using the installed Stormbuffer memory skill. ${scopeGuidance} If it contains one durable correction, accepted decision, confirmed root cause, or necessary handoff that passes every admission gate, submit one reviewable candidate with the versioned sbuf invoke remember/update flow or explicitly write-enabled Stormbuffer MCP. Submit nothing for routine completion, repository-authoritative knowledge, tentative discussion, duplicates, or secrets. Do not retrieve memory again.`;
+	return `${CAPTURE_MARKER}\nEvaluate the completed turn once using the installed Stormbuffer memory skill. ${scopeGuidance} If it contains one durable correction, accepted decision, confirmed root cause, or necessary handoff that passes every admission gate, submit one reviewable candidate through explicitly write-enabled Stormbuffer MCP when available; otherwise use the versioned sbuf invoke remember/update flow. Submit nothing for routine completion, repository-authoritative knowledge, tentative discussion, duplicates, or secrets. Do not retrieve memory again.`;
 }
 
 export function codexPromptOutput(context) {
@@ -166,7 +166,12 @@ export function codexPromptOutput(context) {
 }
 
 export function codexStopOutput(event, options = {}) {
-	if (!event || typeof event !== 'object' || event.stop_hook_active === true) {
+	if (
+		!event ||
+		typeof event !== 'object' ||
+		event.stop_hook_active === true ||
+		options.candidateWritten === true
+	) {
 		return {};
 	}
 	return { decision: 'block', reason: captureInstruction(selectedScope(options.scope)) };

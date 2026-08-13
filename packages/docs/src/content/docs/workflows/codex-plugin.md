@@ -72,6 +72,13 @@ The bundled MCP server can recall memories and use `memory_remember` or
 active until you approve it. The plugin cannot approve, activate, archive, or
 perform destructive lifecycle operations through MCP.
 
+After a successful candidate write through the bundled MCP server, a narrowly
+matched `PostToolUse` hook records that capture already happened for the
+current turn. The Stop hook consumes that signal and lets Codex finish instead
+of asking it to review the same turn again. If no MCP candidate was written,
+Stop remains a fallback capture boundary. Direct CLI writes are not tracked,
+because doing so would require running a hook after every shell command.
+
 That boundary fits the normal agent workflow: the agent proposes durable
 corrections, decisions, constraints, preferences, procedures, and checkpoints;
 you decide whether they become active memory.

@@ -1,5 +1,5 @@
 ---
-title: How storage works
+title: Storage
 description: Understand canonical records, disposable projections, and backups.
 section: Concepts
 group: Core concepts

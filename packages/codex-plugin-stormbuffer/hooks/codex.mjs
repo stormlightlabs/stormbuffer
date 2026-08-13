@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-import { codexPromptOutput, codexStopOutput, contextInvocation, retrieveContext } from './lifecycle.mjs';
+import {
+	codexPromptOutput,
+	codexStopOutput,
+	contextInvocation,
+	retrieveContext
+} from './lifecycle.mjs';
+import { candidateWriteSucceeded, consumeCandidateWrite, markCandidateWrite } from './capture-state.mjs';
 
 const MAX_EVENT_BYTES = 64 * 1024;
 
@@ -28,8 +34,11 @@ let output = {};
 try {
 	if (process.argv[2] === 'prompt' && event) {
 		output = codexPromptOutput(await recall(event));
+	} else if (process.argv[2] === 'post-tool' && candidateWriteSucceeded(event)) {
+		markCandidateWrite(event);
 	} else if (process.argv[2] === 'stop') {
-		output = codexStopOutput(event);
+		const candidateWritten = event?.stop_hook_active === true ? false : consumeCandidateWrite(event);
+		output = codexStopOutput(event, { candidateWritten });
 	}
 } catch {
 	// Hook failures must not block the host.
