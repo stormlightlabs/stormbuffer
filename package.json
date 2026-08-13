@@ -1,0 +1,9 @@
+{
+	"name": "stormbuffer-workspace",
+	"private": true,
+	"packageManager": "pnpm@10.15.1",
+	"scripts": {
+		"check": "pnpm --recursive check",
+		"test": "pnpm --recursive test"
+	}
+}

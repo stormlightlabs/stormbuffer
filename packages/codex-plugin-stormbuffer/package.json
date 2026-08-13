@@ -1,0 +1,25 @@
+{
+	"name": "@stormlightlabs/codex-plugin-stormbuffer",
+	"version": "0.1.0",
+	"description": "Stormbuffer lifecycle recall and capture consideration for Codex",
+	"keywords": ["codex-plugin"],
+	"type": "module",
+	"files": [
+		".codex-plugin",
+		".mcp.json",
+		"hooks",
+		"skills"
+	],
+	"exports": {
+		".": "./hooks/lifecycle.mjs"
+	},
+	"scripts": {
+		"benchmark": "node test/latency.mjs",
+		"check": "node --check hooks/lifecycle.mjs && node --check hooks/codex.mjs && node --check test/latency.mjs",
+		"test": "node --test test/lifecycle.test.mjs"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"license": "MIT"
+}

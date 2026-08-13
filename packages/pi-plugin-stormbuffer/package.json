@@ -1,0 +1,29 @@
+{
+	"name": "pi-plugin-stormbuffer",
+	"version": "0.1.0",
+	"description": "Stormbuffer lifecycle recall and capture consideration for Pi",
+	"keywords": ["pi-package"],
+	"type": "module",
+	"files": [
+		"src",
+		"skills"
+	],
+	"pi": {
+		"extensions": ["./src/index.js"],
+		"skills": ["./skills"]
+	},
+	"dependencies": {
+		"@stormlightlabs/codex-plugin-stormbuffer": "workspace:*"
+	},
+	"devDependencies": {
+		"@earendil-works/pi-coding-agent": "^0.84.1"
+	},
+	"scripts": {
+		"check": "node --check src/index.js",
+		"test": "node --test"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"license": "MIT"
+}

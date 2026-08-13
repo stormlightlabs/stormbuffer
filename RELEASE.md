@@ -46,7 +46,7 @@ baseline.
    platform.
 
 Put migration or rollback warnings in the release notes. The
-[installation guide](docs/src/content/docs/installation.md) owns the normal
+[installation guide](packages/docs/src/content/docs/installation.md) owns the normal
 upgrade, rollback, and uninstall instructions.
 
 ## Optional: publish crates

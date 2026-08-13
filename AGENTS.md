@@ -61,7 +61,7 @@ and fail soft when Stormbuffer is unavailable or has no useful evidence.
 
 ## Svelte and documentation
 
-- `docs/` is a static SvelteKit/mdsvex site. Prefer server/static rendering and
+- `packages/docs/` is a static SvelteKit/mdsvex site. Prefer server/static rendering and
   ordinary links; reading and navigation must work without client JavaScript.
 - Keep components small and accessible with their styles scoped.
 - Use semantic HTML before ARIA and add client state only for real interaction.
@@ -75,10 +75,10 @@ Once configured, milestone/release checks are:
 cargo fmt # don't bother checking
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
-pnpm --dir docs check
-pnpm --dir docs lint
-pnpm --dir docs test
-pnpm --dir docs build
+pnpm --filter @stormlightlabs/stormbuffer-docs check
+pnpm --filter @stormlightlabs/stormbuffer-docs lint
+pnpm --filter @stormlightlabs/stormbuffer-docs test
+pnpm --filter @stormlightlabs/stormbuffer-docs build
 ```
 
 Do not rerun unchanged checks. Do not claim commands pass when their workspace
