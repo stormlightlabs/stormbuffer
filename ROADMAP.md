@@ -64,19 +64,28 @@ It recalls when prior durable context may affect the work, considers capture
 only after a high-signal event, and otherwise takes no memory action. A capture
 event permits evaluation; it does not guarantee a proposal.
 
-The skill owns this semantic judgment. Stormbuffer core continues to enforce
-scope, validation, lifecycle, and approval policy. This boundary keeps the
-workflow inspectable without introducing a second worthiness classifier.
+Make that host decision observable and testable. At a capture boundary, the
+host should classify the event, choose whether to abstain, propose, update, or
+checkpoint, and give a stable reason. Tests should exercise realistic
+conversation scenarios against the installed policy, including corrections,
+accepted decisions, tentative discussion, routine completion, and knowledge
+already preserved in the repository. No-proposal is a valid outcome.
+
+The host owns this semantic judgment. Stormbuffer core continues to enforce
+scope, validation, lifecycle, and approval policy. The assessment is host-side
+and disposable; it does not add a core worthiness classifier or store raw
+conversation content.
 
 ### Project-scoped continuity
 
-Validate that project scope, checkpoints, and recall are enough to resume work
-across sessions. Create a checkpoint only when normal project artifacts do not
-preserve enough state for another session. It should record completed work, the
-exact unresolved state, settled decisions, the next meaningful action, and
-relevant references while omitting chronology and routine commands. Add a
-separate brief or working-memory primitive only if real handoffs expose a
-repeatable gap in discovery or presentation.
+Project-scoped dogfooding confirmed that checkpoints and recall can resume work
+across sessions. A useful checkpoint records completed work, the exact
+unresolved state, settled decisions, the next meaningful action, and relevant
+references. It omits chronology and routine commands, and it is unnecessary
+when repository artifacts already preserve the state. It also omits dead ends
+and transient details. Future failed handoffs will distinguish capture,
+retrieval, and presentation failures. The scenarios did not expose a repeatable
+gap that requires a separate brief or working-memory primitive.
 
 ### Measure usefulness
 
@@ -91,7 +100,7 @@ duplicate rates, retrieved-and-used rate, stale-memory corrections, context
 cost per used memory, and time to later reuse. Use repeatable failures to decide
 whether Stormbuffer next needs better capture, retrieval, or maintenance.
 
-## Later retrieval and maintenance
+## Pre-web retrieval and maintenance
 
 Use observed failures to choose the next retrieval or maintenance work. Likely
 work includes proposing merges for duplicates, superseding stale memories,
@@ -99,12 +108,54 @@ archiving unused material, or improving ranking where the evaluation corpus and
 real use show a repeatable miss. Stormbuffer should suggest these changes for
 review rather than silently rewriting canonical memory.
 
+Separate project context from repository isolation. A project view should
+combine the nearest project store with applicable global memory. A strict local
+view should read only the nearest `.sbuf/`, with no global fallback. The CLI
+should expose the strict repository boundary as `--local` rather than making
+users infer it from the current overloaded `--project` flag.
+
+Give each project store a stable identity in canonical `store.toml` metadata.
+Store a machine-stable project ID separately from its editable display name,
+and stop deriving record scope from the repository directory name. SQLite may
+project that identity for filtering, but it must remain rebuildable from the
+canonical store and records. Do not duplicate a project name across every
+record unless independent record export requires it.
+
+Round out the existing lifecycle and recovery commands before building the web
+editor. Expand `status` with lifecycle counts, canonical and disposable disk
+usage, index and model versions, and last successful synchronization. Add
+preview and verification paths for import and export. `doctor --repair` may fix
+only disposable state; malformed or ambiguous canonical records still require a
+person.
+
+Give people one candidate inbox and a read-only `audit` command for possible
+duplicates, refinements, stale checkpoints, unresolved candidates, and broken
+record links. Audit findings explain their evidence and point to existing
+lifecycle commands. They never change canonical records. A later whole-store
+destruction command must identify the exact store, require strong confirmation,
+and offer an export before deletion. Avoid generic `reset` and `clear` commands
+whose targets are unclear.
+
+Exact normalized-body equality remains a deterministic duplicate check. A
+different body under the same normalized title, kind, and scope only proves
+possible overlap; it does not prove contradiction. Build a reviewed relation
+corpus that distinguishes equivalence, one-way refinement, contradiction,
+compatible additions, temporal change, related records, and unrelated records.
+
+Once the corpus and usefulness measurements can expose errors, add a
+replaceable local relation analyzer. Hybrid retrieval should select a small set
+of candidate pairs, then pairwise inference may label their relationship or
+abstain. Run the analyzer in shadow mode before showing advisory results. It
+must not approve, reject, merge, supersede, archive, or rewrite canonical
+records. Store inferred relationships and model fingerprints only in disposable
+projections.
+
 Milestone 6 covers packages, model and cache diagnostics, generated completions
 and man pages, and installation smoke tests.
 
 ## Later: local web editor
 
-Milestone 7 covers the optional local web app. It will provide browsing, search,
+Milestone 7 covers the local web app. It will provide browsing, search,
 editing, review, and lifecycle controls for people who prefer not to use the
 CLI. A graph may show stored relationships such as supersession, scope, source,
 and shared tags. It will not infer an opaque knowledge graph.
@@ -124,5 +175,3 @@ measured failure they can solve.
 - How much evidence `remember` and `update` need in the common MCP call.
 - Whether receipt feedback provides enough signal when it stores no user
   content.
-- Whether scoped checkpoints cover cross-session handoffs or require a brief
-  primitive.

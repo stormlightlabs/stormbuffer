@@ -156,35 +156,18 @@ configuration.
 Added a five-outcome recall and capture tree to the canonical agent skill.
 Capture evaluation now starts only after a named event, admits at most one
 sourced candidate, and leaves lifecycle and approval policy to core. Contract
-fixtures cover every capture event and rejection class, including ordinary
+scenarios in the Rust integration tests cover capture, rejection, and ordinary
 completion with no proposal.
 
 ### SB-504 — Validate project-scoped continuity
 
-**What to build:** Dogfood project-scoped checkpoints across sessions. Create a
-checkpoint only when another session needs state that normal project artifacts
-do not preserve well enough, and record any discovery or presentation gap
-before designing a separate brief primitive.
-
-**Blocked by:** SB-503
-
-**Acceptance criteria:**
-
-- [ ] A checkpoint contains completed work, the exact unresolved state, settled
-      decisions, the next meaningful action, and relevant references.
-- [ ] A later session can find and cite the checkpoint and resume the work.
-- [ ] Checkpoints omit chronology, routine commands, dead ends, and transient
-      detail that does not affect later work.
-- [ ] No checkpoint is created when normal project artifacts provide enough
-      state for another session to resume.
-- [ ] Any failed handoff records whether capture, retrieval, or presentation
-      caused the failure.
-- [ ] A separate brief primitive is proposed only when the observed gap cannot
-      be solved through checkpoints and recall.
-
-**Verification:** Complete cross-session dogfood scenarios that do and do not
-require a checkpoint. Inspect the captured sources, retrieval result, and
-resumed work.
+Validated project-scoped continuity through the public agent protocol. The
+dogfood test captures a sourced checkpoint with completed work, unresolved
+state, settled decisions, the next action, and references, then retrieves and
+cites it from a separate process before resuming. A companion scenario confirms
+that repository-preserved state needs no checkpoint. Neither handoff failed, so
+no capture, retrieval, or presentation failure needed recording. The scenarios
+exposed no repeatable gap that warrants a separate brief primitive.
 
 ### SB-505 — Record disposable receipt feedback
 
@@ -233,10 +216,190 @@ policy according to the CLI's selected scope. Identical reinstalls are no-ops,
 conflicting files are preserved by default, and `--force` replaces them
 atomically. Process tests cover both scopes and every installation outcome.
 
+### SB-508 — Evaluate the host capture policy
+
+**What to build:** Define a structured host assessment for named capture
+events. It records the event, an abstain/propose/update/checkpoint disposition,
+and a stable reason, with at most one atomic candidate. Exercise the installed
+skill against realistic conversation scenarios instead of testing a separate
+hand-written decision tree.
+
+**Blocked by:** SB-505
+
+**Acceptance criteria:**
+
+- [ ] Scenarios cover durable corrections, accepted decisions, tentative
+      discussion, routine completion, repository-authoritative knowledge,
+      confirmed root causes, and necessary handoffs.
+- [ ] Expected results include correct abstention reasons as well as proposals,
+      updates, and checkpoints.
+- [ ] Evaluation reports proposal precision, missed-memory judgments, and
+      approval, edit, rejection, and duplicate outcomes.
+- [ ] Assessments and feedback store no raw prompts or transcripts.
+- [ ] Capture worthiness remains a host decision; core receives only an
+      admitted candidate and continues to own validation and lifecycle policy.
+
+**Verification:** Run the checked-in capture scenarios against the packaged
+skill and inspect the assessment and receipt-feedback output.
+
+### SB-509 — Correct overlap semantics and build a relation corpus
+
+**What to build:** Preserve exact normalized-body equality as the deterministic
+duplicate fast path. Treat a different body with the same normalized title,
+kind, and scope as possible overlap rather than proven conflict. Build a
+reviewed pair corpus for semantic relation evaluation.
+
+**Acceptance criteria:**
+
+- [ ] Exact matches still return `duplicate_of` deterministically.
+- [ ] Same-title records with different bodies do not claim a contradiction
+      without relation evidence.
+- [ ] The corpus covers paraphrase, one-way refinement, contradiction,
+      compatible additions, temporal change, conditional differences, related
+      records, and unrelated records.
+- [ ] Process and protocol tests describe the revised result and its human
+      review path.
+
+**Verification:** Run repository and protocol tests, then compare the old
+title/body heuristic with the reviewed relation corpus.
+
+### SB-510 — Add advisory semantic relation analysis
+
+**What to build:** Retrieve a small set of related records with the existing
+hybrid index, then classify each candidate pair with a replaceable local
+relation analyzer. The analyzer may report equivalence, one-way entailment,
+contradiction, related, unrelated, or unknown.
+
+**Blocked by:** SB-506, SB-509
+
+**Acceptance criteria:**
+
+- [ ] Embeddings select candidate pairs but never determine contradiction by
+      similarity alone.
+- [ ] Pairwise analysis can abstain and reports evidence, a confidence band,
+      and an analyzer fingerprint.
+- [ ] The analyzer first runs in shadow mode and is compared with reviewed
+      corpus judgments.
+- [ ] Inferred relations are advisory and cannot approve, reject, merge,
+      supersede, archive, or edit a canonical record.
+- [ ] Model output and inferred relations live in a disposable, rebuildable
+      projection; Markdown remains canonical.
+- [ ] No record content is sent to a remote model.
+
+**Verification:** Evaluate deterministic, retrieval-only, and pairwise variants
+against the relation corpus. Inspect false contradictions and abstentions before
+enabling review warnings.
+
+### SB-511 — Separate project context from repository isolation
+
+**What to build:** Give project stores a stable canonical identity and separate
+the composed project view from strict nearest-repository retrieval. A project
+view may include applicable global records; strict local retrieval must use
+only the nearest `.sbuf/`.
+
+**Acceptance criteria:**
+
+- [ ] `store.toml` stores a stable project ID and an editable project name, with
+      validation and initialization tests.
+- [ ] Renaming a repository directory does not change its project identity or
+      make its existing records fall outside the current project scope.
+- [ ] Two repositories with the same directory name do not share a semantic
+      project identity.
+- [ ] `--project` selects the composed project view and `--local` selects only
+      the nearest repository store. Their behavior is unambiguous for search,
+      context, status, mutations, and machine-readable invocation.
+- [ ] Strict local retrieval never opens or returns records from the global
+      store; project retrieval retains applicable global context.
+- [ ] Project identity is canonical metadata. Any SQLite fields are disposable
+      projections and can be rebuilt without losing identity.
+- [ ] Scope derivation is owned by `stormbuffer-core` rather than duplicated in
+      CLI and protocol adapters.
+
+**Verification:** Initialize two same-named repositories, rename one, and test
+project and strict-local retrieval through core, CLI, and JSON protocol
+boundaries. Rebuild each index and confirm that project identity and filtering
+are unchanged.
+
+### SB-512 — Expand store status and safe repair
+
+**What to build:** Make `status` the single operational summary for a selected
+store, and let `doctor` repair disposable state when the repair has one
+unambiguous outcome.
+
+**Blocked by:** SB-511
+
+**Acceptance criteria:**
+
+- [ ] `status` reports lifecycle counts, canonical and disposable disk usage,
+      index and embedding versions, and the last successful synchronization.
+- [ ] Human and JSON output identify whether status describes the global,
+      project, or strict local view.
+- [ ] `doctor --repair` can rebuild or remove disposable projections, stale
+      locks, and temporary metadata reported by `doctor`.
+- [ ] `doctor --repair` never edits, archives, replaces, or deletes canonical
+      records and gives a concrete manual action for canonical failures.
+- [ ] Repeated repair is a no-op after the store becomes healthy.
+
+**Verification:** Corrupt each disposable component in an isolated store, run
+`doctor --repair`, and confirm that canonical Markdown is byte-for-byte
+unchanged. Exercise human and JSON status output at each store boundary.
+
+### SB-513 — Add backup previews and guarded store destruction
+
+**What to build:** Let users inspect restore consequences before import, verify
+an export independently, and deliberately remove an entire selected store when
+starting over is the intended operation.
+
+**Blocked by:** SB-511
+
+**Acceptance criteria:**
+
+- [ ] `import --dry-run` reports ID, scope, destination, and equivalent-record
+      collisions without writing records or projections.
+- [ ] Export verification checks the archive schema, record integrity, and
+      provenance without importing it.
+- [ ] Whole-store destruction prints the resolved store identity and affected
+      canonical and disposable data before confirmation.
+- [ ] Noninteractive destruction requires both `--yes` and the expected stable
+      store ID, and offers an export before deleting canonical records.
+- [ ] The CLI does not add ambiguous `reset` or `clear` commands.
+
+**Verification:** Preview colliding imports and verify valid and corrupted
+exports. Exercise cancelled, wrong-ID, backed-up, and confirmed destruction in
+isolated global and project stores.
+
+### SB-514 — Add a candidate inbox and read-only memory audit
+
+**What to build:** Provide one review queue for candidate records and an `audit`
+command that reports possible maintenance work with evidence and an explicit
+follow-up command.
+
+**Blocked by:** SB-505, SB-510
+
+**Acceptance criteria:**
+
+- [ ] The candidate inbox filters by age, kind, source, scope, and possible
+      overlap, with human and machine-readable output.
+- [ ] `audit` reports unresolved candidates, broken record links, stale
+      checkpoints, and relation-supported duplicate or refinement candidates.
+- [ ] Each audit finding names its evidence, confidence or deterministic rule,
+      and the existing lifecycle command a person may choose to run.
+- [ ] Running `audit` never edits, approves, rejects, supersedes, archives, or
+      deletes a canonical record.
+- [ ] Any usage-based finding distinguishes missing receipt history from known
+      non-use and remains unavailable until SB-505 supplies that evidence.
+
+**Verification:** Run the candidate inbox and audit against checked-in lifecycle
+and relation fixtures. Snapshot human and JSON findings, then confirm that the
+canonical record tree is unchanged.
+
 **Milestone exit:** Agents can propose candidates after high-signal capture
-events without sweeping routine work, resume project work from sourced
-checkpoints, install global-memory behavior without maintaining a separate skill
-copy, and distinguish capture, retrieval, and use failures.
+events without sweeping routine work, explain why they abstained, resume project
+work from sourced checkpoints, install global-memory behavior without
+maintaining a separate skill copy, distinguish capture, retrieval, and use
+failures, surface possible record relationships without autonomous changes, and
+help people inspect, repair, review, back up, or deliberately remove a store
+through commands with specific targets.
 
 ## Milestone 6: MCP and releases
 

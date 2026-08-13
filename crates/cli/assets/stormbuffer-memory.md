@@ -104,10 +104,10 @@ Do not store:
 A checkpoint is not an exception to this list. It must be sourced and necessary for another
 session; ordinary repository state, task status, and recoverable build output are not memory.
 
-## Verify the skill contract
+## Check the installation
 
-From the repository root, validate every capture event, every rejection class, the no-event
-completion path, and the public CLI/MCP examples:
+Run the health check when `sbuf` or MCP appears unavailable or misconfigured. It finds both
+binaries on `PATH` and exercises their public protocols against an isolated temporary project:
 
 ```sh
 python3 .agents/skills/stormbuffer-memory/verify.py
