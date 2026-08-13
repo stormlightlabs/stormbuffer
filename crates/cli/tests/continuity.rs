@@ -71,7 +71,10 @@ fn project_checkpoint_supports_a_later_session() {
         "source": {
             "kind": "document",
             "reference": "ROADMAP.md#project-scoped-continuity",
-            "actor": "human"
+            "actor": "human",
+            "observed_at": "2026-08-13T12:34:56-05:00",
+            "revision": "git:9f2c11a",
+            "content_hash": "blake3:4d8f1c"
         }
     });
     let proposal = success(run(

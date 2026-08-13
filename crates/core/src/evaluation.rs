@@ -1030,6 +1030,9 @@ fn write_relation_record(
             kind: SourceKind::Document,
             reference: format!("evaluation/relations.json#{pair_id}-{side}"),
             actor: "stormbuffer-evaluation".to_owned(),
+            observed_at: None,
+            revision: None,
+            content_hash: None,
         }],
         body: fixture
             .body
@@ -1275,6 +1278,9 @@ fn fixture_record(fixture: &FixtureRecord) -> crate::Result<Record> {
             kind: SourceKind::Document,
             reference: fixture.source_reference.clone(),
             actor: "test".to_owned(),
+            observed_at: None,
+            revision: None,
+            content_hash: None,
         }],
         body: fixture.body.clone(),
     })

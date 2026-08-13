@@ -89,6 +89,9 @@ pub(super) fn run_propose(scope: StoreScope, arguments: WriteStubArgs, output: &
         kind: core::SourceKind::Conversation,
         reference: "stormbuffer:cli/propose".to_owned(),
         actor: "agent".to_owned(),
+        observed_at: None,
+        revision: None,
+        content_hash: None,
     }];
     let markdown = match core::render_markdown(&draft).context("could not prepare the proposal") {
         Ok(markdown) => markdown,
@@ -419,6 +422,9 @@ fn draft_record(
             kind: core::SourceKind::Conversation,
             reference: "stormbuffer:cli".to_owned(),
             actor: "human".to_owned(),
+            observed_at: None,
+            revision: None,
+            content_hash: None,
         }],
         body: body.unwrap_or_else(|| "Write the memory here.".to_owned()),
     })

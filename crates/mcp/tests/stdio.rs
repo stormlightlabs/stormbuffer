@@ -336,7 +336,10 @@ fn stdio_exercises_each_documented_memory_tool() {
     let source = json!({
         "kind": "document",
         "reference": "docs/reference/mcp",
-        "actor": "human"
+        "actor": "human",
+        "observed_at": "2026-08-13T12:34:56-05:00",
+        "revision": "git:9f2c11a",
+        "content_hash": "blake3:4d8f1c"
     });
     let mut stdin = child.stdin.take().expect("child stdin");
     let mut stdout = BufReader::new(child.stdout.take().expect("child stdout"));

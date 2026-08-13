@@ -9,6 +9,7 @@ use fastembed::{
     InitOptionsUserDefined, Pooling, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel,
 };
 use serde::{Deserialize, Serialize};
+use tokenizers::Tokenizer;
 
 use crate::{Error, Result, StorePaths};
 
@@ -71,6 +72,8 @@ pub trait Embedder: Send + Sync {
     fn model_version(&self) -> &str;
     fn model_checksum(&self) -> &str;
     fn dimension(&self) -> usize;
+    fn max_tokens(&self) -> usize;
+    fn token_count(&self, text: &str) -> Result<usize>;
     fn embed(&self, text: &str) -> Result<Embedding>;
 }
 
@@ -242,6 +245,7 @@ impl ModelManifest {
 pub struct LocalEmbedder {
     manifest: ModelManifest,
     checksum: String,
+    tokenizer: Tokenizer,
     model: Mutex<TextEmbedding>,
 }
 
@@ -269,8 +273,11 @@ impl LocalEmbedder {
     fn from_verified_files(manifest: ModelManifest, files: ModelFiles) -> Result<Self> {
         manifest.validate()?;
         let checksum = manifest.fingerprint();
+        let tokenizer_bytes = read_model_file(&files.tokenizer)?;
+        let tokenizer = Tokenizer::from_bytes(&tokenizer_bytes)
+            .map_err(|error| Error::embedding("load verified tokenizer", error.to_string()))?;
         let tokenizer_files = TokenizerFiles {
-            tokenizer_file: read_model_file(&files.tokenizer)?,
+            tokenizer_file: tokenizer_bytes,
             config_file: read_model_file(&files.config)?,
             special_tokens_map_file: read_model_file(&files.special_tokens_map)?,
             tokenizer_config_file: read_model_file(&files.tokenizer_config)?,
@@ -284,6 +291,7 @@ impl LocalEmbedder {
         Ok(Self {
             manifest,
             checksum,
+            tokenizer,
             model: Mutex::new(model),
         })
     }
@@ -306,7 +314,19 @@ impl Embedder for LocalEmbedder {
         self.manifest.dimension
     }
 
+    fn max_tokens(&self) -> usize {
+        self.manifest.max_tokens
+    }
+
+    fn token_count(&self, text: &str) -> Result<usize> {
+        self.tokenizer
+            .encode(text, true)
+            .map(|encoding| encoding.len())
+            .map_err(|error| Error::embedding("tokenize embedding input", error.to_string()))
+    }
+
     fn embed(&self, text: &str) -> Result<Embedding> {
+        validate_token_limit(self, text)?;
         let mut model = self
             .model
             .lock()
@@ -371,7 +391,16 @@ impl Embedder for DeterministicEmbedder {
         self.dimension
     }
 
+    fn max_tokens(&self) -> usize {
+        256
+    }
+
+    fn token_count(&self, text: &str) -> Result<usize> {
+        Ok(simple_token_count(text))
+    }
+
     fn embed(&self, text: &str) -> Result<Embedding> {
+        validate_token_limit(self, text)?;
         let mut values = vec![0.0_f32; self.dimension];
         for token in text.split_whitespace().map(str::to_lowercase) {
             let digest = blake3::hash(token.as_bytes());
@@ -386,6 +415,39 @@ impl Embedder for DeterministicEmbedder {
         }
         Embedding::new(l2_normalize(values)?)
     }
+}
+
+fn validate_token_limit(embedder: &(impl Embedder + ?Sized), text: &str) -> Result<()> {
+    let token_count = embedder.token_count(text)?;
+    if token_count > embedder.max_tokens() {
+        return Err(Error::embedding(
+            "validate embedding input",
+            format!(
+                "input contains {token_count} model tokens; maximum is {}",
+                embedder.max_tokens()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn simple_token_count(text: &str) -> usize {
+    let mut count = 0;
+    let mut in_word = false;
+    for character in text.chars() {
+        if character.is_alphanumeric() || character == '_' {
+            if !in_word {
+                count += 1;
+                in_word = true;
+            }
+        } else {
+            in_word = false;
+            if !character.is_whitespace() {
+                count += 1;
+            }
+        }
+    }
+    count
 }
 
 fn manifest_fingerprint(manifest: &ModelManifest) -> String {

@@ -141,6 +141,14 @@ impl Embedder for UnavailableEmbedder {
         24
     }
 
+    fn max_tokens(&self) -> usize {
+        256
+    }
+
+    fn token_count(&self, text: &str) -> stormbuffer_core::Result<usize> {
+        Ok(text.split_whitespace().count())
+    }
+
     fn embed(&self, _text: &str) -> stormbuffer_core::Result<Embedding> {
         Err(Error::Embedding {
             operation: "embed fixture",
@@ -510,6 +518,14 @@ impl Embedder for FilteredEmbedder {
         1
     }
 
+    fn max_tokens(&self) -> usize {
+        256
+    }
+
+    fn token_count(&self, text: &str) -> stormbuffer_core::Result<usize> {
+        Ok(text.split_whitespace().count())
+    }
+
     fn embed(&self, text: &str) -> stormbuffer_core::Result<Embedding> {
         let value = if text.contains("rare-target") {
             2.0
@@ -566,6 +582,12 @@ impl Embedder for FailingEmbedder {
     }
     fn dimension(&self) -> usize {
         24
+    }
+    fn max_tokens(&self) -> usize {
+        256
+    }
+    fn token_count(&self, text: &str) -> stormbuffer_core::Result<usize> {
+        Ok(text.split_whitespace().count())
     }
     fn embed(&self, _text: &str) -> stormbuffer_core::Result<Embedding> {
         Err(Error::InvalidInput {

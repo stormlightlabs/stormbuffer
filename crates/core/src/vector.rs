@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Once;
 
 use rusqlite::types::Value;
@@ -307,9 +308,12 @@ impl VectorIndex for SqliteVectorIndex<'_> {
                 })
                 .map_err(|source| db_error("run vector search", source))?;
             let mut hits = Vec::new();
+            let mut seen_chunks = HashSet::new();
             for row in rows {
                 let hit = row.map_err(|source| db_error("read vector search result", source))?;
-                if matches_filter(&hit, filter) {
+                if matches_filter(&hit, filter)
+                    && seen_chunks.insert((hit.record_id.clone(), hit.chunk_id.clone()))
+                {
                     hits.push(hit);
                     if hits.len() >= requested {
                         break;

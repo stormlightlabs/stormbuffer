@@ -263,10 +263,16 @@ printf '%s\n' '{"version":1,"query":"release","budget":400}' \\
 local model is available. If the model cannot be loaded or the semantic index
 cannot be refreshed, the request still runs with lexical retrieval. A context
 receipt reports the `retrieval_mode` used and includes `embedding_version` for
-hybrid results.
+hybrid results. Before indexing, Stormbuffer uses that model's tokenizer to
+split oversized Markdown chunks. This keeps every embedding input within the
+model's declared token limit, including dense code or punctuation with little
+whitespace.
 
 Version 1 supports `search`, `context`, `get`, `remember`, `update`, `propose`,
 `supersede`, and `archive`.
+Sources in write requests require `kind`, `reference`, and `actor`. Optional
+`observed_at`, `revision`, and `content_hash` values are preserved in Markdown
+and returned by reads and retrieval receipts.
 Success is `{ "version": 1, "operation": "...", "ok": true, "result": ... }`.
 Failures use the version 1 envelope with `ok: false` and an `error.code`. Scope and access
 filters are applied before records are returned. Internal failures are sanitized and

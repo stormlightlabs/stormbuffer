@@ -43,6 +43,21 @@ fn fixture_preserves_unicode_code_blocks_and_multiple_sources() {
     let record = parse_markdown(&path, &markdown).expect("parse decision fixture");
 
     assert_eq!(record.sources.len(), 2);
+    assert_eq!(
+        record.sources[0].observed_at.map(|value| value.to_string()),
+        Some("2026-08-05T20:08:00-05:00".to_owned())
+    );
+    assert_eq!(
+        record.sources[0].revision.as_deref(),
+        Some("session-revision-7")
+    );
+    assert_eq!(
+        record.sources[0].content_hash.as_deref(),
+        Some("blake3:4d8f1c")
+    );
+    assert_eq!(record.sources[1].revision.as_deref(), Some("git:9f2c11a"));
+    assert!(record.sources[1].observed_at.is_none());
+    assert!(record.sources[1].content_hash.is_none());
     assert!(record.aliases.iter().any(|alias| alias.contains("唯一")));
     assert!(record.body.contains("```rust\n"));
     assert!(record.body.contains("record.validate()?"));

@@ -159,7 +159,9 @@ A `scope` or `scopes` filter can only narrow that view and remains subject to
 the agent-access policy.
 
 `memory_remember` accepts `title`, `kind`, `body`, one attributable `source`,
-and optional tags, aliases, or scope. `memory_update` accepts the active record's
+and optional tags, aliases, or scope. A source requires `kind`, `reference`, and
+`actor`; it may also carry an RFC 3339 `observed_at`, a `revision`, and a
+`content_hash`. `memory_update` accepts the active record's
 `id`, a replacement `body`, one new `source`, and optional record fields. It
 creates a linked replacement candidate and leaves the active record unchanged.
 `memory_forget` archives the named record.

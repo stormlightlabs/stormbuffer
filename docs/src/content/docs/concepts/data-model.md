@@ -45,6 +45,9 @@ supersedes = []
 kind = "conversation"
 reference = "stormbuffer://session/2026-08-05"
 actor = "user"
+observed_at = "2026-08-05T20:09:00-05:00"
+revision = "session-42"
+content_hash = "blake3:8db6c6f72c33..."
 +++
 
 Project memory is private unless the team chooses to share it.
@@ -56,6 +59,12 @@ Project memory is private unless the team chooses to share it.
 - Scopes are `global` or `project:<project-id>`, access is `human` or `agent`, and source kinds
   are `conversation`, `document`, `issue`, or `url`.
 - Timestamps use RFC 3339 and `updated_at` cannot precede `created_at`.
+
+Each source may also include `observed_at`, `revision`, and `content_hash`.
+These fields are optional: include only the freshness information the source
+already provides, such as a Git revision or a stable file hash. Stormbuffer
+preserves the values for later audits but does not crawl the source, detect
+changes, or rewrite the memory automatically.
 
 The core validates lifecycle transitions as `candidate → active`, `active → superseded|archived`,
 and `archived → active` for restore. Superseded records are terminal.

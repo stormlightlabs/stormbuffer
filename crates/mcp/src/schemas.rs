@@ -86,7 +86,10 @@ fn source_schema() -> Value {
         json!({
             "kind": { "type": "string", "enum": ["conversation", "document", "issue", "url"] },
             "reference": { "type": "string", "maxLength": 2048 },
-            "actor": { "type": "string", "maxLength": 256 }
+            "actor": { "type": "string", "maxLength": 256 },
+            "observed_at": { "type": "string", "format": "date-time" },
+            "revision": { "type": "string", "maxLength": 2048 },
+            "content_hash": { "type": "string", "maxLength": 256 }
         }),
         &["kind", "reference", "actor"],
     ))

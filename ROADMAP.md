@@ -6,10 +6,11 @@ sourced project knowledge as readable files under human control.
 ## Version 0.1.0 hardening
 
 Core agent writes now reject high-confidence secrets before canonical Markdown
-is written. The release still needs tokenizer-aware embedding chunks, optional
-source revision metadata, and CI across supported platforms. Multiple chunks
-from one record will be considered only if the benchmark shows that the current
-diversity rule loses necessary evidence.
+is written. Embedding inputs honor the selected model's token limit, and source
+receipts can preserve when and at which revision content was observed. The
+release still needs CI across supported platforms. Multiple chunks from one
+record will be considered only if the benchmark shows that the current diversity
+rule loses necessary evidence.
 
 The scale baseline now covers 100, 1,000, and 10,000 records with deterministic
 local embeddings. At 10,000 records, warm MCP recall had a 1.65-second median,

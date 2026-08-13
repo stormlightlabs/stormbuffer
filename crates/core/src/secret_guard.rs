@@ -14,6 +14,14 @@ pub(crate) fn contains_likely_secret(record: &Record) -> bool {
         || record.sources.iter().any(|source| {
             text_contains_likely_secret(&source.reference)
                 || text_contains_likely_secret(&source.actor)
+                || source
+                    .revision
+                    .as_deref()
+                    .is_some_and(text_contains_likely_secret)
+                || source
+                    .content_hash
+                    .as_deref()
+                    .is_some_and(text_contains_likely_secret)
         })
 }
 
@@ -154,7 +162,7 @@ fn is_placeholder(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::text_contains_likely_secret;
+    use super::{contains_likely_secret, text_contains_likely_secret};
 
     #[test]
     fn detects_high_confidence_secret_shapes() {
@@ -195,5 +203,29 @@ mod tests {
         ] {
             assert!(!text_contains_likely_secret(value), "rejected safe example");
         }
+    }
+
+    #[test]
+    fn scans_optional_source_freshness_fields() {
+        let markdown = r#"+++
+format_version = 1
+id = "01989af2-4305-7b19-88b1-e8ae4ea9a099"
+title = "Source freshness"
+kind = "fact"
+scope = "global"
+status = "active"
+access = "human"
+created_at = "2026-08-13T00:00:00Z"
+updated_at = "2026-08-13T00:00:00Z"
+tags = []
+aliases = []
+supersedes = []
+sources = [{ kind = "document", reference = "safe.md", actor = "tester", revision = "ghp_0123456789abcdefghijklmnop", content_hash = "safe-digest" }]
++++
+
+Safe body.
+"#;
+        let record = crate::parse_markdown("freshness.md", markdown).expect("parse record");
+        assert!(contains_likely_secret(&record));
     }
 }

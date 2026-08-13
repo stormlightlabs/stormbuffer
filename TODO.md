@@ -15,23 +15,8 @@ and at least 100 retrieval questions across several simulated projects and histo
 
 ### SB-703 — Characterize scale and retrieval latency
 
-**What to build:** Add a reproducible harness that generates realistic stores
-at about 100, 1,000, and 10,000 records and measures cold and warm behavior.
-
-**Acceptance criteria:**
-
-- [x] The harness measures reconciliation, FTS, vector, and hybrid retrieval,
-      context compilation, incremental reindexing, and warm MCP recall.
-- [x] Results include p50, p95, maximum latency, index size, and vector index
-      size for each supported store size.
-- [x] The benchmark records its environment and inputs so another developer can
-      reproduce and compare results. A 50,000-record run may remain optional.
-- [x] No storage or caching redesign is added without a measured bottleneck. If
-      per-recall freshness work dominates, evaluate a persisted generation or
-      freshness marker before a daemon or complex cache.
-
-**Verification:** Run the harness at the required sizes and confirm that it
-produces the documented measurements without remote embedding downloads.
+Added a reproducible harness that generates realistic stores at about
+100, 1,000, and 10,000 records and measures cold and warm behavior.
 
 ### SB-704 — Reject secrets in agent-originated core writes
 
@@ -64,11 +49,11 @@ declared token limit.
 
 **Acceptance criteria:**
 
-- [ ] Embedding inputs are bounded by model tokens rather than whitespace word
+- [x] Embedding inputs are bounded by model tokens rather than whitespace word
       counts while preserving structural Markdown boundaries where possible.
-- [ ] Tests cover code, long identifiers, paths, JSON, shell commands, and dense
+- [x] Tests cover code, long identifiers, paths, JSON, shell commands, and dense
       punctuation that exceed 256 model tokens despite a low word count.
-- [ ] Chunking stays deterministic and uses no LLM-based splitter.
+- [x] Chunking stays deterministic and uses no LLM-based splitter.
 
 **Verification:** Run focused chunking and indexing tests with a tokenizer-aware
 test model and assert that no emitted embedding input exceeds its manifest.
@@ -81,12 +66,12 @@ source revision without rewriting the memory.
 
 **Acceptance criteria:**
 
-- [ ] Each field is optional, round-trips through canonical Markdown, and is
+- [x] Each field is optional, round-trips through canonical Markdown, and is
       preserved by every adapter.
-- [ ] Source types are not required to provide metadata they cannot support.
-- [ ] Local file or Git-backed sources use stable hashes or revisions where
+- [x] Source types are not required to provide metadata they cannot support.
+- [x] Local file or Git-backed sources use stable hashes or revisions where
       those values are already available.
-- [ ] This ticket does not add source crawling, connectors, automatic
+- [x] This ticket does not add source crawling, connectors, automatic
       invalidation, or canonical-memory rewriting.
 
 **Verification:** Run core codec and protocol round-trip tests with all, some,

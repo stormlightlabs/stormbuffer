@@ -33,6 +33,12 @@ struct FrontmatterSource {
     kind: String,
     reference: String,
     actor: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    observed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    revision: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_hash: Option<String>,
 }
 
 pub fn parse_markdown(path: impl AsRef<Path>, markdown: &str) -> Result<Record> {
@@ -90,6 +96,20 @@ pub fn parse_markdown(path: impl AsRef<Path>, markdown: &str) -> Result<Record> 
                     )?,
                     reference: source.reference,
                     actor: source.actor,
+                    observed_at: source
+                        .observed_at
+                        .as_deref()
+                        .map(|value| {
+                            parse_field(
+                                path,
+                                &format!("sources[{index}].observed_at"),
+                                value,
+                                Timestamp::parse,
+                            )
+                        })
+                        .transpose()?,
+                    revision: source.revision,
+                    content_hash: source.content_hash,
                 })
             })
             .collect::<Result<Vec<_>>>()?,
@@ -122,6 +142,9 @@ pub fn render_markdown(record: &Record) -> Result<String> {
                 kind: source.kind.to_string(),
                 reference: source.reference.clone(),
                 actor: source.actor.clone(),
+                observed_at: source.observed_at.map(|value| value.to_string()),
+                revision: source.revision.clone(),
+                content_hash: source.content_hash.clone(),
             })
             .collect(),
     };

@@ -975,7 +975,17 @@ fn protocol_sources(
             let source = value
                 .as_object()
                 .ok_or_else(|| InvokeFailure::new("invalid_request", "source must be an object"))?;
-            ensure_keys(source, &["kind", "reference", "actor"])?;
+            ensure_keys(
+                source,
+                &[
+                    "kind",
+                    "reference",
+                    "actor",
+                    "observed_at",
+                    "revision",
+                    "content_hash",
+                ],
+            )?;
             let kind = source
                 .get("kind")
                 .and_then(Value::as_str)
@@ -994,13 +1004,54 @@ fn protocol_sources(
                 .and_then(Value::as_str)
                 .filter(|value| !value.is_empty() && value.len() <= 256)
                 .ok_or_else(|| InvokeFailure::new("invalid_request", "source actor is invalid"))?;
+            let observed_at = source
+                .get("observed_at")
+                .map(|value| {
+                    value
+                        .as_str()
+                        .ok_or_else(|| {
+                            InvokeFailure::new("invalid_request", "source observed_at is invalid")
+                        })?
+                        .parse()
+                        .map_err(|_| {
+                            InvokeFailure::new(
+                                "invalid_request",
+                                "source observed_at must be an RFC 3339 timestamp",
+                            )
+                        })
+                })
+                .transpose()?;
+            let revision = protocol_optional_source_string(source, "revision", 2048)?;
+            let content_hash = protocol_optional_source_string(source, "content_hash", 256)?;
             Ok(crate::Source {
                 kind,
                 reference: reference.to_owned(),
                 actor: actor.to_owned(),
+                observed_at,
+                revision,
+                content_hash,
             })
         })
         .collect()
+}
+
+fn protocol_optional_source_string(
+    source: &Map<String, Value>,
+    key: &str,
+    max_length: usize,
+) -> Result<Option<String>, InvokeFailure> {
+    source
+        .get(key)
+        .map(|value| {
+            value
+                .as_str()
+                .filter(|value| !value.is_empty() && value.len() <= max_length)
+                .map(str::to_owned)
+                .ok_or_else(|| {
+                    InvokeFailure::new("invalid_request", format!("source {key} is invalid"))
+                })
+        })
+        .transpose()
 }
 
 pub fn invoke_search_result(result: &crate::SearchResult) -> Value {
@@ -1034,13 +1085,36 @@ pub fn invoke_record(record: &crate::Record) -> Value {
         "tags": record.tags,
         "aliases": record.aliases,
         "supersedes": record.supersedes.iter().map(ToString::to_string).collect::<Vec<_>>(),
-        "sources": record.sources.iter().map(|source| json!({
-            "kind": source.kind.to_string(),
-            "reference": source.reference,
-            "actor": source.actor
-        })).collect::<Vec<_>>(),
+        "sources": record.sources.iter().map(invoke_source).collect::<Vec<_>>(),
         "body": record.body
     })
+}
+
+fn invoke_source(source: &crate::Source) -> Value {
+    let mut value = Map::from_iter([
+        ("kind".to_owned(), Value::String(source.kind.to_string())),
+        (
+            "reference".to_owned(),
+            Value::String(source.reference.clone()),
+        ),
+        ("actor".to_owned(), Value::String(source.actor.clone())),
+    ]);
+    if let Some(observed_at) = source.observed_at {
+        value.insert(
+            "observed_at".to_owned(),
+            Value::String(observed_at.to_string()),
+        );
+    }
+    if let Some(revision) = &source.revision {
+        value.insert("revision".to_owned(), Value::String(revision.clone()));
+    }
+    if let Some(content_hash) = &source.content_hash {
+        value.insert(
+            "content_hash".to_owned(),
+            Value::String(content_hash.clone()),
+        );
+    }
+    Value::Object(value)
 }
 
 fn map_core_error(error: &crate::Error) -> InvokeFailure {
@@ -1134,4 +1208,51 @@ pub fn invoke_scope_records(
         ));
     }
     Ok(Value::Array(records))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{invoke_record, parse_protocol_record};
+
+    #[test]
+    fn source_freshness_metadata_round_trips_through_the_json_protocol() {
+        let cases = [
+            json!({
+                "kind": "document",
+                "reference": "notes/design.md",
+                "actor": "human",
+                "observed_at": "2026-08-05T20:08:00Z",
+                "revision": "git:9f2c11a",
+                "content_hash": "blake3:4d8f1c"
+            }),
+            json!({
+                "kind": "issue",
+                "reference": "SB-706",
+                "actor": "agent",
+                "revision": "event:12"
+            }),
+            json!({
+                "kind": "conversation",
+                "reference": "session:current",
+                "actor": "user"
+            }),
+        ];
+
+        for source in cases {
+            let value = json!({
+                "title": "Source metadata",
+                "kind": "fact",
+                "scope": "global",
+                "status": "active",
+                "access": "agent",
+                "sources": [source.clone()],
+                "body": "Protocol round trip."
+            });
+            let record = parse_protocol_record(&value, None, "global");
+            let record = record.expect("parse protocol record");
+            assert_eq!(invoke_record(&record)["sources"][0], source);
+        }
+    }
 }

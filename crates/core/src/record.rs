@@ -438,12 +438,22 @@ pub struct Source {
     pub kind: SourceKind,
     pub reference: String,
     pub actor: String,
+    pub observed_at: Option<Timestamp>,
+    pub revision: Option<String>,
+    pub content_hash: Option<String>,
 }
 
 impl Source {
     fn validate(&self) -> Result<()> {
         validate_text("source reference", &self.reference)?;
-        validate_text("source actor", &self.actor)
+        validate_text("source actor", &self.actor)?;
+        if let Some(revision) = &self.revision {
+            validate_text("source revision", revision)?;
+        }
+        if let Some(content_hash) = &self.content_hash {
+            validate_text("source content hash", content_hash)?;
+        }
+        Ok(())
     }
 }
 

@@ -381,6 +381,9 @@ fn generate_records(paths: &core::StorePaths, count: usize) -> Result<(), String
                 kind: core::SourceKind::Document,
                 reference: format!("benchmark/project-{}/runbook.md", index % 24),
                 actor: "scale-harness".to_owned(),
+                observed_at: None,
+                revision: None,
+                content_hash: None,
             }],
             body: format!(
                 "## Context\n\n{}\n\n## Project note\n\nProject {} revision {} records deterministic operational history and a realistic distractor phrase.",

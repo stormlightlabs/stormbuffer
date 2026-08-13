@@ -16,11 +16,15 @@ supersedes = []
 kind = "conversation"
 reference = "stormbuffer://session/2026-08-05"
 actor = "user"
+observed_at = "2026-08-05T20:08:00-05:00"
+revision = "session-revision-7"
+content_hash = "blake3:4d8f1c"
 
 [[sources]]
 kind = "document"
 reference = "AGENTS.md#architecture-boundaries"
 actor = "user"
+revision = "git:9f2c11a"
 +++
 
 The core owns validation and mutation so adapters cannot diverge.
