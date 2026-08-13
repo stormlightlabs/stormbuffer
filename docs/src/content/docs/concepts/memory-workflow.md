@@ -42,6 +42,18 @@ temporary progress, generic knowledge, duplicated documentation, speculation,
 and secrets do not belong in the store. Most sessions should produce no
 candidate.
 
+## Write checkpoints for real handoffs
+
+A project checkpoint is useful when another session cannot recover the current
+state from repository files. Record what is complete, the exact unresolved
+state, settled decisions, the next meaningful action, and links to the relevant
+sources. Leave out chronology, routine commands, dead ends, and temporary
+details.
+
+Do not create a checkpoint when the repository already preserves everything
+needed to continue. A checkpoint should reduce uncertainty for the next session,
+not repeat a status file or task list.
+
 ## Review the store
 
 Each active record should:
