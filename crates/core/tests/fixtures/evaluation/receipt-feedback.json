@@ -1,0 +1,49 @@
+{
+  "revision": "m5-receipt-feedback-1",
+  "judgments": [
+    {
+      "receipt_id": "019c1e10-0001-7000-8000-000000000001",
+      "recorded_at": "2026-08-12T14:00:00Z",
+      "evidence": [
+        {"record_id": "01989af2-4305-7b19-88b1-e8ae4ea9b101", "outcome": "included"}
+      ],
+      "proposal": {
+        "record_id": "019c1e10-1001-7000-8000-000000000001",
+        "outcome": "approved"
+      }
+    },
+    {
+      "receipt_id": "019c1e10-0002-7000-8000-000000000002",
+      "recorded_at": "2026-08-12T14:01:00Z",
+      "evidence": [
+        {"record_id": "01989af2-4305-7b19-88b1-e8ae4ea9b104", "outcome": "cited"}
+      ],
+      "proposal": {
+        "record_id": "019c1e10-1002-7000-8000-000000000002",
+        "outcome": "edited"
+      }
+    },
+    {
+      "receipt_id": "019c1e10-0003-7000-8000-000000000003",
+      "recorded_at": "2026-08-12T14:02:00Z",
+      "evidence": [
+        {"record_id": "01989af2-4305-7b19-88b1-e8ae4ea9b105", "outcome": "ignored"}
+      ],
+      "proposal": {
+        "record_id": "019c1e10-1003-7000-8000-000000000003",
+        "outcome": "rejected"
+      }
+    },
+    {
+      "receipt_id": "019c1e10-0004-7000-8000-000000000004",
+      "recorded_at": "2026-08-12T14:03:00Z",
+      "evidence": [
+        {"record_id": "01989af2-4305-7b19-88b1-e8ae4ea9b103", "outcome": "corrected"}
+      ],
+      "proposal": {
+        "record_id": "019c1e10-1004-7000-8000-000000000004",
+        "outcome": "superseding"
+      }
+    }
+  ]
+}

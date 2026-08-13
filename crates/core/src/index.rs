@@ -18,7 +18,7 @@ use crate::vector::{
     SqliteVectorIndex, VectorDocument, VectorFilter, VectorIndex, VectorMetadata,
     register_sqlite_vec,
 };
-use crate::{Error, Record, StorePaths, StoreScope};
+use crate::{Error, ReceiptId, Record, StorePaths, StoreScope, Timestamp};
 
 pub const INDEX_SCHEMA_VERSION: u32 = 4;
 /// Version of the provider-neutral evidence envelope returned by `context`.
@@ -217,6 +217,8 @@ pub struct ContextContract {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ContextReceipt {
+    pub receipt_id: ReceiptId,
+    pub retrieved_at: String,
     pub query: String,
     pub current_scope: Option<String>,
     pub scopes: Vec<String>,
@@ -937,6 +939,8 @@ fn context_from_hits(
     Ok(ContextResult {
         contract: contract.clone(),
         receipt: ContextReceipt {
+            receipt_id: ReceiptId::new_v7(),
+            retrieved_at: Timestamp::now_utc().to_string(),
             query: query.to_owned(),
             current_scope: options.search.current_scope.clone(),
             scopes,
@@ -1073,7 +1077,7 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
         return Ok(report);
     }
 
-    let canonical = collect_canonical_records(&paths.records);
+    let canonical = collect_markdown_paths(&paths.records).unwrap_or_default();
     let mut valid = HashMap::new();
     for path in canonical {
         match read_canonical(&path) {
@@ -1963,10 +1967,6 @@ fn read_canonical(path: &Path) -> crate::Result<(Record, String)> {
         .map_err(|_| Error::invalid_input(format!("{} is not valid UTF-8", path.display())))?;
     let record = crate::parse_markdown(path, &markdown)?;
     Ok((record, markdown))
-}
-
-fn collect_canonical_records(directory: &Path) -> Vec<PathBuf> {
-    collect_markdown_paths(directory).unwrap_or_default()
 }
 
 fn collect_markdown_paths(directory: &Path) -> crate::Result<Vec<PathBuf>> {

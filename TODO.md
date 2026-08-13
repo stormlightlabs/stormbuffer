@@ -171,20 +171,11 @@ exposed no repeatable gap that warrants a separate brief primitive.
 
 ### SB-505 — Record disposable receipt feedback
 
-**What to build:** Record whether retrieved evidence was included, cited,
-ignored, or corrected and whether the answer led to an approved, edited,
-rejected, or superseding proposal.
-
-**Acceptance criteria:**
-
-- [ ] Feedback joins to retrieval receipts without storing raw prompts or
-      transcripts.
-- [ ] Feedback is stored in a disposable projection.
-- [ ] Checked-in evaluation judgments remain readable and reviewable.
-- [ ] Tests cover each evidence and proposal outcome.
-
-**Verification:** Run the receipt feedback tests and inspect one rebuilt
-projection from the checked-in judgments.
+Added opaque IDs and timestamps to retrieval receipts. Checked-in JSON
+judgments classify retrieved evidence as included, cited, ignored, or corrected
+and resulting proposals as approved, edited, rejected, or superseding. The
+rebuildable SQLite projection retains only receipt and record IDs, timestamps,
+and outcomes; judgment parsing rejects raw prompts, answers, and transcripts.
 
 ### SB-506 — Measure memory usefulness
 

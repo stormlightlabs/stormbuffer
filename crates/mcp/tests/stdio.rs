@@ -325,4 +325,9 @@ fn stdio_exercises_each_documented_memory_tool() {
         assert_eq!(content["operation"], operation);
         assert_eq!(content["ok"], true, "{content}");
     }
+    let receipt = &responses[0]["result"]["structuredContent"]["result"]["receipt"];
+    stormbuffer_core::ReceiptId::parse(receipt["receipt_id"].as_str().expect("receipt id"))
+        .expect("valid receipt id");
+    stormbuffer_core::Timestamp::parse(receipt["retrieved_at"].as_str().expect("retrieval time"))
+        .expect("valid retrieval time");
 }

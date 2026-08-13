@@ -10,6 +10,7 @@ mod backup;
 mod codec;
 mod embedder;
 mod evaluation;
+mod feedback;
 mod index;
 mod invoke;
 mod record;
@@ -32,6 +33,11 @@ pub use evaluation::{
     EvaluationReport, EvaluationStageReport, ExpectedClaim, GroundedEvaluationMetrics,
     GroundedEvaluationReport, GroundedQuestionReport, HostModelEvaluationAdapter, RagQuestion,
     run_evaluation, run_synthetic_evaluation, run_synthetic_grounded_evaluation,
+};
+pub use feedback::{
+    EvidenceFeedback, EvidenceOutcome, ProposalFeedback, ProposalFeedbackOutcome, ReceiptFeedback,
+    ReceiptFeedbackFile, ReceiptFeedbackProjectionReport, ReceiptId, parse_receipt_feedback_file,
+    rebuild_receipt_feedback_projection,
 };
 pub use index::{
     ContextBlock, ContextOptions, ContextReceipt, ContextResult, DoctorIssue, DoctorReport,

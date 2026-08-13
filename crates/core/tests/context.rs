@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use stormbuffer_core::{
-    Access, ContextOptions, SearchOptions, StoreInitMode, StorePaths, StoreScope, context_store,
-    initialize_store, sync_store,
+    Access, ContextOptions, SearchOptions, StoreInitMode, StorePaths, StoreScope, Timestamp,
+    context_store, initialize_store, sync_store,
 };
 
 struct TempStore {
@@ -104,10 +104,16 @@ fn context_is_attributable_deterministic_and_explicitly_untrusted() {
     };
     let first = context_store(&paths, "answer Friday", options.clone()).expect("context");
     let second = context_store(&paths, "answer Friday", options).expect("context");
-    assert_eq!(
-        serde_json::to_string(&first).expect("serialize first"),
-        serde_json::to_string(&second).expect("serialize second")
-    );
+    assert_ne!(first.receipt.receipt_id, second.receipt.receipt_id);
+    Timestamp::parse(&first.receipt.retrieved_at).expect("receipt timestamp");
+    let mut first_json = serde_json::to_value(&first).expect("serialize first");
+    let mut second_json = serde_json::to_value(&second).expect("serialize second");
+    for result in [&mut first_json, &mut second_json] {
+        let receipt = result["receipt"].as_object_mut().expect("receipt object");
+        receipt.remove("receipt_id");
+        receipt.remove("retrieved_at");
+    }
+    assert_eq!(first_json, second_json);
     let block = &first.blocks[0];
     assert_eq!(block.record_id, id);
     assert!(!block.chunk_id.is_empty());

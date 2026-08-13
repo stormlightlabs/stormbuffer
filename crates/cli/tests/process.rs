@@ -616,6 +616,15 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
             serde_json::from_slice(&output.stdout).expect("operation envelope");
         assert_eq!(response["operation"], operation);
         assert_eq!(response["ok"], true);
+        if operation == "context" {
+            let receipt = &response["result"]["receipt"];
+            stormbuffer_core::ReceiptId::parse(receipt["receipt_id"].as_str().expect("receipt id"))
+                .expect("valid receipt id");
+            stormbuffer_core::Timestamp::parse(
+                receipt["retrieved_at"].as_str().expect("retrieval time"),
+            )
+            .expect("valid retrieval time");
+        }
     }
 
     let supersede = run_json(

@@ -34,8 +34,7 @@ sbuf --project add --title "Test command" --kind procedure
 sbuf --project search test
 ```
 
-Agents can use the versioned JSON protocol without prompts or human-formatted
-output:
+Agents can use the versioned JSON protocol without prompts or formatted output:
 
 ```sh
 printf '%s\n' \
