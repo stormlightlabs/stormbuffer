@@ -92,6 +92,13 @@ fn export_import_and_gc_are_explicit_and_safe() {
             .expect("archive Markdown")
             .contains("The canonical body")
     );
+    let verified = run(&source, &["verify-export", &archive_text]);
+    assert!(
+        verified.status.success(),
+        "{}",
+        String::from_utf8_lossy(&verified.stderr)
+    );
+    assert!(String::from_utf8_lossy(&verified.stdout).contains("Records: 1"));
 
     let unsafe_archive = source.join(".sbuf/backup.json");
     let unsafe_archive_text = unsafe_archive.to_string_lossy().into_owned();
@@ -104,6 +111,32 @@ fn export_import_and_gc_are_explicit_and_safe() {
     let import_without_scope = run(&target, &["--project", "import", &archive_text]);
     assert!(!import_without_scope.status.success());
     assert!(String::from_utf8_lossy(&import_without_scope.stderr).contains("scope collision"));
+
+    let preview = run(
+        &target,
+        &[
+            "--project",
+            "import",
+            &archive_text,
+            "--on-scope",
+            "remap",
+            "--dry-run",
+        ],
+    );
+    assert!(
+        preview.status.success(),
+        "{}",
+        String::from_utf8_lossy(&preview.stderr)
+    );
+    assert!(String::from_utf8_lossy(&preview.stdout).contains("Dry run: yes"));
+    assert_eq!(
+        target
+            .join(".sbuf/records")
+            .read_dir()
+            .expect("read records")
+            .count(),
+        0
+    );
 
     let remapped = run(
         &target,
@@ -172,6 +205,48 @@ fn export_import_and_gc_are_explicit_and_safe() {
             .next()
             .is_some()
     );
+
+    let target_bundle: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&target_archive).expect("read target archive"))
+            .expect("parse target archive");
+    let store_id = target_bundle["source_scope"]
+        .as_str()
+        .expect("source scope")
+        .strip_prefix("project:")
+        .expect("project scope");
+    let wrong = run(
+        &target,
+        &["--project", "destroy-store", "--store-id", "wrong", "--yes"],
+    );
+    assert!(!wrong.status.success());
+    assert!(target.join(".sbuf").is_dir());
+    let cancelled = run(
+        &target,
+        &["--project", "destroy-store", "--store-id", store_id],
+    );
+    assert!(!cancelled.status.success());
+    assert!(target.join(".sbuf").is_dir());
+    let safety_export = root.join("before-destroy.json");
+    let safety_export_text = safety_export.to_string_lossy().into_owned();
+    let destroyed = run(
+        &target,
+        &[
+            "--project",
+            "destroy-store",
+            "--store-id",
+            store_id,
+            "--yes",
+            "--export",
+            &safety_export_text,
+        ],
+    );
+    assert!(
+        destroyed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&destroyed.stderr)
+    );
+    assert!(safety_export.is_file());
+    assert!(!target.join(".sbuf").exists());
 
     fs::remove_dir_all(root).expect("remove temporary root");
 }

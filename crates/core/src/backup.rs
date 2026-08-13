@@ -6,7 +6,10 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::repository::{RecordRepository, StoredRecord, write_atomic};
-use crate::{Error, Record, RecordId, RecordStatus, StorePaths, parse_markdown, render_markdown};
+use crate::{
+    DestructionAcknowledgement, Error, Record, RecordId, RecordStatus, StorePaths, StoreScope,
+    parse_markdown, render_markdown,
+};
 
 pub const EXPORT_FORMAT_VERSION: u32 = 1;
 pub const MAX_EXPORT_ARCHIVE_BYTES: usize = 16 * 1024 * 1024;
@@ -165,6 +168,40 @@ pub struct ImportReport {
     pub remapped: usize,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ExportVerificationReport {
+    pub format_version: u32,
+    pub source_scope: String,
+    pub records: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ImportPreviewEntry {
+    pub source_id: String,
+    pub target_id: String,
+    pub scope: String,
+    pub destination: String,
+    pub action: String,
+    pub equivalent_record_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct ImportPreview {
+    pub report: ImportReport,
+    pub records: Vec<ImportPreviewEntry>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct StoreDestructionPreview {
+    pub store_id: String,
+    pub scope: String,
+    pub root: String,
+    pub store_root_bytes: u64,
+    pub records: usize,
+    pub canonical_bytes: u64,
+    pub disposable_bytes: u64,
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct GcOptions {
     pub dry_run: bool,
@@ -187,7 +224,11 @@ pub struct GcReport {
 
 pub fn export_store(paths: &StorePaths) -> crate::Result<ExportBundle> {
     let repository = RecordRepository::new(paths.clone());
-    let records = repository.list(true)?;
+    let records = repository.list_read_only(true)?;
+    export_records(paths, records)
+}
+
+fn export_records(paths: &StorePaths, records: Vec<StoredRecord>) -> crate::Result<ExportBundle> {
     let mut exported = records
         .into_iter()
         .map(|stored| {
@@ -242,6 +283,31 @@ pub fn decode_export(contents: &str) -> crate::Result<ExportBundle> {
     Ok(bundle)
 }
 
+pub fn verify_export(bundle: &ExportBundle) -> crate::Result<ExportVerificationReport> {
+    validate_bundle_header(bundle)?;
+    let mut ids = HashSet::new();
+    for (index, item) in bundle.records.iter().enumerate() {
+        validate_archive_path(index, &item.path)?;
+        let record = parse_archive_record(index, item)?;
+        record.validate_provenance().map_err(|error| {
+            Error::backup(BackupError::InvalidArchiveRecord {
+                index,
+                message: error.to_string(),
+            })
+        })?;
+        if !ids.insert(record.id) {
+            return Err(Error::backup(BackupError::DuplicateArchiveId {
+                id: record.id,
+            }));
+        }
+    }
+    Ok(ExportVerificationReport {
+        format_version: bundle.format_version,
+        source_scope: bundle.source_scope.clone(),
+        records: bundle.records.len(),
+    })
+}
+
 pub fn write_export_archive(
     paths: &StorePaths,
     destination: &Path,
@@ -275,10 +341,33 @@ pub fn import_store(
     bundle: &ExportBundle,
     options: &ImportOptions,
 ) -> crate::Result<ImportReport> {
-    validate_bundle_header(bundle)?;
     let repository = RecordRepository::new(paths.clone());
     let _lock = repository.prepare_mutation()?;
     let existing = repository.scan_locked()?;
+    let (plans, preview) = plan_import(paths, bundle, options, &existing)?;
+    for plan in plans {
+        write_atomic(&plan.destination, plan.markdown.as_bytes())?;
+    }
+    Ok(preview.report)
+}
+
+pub fn preview_import(
+    paths: &StorePaths,
+    bundle: &ExportBundle,
+    options: &ImportOptions,
+) -> crate::Result<ImportPreview> {
+    let repository = RecordRepository::new(paths.clone());
+    let existing = repository.list_read_only(true)?;
+    plan_import(paths, bundle, options, &existing).map(|(_, preview)| preview)
+}
+
+fn plan_import(
+    paths: &StorePaths,
+    bundle: &ExportBundle,
+    options: &ImportOptions,
+    existing: &[StoredRecord],
+) -> crate::Result<(Vec<ImportPlan>, ImportPreview)> {
+    verify_export(bundle)?;
     let by_id: HashMap<_, _> = existing
         .iter()
         .map(|stored| (stored.record().id, stored.clone()))
@@ -286,17 +375,10 @@ pub fn import_store(
     let expected_scope = expected_scope(paths)?;
     let mut archive_ids = HashSet::new();
     let mut plans = Vec::new();
-    let mut report = ImportReport::default();
+    let mut preview = ImportPreview::default();
 
     for (index, item) in bundle.records.iter().enumerate() {
-        validate_archive_path(index, &item.path)?;
-        let mut record =
-            parse_markdown(Path::new("<export>"), &item.markdown).map_err(|error| {
-                Error::backup(BackupError::InvalidArchiveRecord {
-                    index,
-                    message: error.to_string(),
-                })
-            })?;
+        let mut record = parse_archive_record(index, item)?;
         if !archive_ids.insert(record.id) {
             return Err(Error::backup(BackupError::DuplicateArchiveId {
                 id: record.id,
@@ -307,7 +389,7 @@ pub fn import_store(
         if record.scope.as_str() != expected_scope {
             match options.scope_collision {
                 Some(ScopeCollisionPolicy::Skip) => {
-                    report.skipped += 1;
+                    add_skipped_preview(&mut preview, &record, "scope_collision", None);
                     continue;
                 }
                 Some(ScopeCollisionPolicy::Remap) => {
@@ -334,11 +416,18 @@ pub fn import_store(
         let mut destination = paths.records.join(format!("{target_id}.md"));
         let mut overwritten = false;
         let mut remapped = false;
+        let equivalent_record_id =
+            existing_identity(existing, &record).map(|stored| stored.record().id);
         if let Some(current) = by_id.get(&record.id) {
             if !changed && current.markdown() == item.markdown {
                 match options.existing_record {
                     Some(ExistingRecordPolicy::Skip) => {
-                        report.skipped += 1;
+                        add_skipped_preview(
+                            &mut preview,
+                            &record,
+                            "existing_record",
+                            Some(current),
+                        );
                         continue;
                     }
                     Some(ExistingRecordPolicy::Overwrite) => {
@@ -360,7 +449,7 @@ pub fn import_store(
             } else {
                 match options.id_collision {
                     Some(IdCollisionPolicy::Skip) => {
-                        report.skipped += 1;
+                        add_skipped_preview(&mut preview, &record, "id_collision", Some(current));
                         continue;
                     }
                     Some(IdCollisionPolicy::Overwrite) => {
@@ -384,10 +473,10 @@ pub fn import_store(
                     }
                 }
             }
-        } else if let Some(current) = existing_identity(&existing, &record) {
+        } else if let Some(current) = existing_identity(existing, &record) {
             match options.existing_record {
                 Some(ExistingRecordPolicy::Skip) => {
-                    report.skipped += 1;
+                    add_skipped_preview(&mut preview, &record, "equivalent_record", Some(current));
                     continue;
                 }
                 Some(ExistingRecordPolicy::Overwrite) => {
@@ -418,6 +507,7 @@ pub fn import_store(
             remapped,
             changed,
             original_id,
+            equivalent_record_id,
         });
     }
 
@@ -442,17 +532,107 @@ pub fn import_store(
         }
     }
 
-    for plan in plans {
-        write_atomic(&plan.destination, plan.markdown.as_bytes())?;
-        report.imported += 1;
+    for plan in &plans {
+        preview.report.imported += 1;
         if plan.overwritten {
-            report.overwritten += 1;
+            preview.report.overwritten += 1;
         }
         if plan.remapped {
-            report.remapped += 1;
+            preview.report.remapped += 1;
         }
+        preview.records.push(ImportPreviewEntry {
+            source_id: plan.original_id.to_string(),
+            target_id: plan.record.id.to_string(),
+            scope: plan.record.scope.to_string(),
+            destination: format!("records/{}.md", plan.record.id),
+            action: if plan.overwritten {
+                "overwrite"
+            } else if plan.remapped {
+                "remap"
+            } else {
+                "import"
+            }
+            .to_owned(),
+            equivalent_record_id: plan.equivalent_record_id.map(|id| id.to_string()),
+        });
     }
-    Ok(report)
+    Ok((plans, preview))
+}
+
+pub fn preview_store_destruction(paths: &StorePaths) -> crate::Result<StoreDestructionPreview> {
+    let status = crate::inspect_store(paths)?;
+    if !status.initialized {
+        return Err(Error::repository(
+            crate::RepositoryError::StoreNotInitialized {
+                root: paths.root.clone(),
+            },
+        ));
+    }
+    let store_id = status
+        .project
+        .map_or_else(|| "global".to_owned(), |project| project.id.to_string());
+    Ok(StoreDestructionPreview {
+        store_id,
+        scope: paths.scope.to_string(),
+        root: paths.root.display().to_string(),
+        store_root_bytes: crate::directory_bytes(&paths.root)?,
+        records: status.record_count,
+        canonical_bytes: status.canonical_bytes,
+        disposable_bytes: status.disposable_bytes,
+    })
+}
+
+pub fn destroy_store(
+    paths: &StorePaths,
+    expected_store_id: &str,
+    _acknowledgement: DestructionAcknowledgement,
+    export_destination: Option<&Path>,
+) -> crate::Result<()> {
+    let repository = RecordRepository::new(paths.clone());
+    let _lock = repository.prepare_mutation()?;
+    let preview = preview_store_destruction(paths)?;
+    if expected_store_id != preview.store_id {
+        return Err(Error::invalid_input(format!(
+            "store id mismatch: expected `{}`, got `{expected_store_id}`",
+            preview.store_id
+        )));
+    }
+    if let Some(destination) = export_destination {
+        let bundle = export_records(paths, repository.scan_locked()?)?;
+        verify_export(&bundle)?;
+        let encoded = encode_export(&bundle)?;
+        if encoded.len() > MAX_EXPORT_ARCHIVE_BYTES {
+            return Err(Error::backup(BackupError::InvalidArchive {
+                message: format!("archive exceeds the {MAX_EXPORT_ARCHIVE_BYTES} byte limit"),
+            }));
+        }
+        write_export_archive(paths, destination, encoded.as_bytes())?;
+    }
+    if paths.scope == StoreScope::Global {
+        remove_global_projection(paths)?;
+    }
+    fs::remove_dir_all(&paths.root)
+        .map_err(|source| Error::io("destroy the selected store", source))?;
+    Ok(())
+}
+
+fn remove_global_projection(paths: &StorePaths) -> crate::Result<()> {
+    let index = crate::index::existing_index_path(paths);
+    for suffix in ["", "-wal", "-shm"] {
+        remove_file_if_present(&PathBuf::from(format!("{}{suffix}", index.display())))?;
+    }
+    if let Some(parent) = index.parent() {
+        remove_file_if_present(&parent.join("projection.lock"))?;
+    }
+    Ok(())
+}
+
+fn remove_file_if_present(path: &Path) -> crate::Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(Error::io("remove the selected store projection", source)),
+    }
 }
 
 pub fn gc_store(paths: &StorePaths, options: GcOptions) -> crate::Result<GcReport> {
@@ -529,6 +709,33 @@ struct ImportPlan {
     remapped: bool,
     changed: bool,
     original_id: RecordId,
+    equivalent_record_id: Option<RecordId>,
+}
+
+fn parse_archive_record(index: usize, item: &ExportedRecord) -> crate::Result<Record> {
+    parse_markdown(Path::new("<export>"), &item.markdown).map_err(|error| {
+        Error::backup(BackupError::InvalidArchiveRecord {
+            index,
+            message: error.to_string(),
+        })
+    })
+}
+
+fn add_skipped_preview(
+    preview: &mut ImportPreview,
+    record: &Record,
+    action: &str,
+    equivalent: Option<&StoredRecord>,
+) {
+    preview.report.skipped += 1;
+    preview.records.push(ImportPreviewEntry {
+        source_id: record.id.to_string(),
+        target_id: record.id.to_string(),
+        scope: record.scope.to_string(),
+        destination: format!("records/{}.md", record.id),
+        action: format!("skip_{action}"),
+        equivalent_record_id: equivalent.map(|stored| stored.record().id.to_string()),
+    });
 }
 
 fn validate_bundle_header(bundle: &ExportBundle) -> crate::Result<()> {

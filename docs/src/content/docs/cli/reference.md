@@ -115,10 +115,17 @@ The command-line help also accepts `--color auto|always|never` for human-facing 
 
 ## Back up and clean a store
 
-`export` writes canonical records and provenance to a JSON archive. `import` restores an archive
-and requires a collision policy for IDs, scope, or equivalent records. `gc` removes only
-disposable indexes, caches, locks, logs, and temporary files. Add `--dry-run` to
-inspect its candidates first.
+`export` writes canonical records and provenance to a JSON archive. Check an
+archive without importing it, or preview every import destination and collision:
+
+```text
+sbuf --project verify-export stormbuffer-memory.json
+sbuf --project import stormbuffer-memory.json --dry-run
+```
+
+`import` requires a policy for ID, scope, or equivalent-record collisions. `gc`
+removes only disposable indexes, caches, locks, logs, and temporary files. Add
+`--dry-run` to inspect its candidates first.
 
 See [Backup and recovery](/docs/workflows/backup-recovery/) for examples and collision choices.
 
@@ -214,6 +221,24 @@ duplicates are not written. A different body with the same title, kind, and
 scope is only a possible overlap; Stormbuffer keeps the candidate so a person
 can compare both records. Use `supersede` followed by approval when the new
 record should replace an earlier one.
+
+Use `inbox` to review candidates across the selected store. It can filter by
+minimum age, kind, provenance source, exact scope, or possible overlap:
+
+```sh
+sbuf --project inbox --min-age-days 7 --possible-overlap
+sbuf --project inbox --kind procedure --source conversation --json
+```
+
+`audit` reports unresolved candidates, broken supersession links, stale active
+checkpoints, and relation-supported duplicate or refinement candidates. Each
+finding includes its evidence and a lifecycle command for the selected store.
+It does not change records or create recovery and projection files.
+
+```sh
+sbuf --project audit --stale-after-days 45
+sbuf --project audit --json
+```
 
 ## Invoke the JSON protocol
 

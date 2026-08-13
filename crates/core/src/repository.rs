@@ -446,6 +446,17 @@ impl RecordRepository {
 
     pub fn list(&self, include_inactive: bool) -> Result<Vec<StoredRecord>, Error> {
         let _lock = self.prepare_mutation()?;
+        self.list_scanned(include_inactive)
+    }
+
+    pub(crate) fn list_read_only(
+        &self,
+        include_inactive: bool,
+    ) -> Result<Vec<StoredRecord>, Error> {
+        self.list_scanned(include_inactive)
+    }
+
+    fn list_scanned(&self, include_inactive: bool) -> Result<Vec<StoredRecord>, Error> {
         let mut records = self.scan_locked()?;
         if !include_inactive {
             records.retain(|stored| stored.record.status == RecordStatus::Active);
@@ -750,6 +761,13 @@ fn matching_record<'a>(
     kind: MatchKind,
 ) -> Option<&'a StoredRecord> {
     matching_record_excluding(records, record, kind, record.id)
+}
+
+pub(crate) fn possible_overlap<'a>(
+    records: &'a [StoredRecord],
+    record: &Record,
+) -> Option<&'a StoredRecord> {
+    matching_record(records, record, MatchKind::Overlap)
 }
 
 fn matching_record_excluding<'a>(

@@ -24,6 +24,12 @@ Export the selected store to a JSON archive:
 sbuf --project export stormbuffer-memory.json
 ```
 
+Verify the archive before moving or relying on it:
+
+```sh
+sbuf --project verify-export stormbuffer-memory.json
+```
+
 The archive does not contain the host's absolute paths. Copy it using your normal backup or
 transfer process. To import it into another store, choose a policy when the stores do not have the
 same scope:
@@ -35,6 +41,14 @@ sbuf --project import stormbuffer-memory.json --on-scope remap
 A scope remap changes `project:<project-id>` to the selected project's stable
 scope. Imports preserve record IDs and Markdown when the selected policy does
 not require a change.
+
+Preview the resolved scope, destination, and collision action before importing:
+
+```sh
+sbuf --project import stormbuffer-memory.json --on-scope remap --dry-run
+```
+
+The preview validates the archive but writes no records or projections.
 
 ## Collisions
 
@@ -71,6 +85,29 @@ sbuf --project gc
 
 `gc` only considers known indexes, model-cache files, locks, logs, and temporary files. It never
 removes `store.toml`, `.gitignore`, or Markdown records. A dry run does not change anything.
+
+## Starting Over
+
+Use `destroy-store` only when you intend to remove the entire selected store. It
+prints the stable store identity, the store root's total size, and the affected
+canonical and disposable byte counts before asking for confirmation. Everything
+under the printed store root is removed, including files Stormbuffer does not
+recognize:
+
+```text
+sbuf --project destroy-store
+```
+
+For scripts, pass both the stable ID shown by the preview and `--yes`. Add
+`--export` to create a verified recovery archive before deletion:
+
+```text
+sbuf --project destroy-store --store-id <project-id> --yes --export stormbuffer-before-destroy.json
+```
+
+A wrong or missing ID stops noninteractive destruction. For the global store,
+the stable ID is `global`. Destroying it removes the global projection but keeps
+the shared model cache used by project stores.
 
 ## Sharing and Merging
 

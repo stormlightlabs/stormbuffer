@@ -86,8 +86,16 @@ pub enum CliCommand {
     Doctor(DoctorArgs),
     /// Export canonical records and provenance as a portable JSON archive.
     Export(PathArgs),
+    /// Verify an export archive without importing it.
+    VerifyExport(VerifyExportArgs),
     /// Import a portable canonical-record archive.
     Import(ImportArgs),
+    /// Permanently remove the entire selected store.
+    DestroyStore(DestroyStoreArgs),
+    /// Review candidate memories awaiting a lifecycle decision.
+    Inbox(InboxArgs),
+    /// Audit memory health without changing canonical records.
+    Audit(AuditArgs),
     /// Invoke a versioned, noninteractive JSON operation.
     Invoke(InvokeArgs),
     /// Run the checked-in retrieval evaluation corpus.
@@ -266,6 +274,60 @@ pub struct ImportArgs {
     /// Policy for an existing equivalent record: fail, skip, or overwrite.
     #[arg(long, visible_alias = "existing-policy")]
     pub on_existing: Option<String>,
+    /// Report the resolved import actions without writing anything.
+    #[arg(long)]
+    pub dry_run: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct VerifyExportArgs {
+    /// Export path, or `-` to read stdin.
+    pub path: String,
+}
+
+#[derive(Args, Debug)]
+pub struct DestroyStoreArgs {
+    /// Stable identity printed by the destruction preview.
+    #[arg(long)]
+    pub store_id: Option<String>,
+    /// Export canonical records here before destruction.
+    #[arg(long, value_name = "PATH")]
+    pub export: Option<PathBuf>,
+    /// Skip the interactive confirmation prompt.
+    #[arg(long)]
+    pub yes: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct InboxArgs {
+    /// Include candidates at least this many days old.
+    #[arg(long)]
+    pub min_age_days: Option<u64>,
+    /// Filter by memory kind.
+    #[arg(long)]
+    pub kind: Option<String>,
+    /// Filter by provenance source kind.
+    #[arg(long)]
+    pub source: Option<String>,
+    /// Filter by exact record scope.
+    #[arg(long)]
+    pub scope: Option<String>,
+    /// Show only candidates with a possible overlapping record.
+    #[arg(long)]
+    pub possible_overlap: bool,
+    /// Emit a machine-readable JSON array.
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct AuditArgs {
+    /// Treat active checkpoints at least this many days old as stale.
+    #[arg(long, default_value_t = 30)]
+    pub stale_after_days: u64,
+    /// Emit a machine-readable JSON object.
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args, Debug)]

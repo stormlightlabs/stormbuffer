@@ -15,6 +15,7 @@ mod evaluation;
 mod feedback;
 mod index;
 mod invoke;
+mod maintenance;
 mod record;
 mod repository;
 mod vector;
@@ -25,6 +26,7 @@ pub use evaluation::*;
 pub use feedback::*;
 pub use index::*;
 pub use invoke::*;
+pub use maintenance::*;
 pub use record::*;
 
 pub use codec::{parse_markdown, render_markdown};
@@ -558,7 +560,7 @@ fn file_bytes(path: &Path) -> Result<u64> {
     }
 }
 
-fn directory_bytes(directory: &Path) -> Result<u64> {
+pub(crate) fn directory_bytes(directory: &Path) -> Result<u64> {
     let entries = match fs::read_dir(directory) {
         Ok(entries) => entries,
         Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(0),
@@ -580,14 +582,20 @@ fn directory_bytes(directory: &Path) -> Result<u64> {
 }
 
 fn disposable_bytes(paths: &StorePaths) -> Result<u64> {
-    let mut bytes = if paths.scope == StoreScope::Global {
-        directory_bytes(&paths.cache)?
-    } else {
-        0
-    };
+    let mut bytes = 0;
     let configured_index = index::index_path(paths);
-    let active_index = index::active_index_path(paths)?;
-    if active_index != configured_index {
+    let active_index = index::existing_index_path(paths);
+    if paths.scope == StoreScope::Global {
+        for suffix in ["", "-wal", "-shm"] {
+            bytes += file_bytes(&PathBuf::from(format!(
+                "{}{suffix}",
+                active_index.display()
+            )))?;
+        }
+        if let Some(parent) = active_index.parent() {
+            bytes += file_bytes(&parent.join("projection.lock"))?;
+        }
+    } else if active_index != configured_index {
         for name in ["index.sqlite3", "index.sqlite3-wal", "index.sqlite3-shm"] {
             bytes += file_bytes(&active_index.with_file_name(name))?;
         }

@@ -1,11 +1,11 @@
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, IsTerminal, Read, Write};
 use std::path::Path;
 
 use anyhow::{Context, Result as AnyhowResult, bail};
 use stormbuffer_core::{self as core, StoreScope};
 
-use crate::command::{ImportArgs, PathArgs};
+use crate::command::{DestroyStoreArgs, ImportArgs, PathArgs, VerifyExportArgs};
 use crate::echo::Echo;
 use crate::{report_error, resolve};
 
@@ -79,17 +79,152 @@ pub(super) fn run_import(scope: StoreScope, arguments: ImportArgs, output: &Echo
         Ok(options) => options,
         Err(error) => return report_error(error, output),
     };
+    if arguments.dry_run {
+        return match core::preview_import(&paths, &bundle, &options)
+            .context("could not preview canonical record import")
+        {
+            Ok(preview) => {
+                output.field("Dry run", "yes");
+                for record in &preview.records {
+                    output.line(&format!(
+                        "{} -> {} | {} | {} | {}{}",
+                        record.source_id,
+                        record.target_id,
+                        record.scope,
+                        record.destination,
+                        record.action,
+                        record
+                            .equivalent_record_id
+                            .as_ref()
+                            .map_or_else(String::new, |id| format!(" | equivalent: {id}"))
+                    ));
+                }
+                print_import_report(&preview.report, output);
+                0
+            }
+            Err(error) => report_error(error, output),
+        };
+    }
     match core::import_store(&paths, &bundle, &options)
         .context("could not import canonical records")
     {
         Ok(report) => {
-            output.field("Imported", report.imported);
-            output.field("Skipped", report.skipped);
-            output.field("Overwritten", report.overwritten);
-            output.field("Remapped", report.remapped);
+            print_import_report(&report, output);
             0
         }
         Err(error) => report_error(error, output),
+    }
+}
+
+pub(super) fn run_verify_export(arguments: VerifyExportArgs, output: &Echo) -> i32 {
+    let contents = match read_archive_path(&arguments.path) {
+        Ok(contents) => contents,
+        Err(error) => return report_error(error.context("could not read export archive"), output),
+    };
+    let bundle = match core::decode_export(&contents).and_then(|bundle| {
+        let report = core::verify_export(&bundle)?;
+        Ok(report)
+    }) {
+        Ok(report) => report,
+        Err(error) => return report_error(anyhow::Error::new(error), output),
+    };
+    output.field("Verified", arguments.path);
+    output.field("Format version", bundle.format_version);
+    output.field("Source scope", bundle.source_scope);
+    output.field("Records", bundle.records);
+    0
+}
+
+pub(super) fn run_destroy_store(
+    scope: StoreScope,
+    arguments: DestroyStoreArgs,
+    output: &Echo,
+) -> i32 {
+    let paths = match resolve(scope) {
+        Ok(paths) => paths,
+        Err(error) => return report_error(error, output),
+    };
+    let preview = match core::preview_store_destruction(&paths) {
+        Ok(preview) => preview,
+        Err(error) => return report_error(anyhow::Error::new(error), output),
+    };
+    output.field("Store ID", &preview.store_id);
+    output.field("Scope", &preview.scope);
+    output.field("Root", &preview.root);
+    output.field("Store root bytes", preview.store_root_bytes);
+    output.field("Canonical records", preview.records);
+    output.field("Canonical bytes", preview.canonical_bytes);
+    output.field("Disposable bytes", preview.disposable_bytes);
+
+    if let Some(expected) = arguments.store_id.as_deref() {
+        if expected != preview.store_id {
+            output.error("the supplied --store-id does not match the selected store");
+            return 1;
+        }
+    }
+    if arguments.yes && arguments.store_id.is_none() {
+        output.error("noninteractive destruction requires both --yes and --store-id");
+        return 1;
+    }
+    if !arguments.yes {
+        if !io::stdin().is_terminal() || !io::stdout().is_terminal() || !io::stderr().is_terminal()
+        {
+            output.error("noninteractive destruction requires both --yes and --store-id");
+            return 1;
+        }
+        let mut stderr = io::stderr().lock();
+        let _ = write!(
+            stderr,
+            "Type store ID {} to destroy it (or cancel and use --export first): ",
+            preview.store_id
+        );
+        let _ = stderr.flush();
+        let mut answer = String::new();
+        if let Err(error) = io::stdin().read_line(&mut answer) {
+            return report_error(
+                anyhow::Error::new(error).context("could not read confirmation"),
+                output,
+            );
+        }
+        if answer.trim() != preview.store_id {
+            output.error("store destruction cancelled");
+            return 1;
+        }
+    }
+    match core::destroy_store(
+        &paths,
+        &preview.store_id,
+        core::DestructionAcknowledgement::deliberate(),
+        arguments.export.as_deref(),
+    ) {
+        Ok(()) => {
+            if let Some(destination) = arguments.export.as_deref() {
+                output.field("Exported", destination.display());
+            }
+            output.line(&format!("Destroyed store {}", preview.store_id));
+            0
+        }
+        Err(error) => report_error(
+            anyhow::Error::new(error).context("could not destroy selected store"),
+            output,
+        ),
+    }
+}
+
+fn print_import_report(report: &core::ImportReport, output: &Echo) {
+    output.field("Imported", report.imported);
+    output.field("Skipped", report.skipped);
+    output.field("Overwritten", report.overwritten);
+    output.field("Remapped", report.remapped);
+}
+
+fn read_archive_path(path: &str) -> AnyhowResult<String> {
+    if path == "-" {
+        read_import_archive(io::stdin())
+    } else {
+        fs::File::open(path)
+            .map_err(anyhow::Error::new)
+            .and_then(read_import_archive)
     }
 }
 

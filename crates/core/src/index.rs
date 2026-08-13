@@ -342,7 +342,7 @@ pub struct ProjectionStatus {
     pub last_successful_sync: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct AdvisoryRelationProjection {
     pub left_record_id: String,
     pub right_record_id: String,
@@ -350,6 +350,50 @@ pub struct AdvisoryRelationProjection {
     pub evidence_json: String,
     pub confidence: String,
     pub analyzer_fingerprint: String,
+}
+
+pub fn advisory_relations(paths: &StorePaths) -> crate::Result<Vec<AdvisoryRelationProjection>> {
+    let path = existing_index_path(paths);
+    if !path.is_file() {
+        return Ok(Vec::new());
+    }
+    let connection = Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|source| db_error("open advisory relation projection", source))?;
+    let mut statement = connection
+        .prepare("SELECT left_record_id, right_record_id, relation, evidence_json, confidence, analyzer_fingerprint FROM advisory_relations ORDER BY left_record_id, right_record_id")
+        .map_err(|source| db_error("read advisory relation projection", source))?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(AdvisoryRelationProjection {
+                left_record_id: row.get(0)?,
+                right_record_id: row.get(1)?,
+                relation: row.get(2)?,
+                evidence_json: row.get(3)?,
+                confidence: row.get(4)?,
+                analyzer_fingerprint: row.get(5)?,
+            })
+        })
+        .map_err(|source| db_error("read advisory relation projection", source))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|source| db_error("read advisory relation projection", source))
+}
+
+pub(crate) fn existing_index_path(paths: &StorePaths) -> PathBuf {
+    let configured = index_path(paths);
+    if configured.is_file() || paths.scope != StoreScope::Global {
+        return configured;
+    }
+    let identity = blake3::hash(paths.root.to_string_lossy().as_bytes())
+        .to_hex()
+        .to_string();
+    let fallback = std::env::temp_dir()
+        .join(format!("stormbuffer-projection-{identity}"))
+        .join("index.sqlite3");
+    if fallback.is_file() {
+        fallback
+    } else {
+        configured
+    }
 }
 
 pub fn replace_advisory_relation_projection(

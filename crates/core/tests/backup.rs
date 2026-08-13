@@ -6,7 +6,8 @@ use stormbuffer_core::{
     ExistingRecordPolicy, GcOptions, IdCollisionPolicy, ImportOptions, MAX_EXPORT_ARCHIVE_BYTES,
     RecordRepository, ScopeCollisionPolicy, StoreInitMode, StorePaths, StoreScope, decode_export,
     encode_export, export_store, gc_store, import_store, initialize_store, parse_markdown,
-    render_markdown, write_export_archive,
+    preview_import, preview_store_destruction, render_markdown, verify_export,
+    write_export_archive,
 };
 
 fn temporary_root(name: &str) -> PathBuf {
@@ -214,4 +215,144 @@ fn import_requires_scope_and_id_policies_and_gc_never_touches_records() {
     assert!(record_path.is_file());
 
     fs::remove_dir_all(root).expect("remove temporary root");
+}
+
+#[test]
+fn verification_and_import_preview_are_read_only() {
+    let root = temporary_root("verify-preview");
+    let source_paths = paths(&root.join("source"), StoreScope::Global);
+    let target_paths = paths(&root.join("target"), StoreScope::Global);
+    initialize_store(&source_paths, StoreInitMode::Default).expect("initialize source");
+    initialize_store(&target_paths, StoreInitMode::Default).expect("initialize target");
+    RecordRepository::new(source_paths.clone())
+        .add(fixture())
+        .expect("add fixture");
+    let bundle = export_store(&source_paths).expect("export source");
+
+    let verified = verify_export(&bundle).expect("verify archive");
+    assert_eq!(verified.records, 1);
+    let mut nested = bundle.clone();
+    nested.records[0].path = format!("records/archive/{}.md", fixture().id);
+    verify_export(&nested).expect("safe nested canonical path remains valid");
+    let before = fs::read_dir(&target_paths.records)
+        .expect("read empty records")
+        .count();
+    let preview =
+        preview_import(&target_paths, &bundle, &ImportOptions::default()).expect("preview import");
+    assert_eq!(preview.report.imported, 1);
+    assert_eq!(
+        preview.records[0].destination,
+        format!("records/{}.md", fixture().id)
+    );
+    assert_eq!(
+        fs::read_dir(&target_paths.records)
+            .expect("read records")
+            .count(),
+        before
+    );
+
+    RecordRepository::new(target_paths.clone())
+        .add(fixture())
+        .expect("add colliding fixture");
+    let collision_preview = preview_import(
+        &target_paths,
+        &bundle,
+        &ImportOptions {
+            existing_record: Some(ExistingRecordPolicy::Skip),
+            ..ImportOptions::default()
+        },
+    )
+    .expect("preview collision");
+    assert_eq!(collision_preview.report.skipped, 1);
+    assert_eq!(
+        collision_preview.records[0].equivalent_record_id,
+        Some(fixture().id.to_string())
+    );
+
+    let mut corrupt = bundle;
+    corrupt.records[0].markdown = corrupt.records[0]
+        .markdown
+        .replace("actor = \"user\"", "actor = \"inference\"");
+    let error = verify_export(&corrupt)
+        .expect_err("unsupported inference is not provenance")
+        .to_string();
+    assert!(error.contains("unsupported inference"), "{error}");
+    fs::remove_dir_all(root).expect("remove temporary root");
+}
+
+#[test]
+fn whole_store_destruction_requires_the_exact_stable_identity() {
+    let root = temporary_root("destroy-store");
+    let store_paths = paths(&root, StoreScope::Project);
+    initialize_store(&store_paths, StoreInitMode::Default).expect("initialize store");
+    RecordRepository::new(store_paths.clone())
+        .add(fixture_for_scope(&store_paths))
+        .expect("add fixture");
+    fs::write(store_paths.root.join("unrecognized.data"), "also removed")
+        .expect("write unrecognized store data");
+    let preview = preview_store_destruction(&store_paths).expect("preview destruction");
+    assert!(preview.store_root_bytes > preview.canonical_bytes);
+    let safety_export = root.join("before-destroy.json");
+    let error = stormbuffer_core::destroy_store(
+        &store_paths,
+        "wrong-id",
+        stormbuffer_core::DestructionAcknowledgement::deliberate(),
+        None,
+    )
+    .expect_err("wrong identity must fail")
+    .to_string();
+    assert!(error.contains("store id mismatch"), "{error}");
+    assert!(store_paths.root.is_dir());
+    stormbuffer_core::destroy_store(
+        &store_paths,
+        &preview.store_id,
+        stormbuffer_core::DestructionAcknowledgement::deliberate(),
+        Some(&safety_export),
+    )
+    .expect("destroy selected store");
+    assert!(!store_paths.root.exists());
+    let archive = decode_export(&fs::read_to_string(&safety_export).expect("read safety export"))
+        .expect("decode safety export");
+    assert_eq!(
+        verify_export(&archive)
+            .expect("verify safety export")
+            .records,
+        1
+    );
+    fs::remove_dir_all(root).expect("remove temporary root");
+}
+
+#[test]
+fn global_store_destruction_removes_its_projection_but_preserves_shared_cache_data() {
+    let root = temporary_root("destroy-global-store");
+    let store_paths = paths(&root, StoreScope::Global);
+    initialize_store(&store_paths, StoreInitMode::Default).expect("initialize store");
+    RecordRepository::new(store_paths.clone())
+        .add(fixture_for_scope(&store_paths))
+        .expect("add fixture");
+    fs::create_dir_all(&store_paths.cache).expect("create disposable cache");
+    fs::write(store_paths.cache.join("global.sqlite3"), "disposable")
+        .expect("write projection fixture");
+    fs::create_dir_all(store_paths.cache.join("models")).expect("create model cache");
+    fs::write(store_paths.cache.join("models/shared"), "shared")
+        .expect("write shared cache fixture");
+
+    stormbuffer_core::destroy_store(
+        &store_paths,
+        "global",
+        stormbuffer_core::DestructionAcknowledgement::deliberate(),
+        None,
+    )
+    .expect("destroy global store");
+
+    assert!(!store_paths.root.exists());
+    assert!(!store_paths.cache.join("global.sqlite3").exists());
+    assert!(store_paths.cache.join("models/shared").is_file());
+    fs::remove_dir_all(root).expect("remove temporary root");
+}
+
+fn fixture_for_scope(paths: &StorePaths) -> stormbuffer_core::Record {
+    let mut record = fixture();
+    record.scope = stormbuffer_core::record_scope(paths).expect("selected scope");
+    record
 }

@@ -252,52 +252,23 @@ and verify that a second repair is a no-op.
 
 ### SB-513 — Add backup previews and guarded store destruction
 
-**What to build:** Let users inspect restore consequences before import, verify
-an export independently, and deliberately remove an entire selected store when
-starting over is the intended operation.
-
-**Blocked by:** SB-511
-
-**Acceptance criteria:**
-
-- [ ] `import --dry-run` reports ID, scope, destination, and equivalent-record
-      collisions without writing records or projections.
-- [ ] Export verification checks the archive schema, record integrity, and
-      provenance without importing it.
-- [ ] Whole-store destruction prints the resolved store identity and affected
-      canonical and disposable data before confirmation.
-- [ ] Noninteractive destruction requires both `--yes` and the expected stable
-      store ID, and offers an export before deleting canonical records.
-- [ ] The CLI does not add ambiguous `reset` or `clear` commands.
-
-**Verification:** Preview colliding imports and verify valid and corrupted
-exports. Exercise cancelled, wrong-ID, backed-up, and confirmed destruction in
-isolated global and project stores.
+Added read-only import previews and independent export verification for archive
+schema, record integrity, and provenance. Whole-store destruction now previews
+the selected stable identity and affected canonical and disposable data. Scripts
+must provide both `--yes` and the exact store ID, and may create an export before
+deletion. Tests cover equivalent collisions, corrupt archives, cancellation,
+wrong identities, verified safety exports, and confirmed project and global
+destruction without removing their shared model cache.
 
 ### SB-514 — Add a candidate inbox and read-only memory audit
 
-**What to build:** Provide one review queue for candidate records and an `audit`
-command that reports possible maintenance work with evidence and an explicit
-follow-up command.
-
-**Blocked by:** SB-505, SB-510
-
-**Acceptance criteria:**
-
-- [ ] The candidate inbox filters by age, kind, source, scope, and possible
-      overlap, with human and machine-readable output.
-- [ ] `audit` reports unresolved candidates, broken record links, stale
-      checkpoints, and relation-supported duplicate or refinement candidates.
-- [ ] Each audit finding names its evidence, confidence or deterministic rule,
-      and the existing lifecycle command a person may choose to run.
-- [ ] Running `audit` never edits, approves, rejects, supersedes, archives, or
-      deletes a canonical record.
-- [ ] Any usage-based finding distinguishes missing receipt history from known
-      non-use and remains unavailable until SB-505 supplies that evidence.
-
-**Verification:** Run the candidate inbox and audit against checked-in lifecycle
-and relation fixtures. Snapshot human and JSON findings, then confirm that the
-canonical record tree is unchanged.
+Added a candidate inbox with age, kind, source, scope, and possible-overlap
+filters in human and JSON forms. The read-only audit reports unresolved
+candidates, broken record links, stale checkpoints, and relation-supported
+duplicate or refinement candidates with evidence, confidence or a deterministic
+rule, and an existing lifecycle follow-up. It makes no usage claim without the
+receipt evidence planned in SB-505. Tests cover lifecycle and relation findings,
+both output forms, and byte-for-byte preservation of canonical records.
 
 **Milestone exit:** Agents can propose candidates after high-signal capture
 events without sweeping routine work, explain why they abstained, resume project

@@ -8,6 +8,7 @@ mod backup;
 mod command;
 mod echo;
 mod index;
+mod maintenance;
 mod protocol;
 mod records;
 mod skill;
@@ -47,6 +48,8 @@ where
 
     let machine = matches!(&parsed.command, CliCommand::Status(arguments) if arguments.json)
         || matches!(&parsed.command, CliCommand::Search(arguments) if arguments.json)
+        || matches!(&parsed.command, CliCommand::Inbox(arguments) if arguments.json)
+        || matches!(&parsed.command, CliCommand::Audit(arguments) if arguments.json)
         || matches!(&parsed.command, CliCommand::Context(_))
         || matches!(&parsed.command, CliCommand::Evaluate)
         || matches!(&parsed.command, CliCommand::Invoke(_));
@@ -94,7 +97,11 @@ fn run_command(cli: Cli, output: Echo) -> i32 {
         CliCommand::Reject(arguments) => records::run_reject(scope, arguments, &output),
         CliCommand::Gc(arguments) => index::run_gc(scope, arguments, &output),
         CliCommand::Export(arguments) => backup::run_export(scope, arguments, &output),
+        CliCommand::VerifyExport(arguments) => backup::run_verify_export(arguments, &output),
         CliCommand::Import(arguments) => backup::run_import(scope, arguments, &output),
+        CliCommand::DestroyStore(arguments) => backup::run_destroy_store(scope, arguments, &output),
+        CliCommand::Inbox(arguments) => maintenance::run_inbox(scope, arguments, &output),
+        CliCommand::Audit(arguments) => maintenance::run_audit(scope, arguments, &output),
         CliCommand::Skill(arguments) => match arguments.command {
             SkillCommand::Install(arguments) => skill::run_install(scope, arguments, &output),
         },
