@@ -363,7 +363,7 @@ fn prepare_retrieval_stores(
     Some(stores)
 }
 
-fn configured_embedder() -> AnyhowResult<Option<Box<dyn core::Embedder>>> {
+pub(super) fn configured_embedder() -> AnyhowResult<Option<Box<dyn core::Embedder>>> {
     if !semantic_model_enabled() {
         return Ok(None);
     }

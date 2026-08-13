@@ -7,7 +7,7 @@ use stormbuffer_core::{self as core, StoreScope};
 
 use crate::command::{InvokeArgs, McpArgs};
 use crate::echo::Echo;
-use crate::{FAILURE, resolve};
+use crate::{FAILURE, index::configured_embedder, resolve};
 
 pub(super) fn run_mcp(scope: StoreScope, arguments: McpArgs, output: &Echo) -> i32 {
     if !arguments.stdio {
@@ -64,13 +64,27 @@ pub(super) fn run_invoke(scope: StoreScope, arguments: InvokeArgs, output: &Echo
         }
     };
     let mut input = Vec::new();
-    let result = match io::stdin()
+    let input_result = io::stdin()
         .take((core::MAX_INVOKE_INPUT + 1) as u64)
-        .read_to_end(&mut input)
+        .read_to_end(&mut input);
+    let request_is_object =
+        serde_json::from_slice::<Value>(&input).is_ok_and(|value| value.is_object());
+    let embedder = if input_result.is_ok()
+        && input.len() <= core::MAX_INVOKE_INPUT
+        && request_is_object
+        && matches!(arguments.operation.as_str(), "search" | "context")
     {
-        Ok(_) if input.len() <= core::MAX_INVOKE_INPUT => {
-            core::invoke_request(&paths, &arguments.operation, &input)
-        }
+        configured_embedder().ok().flatten()
+    } else {
+        None
+    };
+    let result = match input_result {
+        Ok(_) if input.len() <= core::MAX_INVOKE_INPUT => core::invoke_request_with_embedder(
+            &paths,
+            &arguments.operation,
+            &input,
+            embedder.as_deref(),
+        ),
         Ok(_) => Err(core::InvokeFailure::new(
             "input_too_large",
             "request exceeds the bounded input limit",

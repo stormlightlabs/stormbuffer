@@ -11,7 +11,9 @@ pub use transport::{run_stdio, run_stdio_with_config};
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use rmcp::model::JsonObject;
     use stormbuffer_core as core;
@@ -68,14 +70,16 @@ mod tests {
 
     #[test]
     fn writes_are_denied_and_cancellation_is_observed() {
-        let result = tools::call(&paths(), false, "archive", JsonObject::new(), false).unwrap();
+        let result =
+            tools::call(&paths(), false, "archive", JsonObject::new(), false, None).unwrap();
         assert_eq!(result.is_error, Some(true));
         assert_eq!(
             result.structured_content.as_ref().unwrap()["error"]["code"],
             "permission_denied"
         );
 
-        let error = tools::call(&paths(), true, "context", JsonObject::new(), true).unwrap_err();
+        let error =
+            tools::call(&paths(), true, "context", JsonObject::new(), true, None).unwrap_err();
         assert!(error.to_string().contains("cancelled"));
     }
 
@@ -83,5 +87,51 @@ mod tests {
     fn malformed_invocation_is_rejected_by_core() {
         let error = core::invoke_request(&paths(), "search", b"not-json").unwrap_err();
         assert_eq!(error.code(), "invalid_json");
+    }
+
+    #[test]
+    fn recall_uses_the_supplied_embedder_for_hybrid_retrieval() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("stormbuffer-mcp-hybrid-{suffix}"));
+        let paths = core::StorePaths {
+            scope: core::StoreScope::Global,
+            records: root.join("records"),
+            cache: root.join("cache"),
+            root: root.clone(),
+        };
+        core::initialize_store(&paths, core::StoreInitMode::Default).expect("initialize store");
+        let remembered = core::invoke_request(
+            &paths,
+            "remember",
+            br#"{"version":1,"title":"Hybrid MCP memory","kind":"fact","body":"A pulsar powers the MCP fixture.","source":{"kind":"document","reference":"mcp-test","actor":"test"}}"#,
+        )
+        .expect("remember fixture");
+        let id = remembered["record_id"]
+            .as_str()
+            .expect("record ID")
+            .parse()
+            .expect("valid record ID");
+        core::RecordRepository::new(paths.clone())
+            .approve(id)
+            .expect("approve fixture");
+        let embedder = core::DeterministicEmbedder::new("mcp-semantic-v1", 24)
+            .expect("deterministic embedder");
+        let arguments =
+            serde_json::from_value(serde_json::json!({"query":"pulsar MCP","budget":128}))
+                .expect("tool arguments");
+
+        let result = tools::call(&paths, false, "context", arguments, false, Some(&embedder))
+            .expect("recall result");
+        let receipt = &result
+            .structured_content
+            .as_ref()
+            .expect("structured result")["result"]["receipt"];
+        assert_eq!(receipt["retrieval_mode"], "hybrid");
+        assert_eq!(receipt["embedding_version"], "mcp-semantic-v1");
+
+        fs::remove_dir_all(root).expect("remove temporary store");
     }
 }

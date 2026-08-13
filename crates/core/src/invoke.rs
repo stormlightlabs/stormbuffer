@@ -53,12 +53,21 @@ pub fn invoke_request(
     operation: &str,
     input: &[u8],
 ) -> Result<Value, InvokeFailure> {
+    invoke_request_with_embedder(paths, operation, input, None)
+}
+
+pub fn invoke_request_with_embedder(
+    paths: &crate::StorePaths,
+    operation: &str,
+    input: &[u8],
+    embedder: Option<&dyn crate::Embedder>,
+) -> Result<Value, InvokeFailure> {
     let value: Value = serde_json::from_slice(input)
         .map_err(|_| InvokeFailure::new("invalid_json", "stdin must contain one JSON object"))?;
     let map = value
         .as_object()
         .ok_or_else(|| InvokeFailure::new("invalid_request", "request must be a JSON object"))?;
-    invoke_operation(paths, operation, map)
+    invoke_operation_with_embedder(paths, operation, map, embedder)
 }
 
 pub fn invoke_operation(
@@ -66,10 +75,19 @@ pub fn invoke_operation(
     operation: &str,
     map: &Map<String, Value>,
 ) -> Result<Value, InvokeFailure> {
+    invoke_operation_with_embedder(paths, operation, map, None)
+}
+
+pub fn invoke_operation_with_embedder(
+    paths: &crate::StorePaths,
+    operation: &str,
+    map: &Map<String, Value>,
+    embedder: Option<&dyn crate::Embedder>,
+) -> Result<Value, InvokeFailure> {
     request_map(map, operation)?;
     match operation {
-        "search" => invoke_search(paths, map),
-        "context" => invoke_context(paths, map),
+        "search" => invoke_search(paths, map, embedder),
+        "context" => invoke_context(paths, map, embedder),
         "get" => invoke_get(paths, map),
         "remember" => invoke_remember(paths, map),
         "update" => invoke_update(paths, map),
@@ -244,7 +262,8 @@ fn invocation_scope(
 fn invocation_stores(
     paths: &crate::StorePaths,
     allowed_scopes: &[String],
-) -> Result<Vec<crate::StorePaths>, InvokeFailure> {
+    embedder: Option<&dyn crate::Embedder>,
+) -> Result<(Vec<crate::StorePaths>, bool), InvokeFailure> {
     let cwd = std::env::current_dir()
         .map_err(|_| InvokeFailure::new("internal_error", "could not resolve selected stores"))?;
     let mut stores =
@@ -253,6 +272,7 @@ fn invocation_stores(
         store.scope != crate::StoreScope::Global
             || allowed_scopes.iter().any(|scope| scope == "global")
     });
+    let mut semantic_ready = embedder.is_some();
     for store in &stores {
         let report = crate::sync_store(store).map_err(|error| map_core_error(&error))?;
         if !report.is_complete() {
@@ -261,13 +281,26 @@ fn invocation_stores(
                 "one or more canonical records are invalid",
             ));
         }
+        if let Some(embedder) = embedder {
+            if let Err(error) = crate::rebuild_vector_index(store, embedder) {
+                if matches!(
+                    error,
+                    crate::Error::Embedding { .. } | crate::Error::IndexBusy
+                ) {
+                    semantic_ready = false;
+                } else {
+                    return Err(map_core_error(&error));
+                }
+            }
+        }
     }
-    Ok(stores)
+    Ok((stores, semantic_ready))
 }
 
 fn invoke_search(
     paths: &crate::StorePaths,
     map: &Map<String, Value>,
+    embedder: Option<&dyn crate::Embedder>,
 ) -> Result<Value, InvokeFailure> {
     ensure_keys(map, &["query", "limit", "scope", "scopes", "access"])?;
     let query = required_string(map, "query")?;
@@ -277,14 +310,26 @@ fn invoke_search(
     let limit = bounded_number(map, "limit", 20, MAX_INVOKE_LIMIT)?;
     let scopes = invocation_scope(paths, map)?;
     let access = invocation_access(map)?;
-    let stores = invocation_stores(paths, &scopes)?;
+    let (stores, semantic_ready) = invocation_stores(paths, &scopes, embedder)?;
     let mut options = crate::SearchOptions::for_store(paths);
     options.limit = limit;
     options.allowed_scopes = Some(scopes);
     options.allowed_access = Some(access);
-    options.mode = crate::RetrievalMode::Lexical;
-    let results =
-        crate::search_stores(&stores, query, options).map_err(|error| map_core_error(&error))?;
+    let results = if let Some(embedder) = embedder.filter(|_| semantic_ready) {
+        options.mode = crate::RetrievalMode::Hybrid;
+        match crate::search_stores_with_embedder(&stores, query, options.clone(), embedder) {
+            Ok(results) => Ok(results),
+            Err(crate::Error::Embedding { .. }) => {
+                options.mode = crate::RetrievalMode::Lexical;
+                crate::search_stores(&stores, query, options)
+            }
+            Err(error) => Err(error),
+        }
+    } else {
+        options.mode = crate::RetrievalMode::Lexical;
+        crate::search_stores(&stores, query, options)
+    }
+    .map_err(|error| map_core_error(&error))?;
     Ok(Value::Array(
         results.iter().map(invoke_search_result).collect(),
     ))
@@ -293,6 +338,7 @@ fn invoke_search(
 fn invoke_context(
     paths: &crate::StorePaths,
     map: &Map<String, Value>,
+    embedder: Option<&dyn crate::Embedder>,
 ) -> Result<Value, InvokeFailure> {
     ensure_keys(
         map,
@@ -306,14 +352,30 @@ fn invoke_context(
     let budget = bounded_number(map, "budget", 512, MAX_INVOKE_BUDGET)?;
     let scopes = invocation_scope(paths, map)?;
     let access = invocation_access(map)?;
-    let stores = invocation_stores(paths, &scopes)?;
+    let (stores, semantic_ready) = invocation_stores(paths, &scopes, embedder)?;
     let mut search = crate::SearchOptions::for_store(paths);
     search.limit = limit;
     search.allowed_scopes = Some(scopes);
     search.allowed_access = Some(access);
-    search.mode = crate::RetrievalMode::Lexical;
-    let result = crate::context_stores(&stores, query, crate::ContextOptions { budget, search })
-        .map_err(|error| map_core_error(&error))?;
+    let options = crate::ContextOptions { budget, search };
+    let result = if let Some(embedder) = embedder.filter(|_| semantic_ready) {
+        let mut options = options;
+        options.search.mode = crate::RetrievalMode::Hybrid;
+        match crate::context_stores_with_embedder(&stores, query, options.clone(), embedder) {
+            Ok(result) => Ok(result),
+            Err(crate::Error::Embedding { .. }) => {
+                let mut options = options;
+                options.search.mode = crate::RetrievalMode::Lexical;
+                crate::context_stores(&stores, query, options)
+            }
+            Err(error) => Err(error),
+        }
+    } else {
+        let mut options = options;
+        options.search.mode = crate::RetrievalMode::Lexical;
+        crate::context_stores(&stores, query, options)
+    }
+    .map_err(|error| map_core_error(&error))?;
     serde_json::to_value(result)
         .map_err(|_| InvokeFailure::new("internal_error", "could not encode context result"))
 }
@@ -323,7 +385,7 @@ fn invoke_get(paths: &crate::StorePaths, map: &Map<String, Value>) -> Result<Val
     let id = parse_protocol_id(required_string(map, "id")?)?;
     let scopes = invocation_scope(paths, map)?;
     let access = invocation_access(map)?;
-    let stores = invocation_stores(paths, &scopes)?;
+    let (stores, _) = invocation_stores(paths, &scopes, None)?;
     let mut denied = None;
     for store in stores {
         match crate::RecordRepository::new(store).find_allowed(id, &scopes, &access) {
@@ -992,7 +1054,7 @@ pub fn invoke_scope_records(
     }
     let request = Map::from_iter([(String::from("scope"), Value::String(scope.to_owned()))]);
     let scopes = invocation_scope(paths, &request)?;
-    let stores = invocation_stores(paths, &scopes)?;
+    let (stores, _) = invocation_stores(paths, &scopes, None)?;
     let mut records = Vec::new();
     for store in stores {
         for stored in crate::RecordRepository::new(store)

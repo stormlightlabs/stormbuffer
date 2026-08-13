@@ -6,8 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use stormbuffer_core::{
     Access, ContextOptions, DeterministicEmbedder, Embedder, Embedding, Error, RetrievalMode,
     SearchOptions, StoreInitMode, StorePaths, StoreScope, context_stores_with_embedder, index_path,
-    initialize_store, rebuild_vector_index, record_scope, reindex_store_with_embedder,
-    search_stores_with_embedder, sync_store,
+    initialize_store, invoke_request, invoke_request_with_embedder, rebuild_vector_index,
+    record_scope, reindex_store_with_embedder, search_stores_with_embedder, sync_store,
 };
 
 struct TempStore {
@@ -59,6 +59,114 @@ impl Drop for TempStore {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
     }
+}
+
+#[test]
+fn invoke_search_and_context_use_hybrid_retrieval_when_an_embedder_is_supplied() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    let remembered = invoke_request(
+        &paths,
+        "remember",
+        br#"{"version":1,"title":"Hybrid protocol memory","kind":"fact","body":"A quasar powers the protocol fixture.","source":{"kind":"document","reference":"semantic-test","actor":"test"}}"#,
+    )
+    .expect("remember fixture");
+    let id = remembered["record_id"]
+        .as_str()
+        .expect("fixture id")
+        .parse()
+        .expect("valid fixture id");
+    stormbuffer_core::RecordRepository::new(paths.clone())
+        .approve(id)
+        .expect("approve fixture");
+    let embedder = DeterministicEmbedder::new("semantic-v1", 24).expect("embedder");
+
+    let search = invoke_request_with_embedder(
+        &paths,
+        "search",
+        br#"{"version":1,"query":"quasar protocol"}"#,
+        Some(&embedder),
+    )
+    .expect("hybrid invocation search");
+    let reasons = search[0]["match_reasons"]
+        .as_array()
+        .expect("match reasons");
+    assert!(reasons.iter().any(|reason| {
+        reason
+            .as_str()
+            .is_some_and(|reason| reason.starts_with("lexical:"))
+    }));
+    assert!(reasons.iter().any(|reason| {
+        reason
+            .as_str()
+            .is_some_and(|reason| reason.starts_with("vector:"))
+    }));
+
+    let context = invoke_request_with_embedder(
+        &paths,
+        "context",
+        br#"{"version":1,"query":"quasar protocol","budget":128}"#,
+        Some(&embedder),
+    )
+    .expect("hybrid invocation context");
+    assert_eq!(context["receipt"]["retrieval_mode"], "hybrid");
+    assert_eq!(context["receipt"]["embedding_version"], "semantic-v1");
+}
+
+struct UnavailableEmbedder;
+
+impl Embedder for UnavailableEmbedder {
+    fn model_version(&self) -> &str {
+        "unavailable-v1"
+    }
+
+    fn model_checksum(&self) -> &str {
+        "unavailable"
+    }
+
+    fn dimension(&self) -> usize {
+        24
+    }
+
+    fn embed(&self, _text: &str) -> stormbuffer_core::Result<Embedding> {
+        Err(Error::Embedding {
+            operation: "embed fixture",
+            message: "model unavailable".to_owned(),
+        })
+    }
+}
+
+#[test]
+fn invoke_context_falls_back_to_lexical_when_semantic_indexing_is_unavailable() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    let remembered = invoke_request(
+        &paths,
+        "remember",
+        br#"{"version":1,"title":"Fallback memory","kind":"fact","body":"Lexical fallback remains available.","source":{"kind":"document","reference":"semantic-test","actor":"test"}}"#,
+    )
+    .expect("remember fixture");
+    let id = remembered["record_id"]
+        .as_str()
+        .expect("fixture id")
+        .parse()
+        .expect("valid fixture id");
+    stormbuffer_core::RecordRepository::new(paths.clone())
+        .approve(id)
+        .expect("approve fixture");
+
+    let context = invoke_request_with_embedder(
+        &paths,
+        "context",
+        br#"{"version":1,"query":"lexical fallback","budget":128}"#,
+        Some(&UnavailableEmbedder),
+    )
+    .expect("lexical fallback");
+    assert_eq!(context["receipt"]["retrieval_mode"], "lexical");
+    assert!(context["receipt"]["embedding_version"].is_null());
+    assert_eq!(context["blocks"][0]["title"], "Fallback memory");
 }
 
 fn write_record(paths: &StorePaths, id: &str, scope: &str, kind: &str, status: &str, body: &str) {

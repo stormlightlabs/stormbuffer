@@ -259,6 +259,12 @@ printf '%s\n' '{"version":1,"query":"release","budget":400}' \\
   | sbuf --project invoke context
 ```
 
+`search` and `context` combine lexical and semantic matches when the verified
+local model is available. If the model cannot be loaded or the semantic index
+cannot be refreshed, the request still runs with lexical retrieval. A context
+receipt reports the `retrieval_mode` used and includes `embedding_version` for
+hybrid results.
+
 Version 1 supports `search`, `context`, `get`, `remember`, `update`, `propose`,
 `supersede`, and `archive`.
 Success is `{ "version": 1, "operation": "...", "ok": true, "result": ... }`.

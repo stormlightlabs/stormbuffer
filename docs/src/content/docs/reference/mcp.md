@@ -10,13 +10,19 @@ order: 4
 2.0 and the [official MCP Rust SDK](https://github.com/modelcontextprotocol/rust-sdk)
 (`rmcp = 2.1.0`, with the server and stdio transport features). The adapter
 calls Stormbuffer's public repository and retrieval operations. It does not
-open SQLite directly, edit arbitrary files, or run a model.
+open SQLite directly or edit arbitrary files. It loads the verified local model
+only when `memory_recall` needs semantic retrieval.
 
 ## Before connecting
 
 Install Stormbuffer and initialize the store you want the adapter to use. See
 [Installation](/docs/installation/) and the [quick start](/docs/quick-start/).
 Connecting an MCP host never initializes a store or creates records.
+
+The adapter can start without a local model. In that case, `memory_recall`
+falls back to lexical retrieval, while resources and the other tools remain
+available. Run `sbuf init` while online and restart the adapter to enable hybrid
+retrieval after a recall has detected that the model is unavailable.
 
 ## Choose a store view and write access
 
@@ -139,7 +145,10 @@ paths and refuse records outside the selected scope or access class.
 | `memory_forget`   | `archive`  | write grant required |
 
 `memory_recall` accepts a query, result limit, token budget, and optional scope
-filters. It returns context blocks and a receipt. MCP has no separate search
+filters. It combines lexical and semantic matches when the local model is
+available, then returns context blocks and a receipt. If semantic retrieval is
+unavailable, it falls back to lexical matches. The receipt's `retrieval_mode`
+and `embedding_version` fields show which path ran. MCP has no separate search
 tool. `memory_get` reads one record by ID. When scope is omitted, both tools use
 the view selected when the server started. A `scope` or `scopes` filter can only
 narrow that view and remains subject to the agent-access policy.

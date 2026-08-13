@@ -8,14 +8,19 @@ use rmcp::{
     service::{RequestContext, RoleServer},
     tool, tool_handler, tool_router,
 };
+use std::sync::{Arc, OnceLock};
 use stormbuffer_core as core;
 
 use crate::{config, resources, schemas, tools};
 
-#[derive(Clone, Debug)]
+type EmbedderCache = Arc<OnceLock<Option<Arc<dyn core::Embedder>>>>;
+
+#[derive(Clone)]
 pub struct McpServer {
     paths: core::StorePaths,
     allow_writes: bool,
+    embedder: Option<Arc<dyn core::Embedder>>,
+    default_embedder: Option<EmbedderCache>,
 }
 
 impl McpServer {
@@ -23,6 +28,30 @@ impl McpServer {
         Self {
             paths,
             allow_writes,
+            embedder: None,
+            default_embedder: None,
+        }
+    }
+
+    pub fn with_default_embedder(paths: core::StorePaths, allow_writes: bool) -> Self {
+        Self {
+            paths,
+            allow_writes,
+            embedder: None,
+            default_embedder: Some(Arc::new(OnceLock::new())),
+        }
+    }
+
+    pub fn with_embedder(
+        paths: core::StorePaths,
+        allow_writes: bool,
+        embedder: Arc<dyn core::Embedder>,
+    ) -> Self {
+        Self {
+            paths,
+            allow_writes,
+            embedder: Some(embedder),
+            default_embedder: None,
         }
     }
 
@@ -140,14 +169,32 @@ impl McpServer {
     ) -> Result<CallToolResult, RmcpError> {
         let paths = self.paths.clone();
         let allow_writes = self.allow_writes;
+        let embedder = self.embedder.clone();
+        let default_embedder = self.default_embedder.clone();
         let cancellation = context.ct.clone();
         let operation_task = tokio::task::spawn_blocking(move || {
+            let embedder = if operation == "context" {
+                embedder.or_else(|| {
+                    default_embedder.and_then(|slot| {
+                        slot.get_or_init(|| {
+                            core::ensure_default_model(&paths).ok()?;
+                            core::LocalEmbedder::from_default_cache(&paths)
+                                .ok()
+                                .map(|embedder| Arc::new(embedder) as Arc<dyn core::Embedder>)
+                        })
+                        .clone()
+                    })
+                })
+            } else {
+                None
+            };
             tools::call(
                 &paths,
                 allow_writes,
                 operation,
                 arguments,
                 cancellation.is_cancelled(),
+                embedder.as_deref(),
             )
         });
         tokio::select! {
