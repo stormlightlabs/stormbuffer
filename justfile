@@ -4,7 +4,7 @@ install:
 
 # deploy the kit doc site & then push
 deploy-docs:
-    pnpm --dir packages/docs deploy && git push
+    pnpm --dir packages/docs run deploy && git push
 
 # reinstall the codex plugin
 codex:
