@@ -11,15 +11,22 @@ The Stormbuffer CLI is installed as `sbuf`.
 
 ## Choose a store
 
-Stormbuffer uses a global store by default. Add `--project` to use the nearest `.sbuf/`
-directory instead:
+Stormbuffer uses the global store by default. Add `--project` for a project view:
 
 ```sh
 sbuf --project root
 ```
 
-Use `--global` when an agent configuration should show the global scope
-explicitly.
+The project view reads the nearest `.sbuf/` store and applicable global memory.
+Use `--local` when a command must stay inside the nearest `.sbuf/` store and
+must not open the global store:
+
+```text
+sbuf --local search "private project note"
+```
+
+`--global`, `--project`, and `--local` are mutually exclusive. Use `--global`
+when a command or agent configuration should name the default explicitly.
 
 ## Install an agent skill
 
@@ -83,11 +90,13 @@ sbuf --project root
 
 ## Inspect a store
 
-`status` reports the selected scope, root path, initialization state, visibility, and record count:
+`status` reports the selected view, root path, initialization state, visibility,
+record count, and project identity when applicable:
 
 ```sh
 sbuf status
 sbuf --project status
+sbuf --local status
 ```
 
 Use `--json` when another program will consume the result:
@@ -96,7 +105,7 @@ Use `--json` when another program will consume the result:
 sbuf --project status --json
 ```
 
-The global `--project` option can appear before the command.
+The store-selection option appears before the command.
 
 Add `--shared` only to `--project init` to opt into tracked project memory.
 
@@ -198,10 +207,11 @@ sbuf --project reject <candidate-id>
 ```
 
 A proposal must have attributable sources. Stormbuffer reports one of `accepted`,
-`duplicate_of`, `conflicts_with`, `requires_approval`, or `invalid`. Duplicate
-proposals are not written. Conflicting proposals remain as candidates so both claims are
-available for review. Use `supersede` followed by approval instead of rewriting the stored
-record.
+`duplicate_of`, `possible_overlap`, `requires_approval`, or `invalid`. Exact
+duplicates are not written. A different body with the same title, kind, and
+scope is only a possible overlap; Stormbuffer keeps the candidate so a person
+can compare both records. Use `supersede` followed by approval when the new
+record should replace an earlier one.
 
 ## Invoke the JSON protocol
 
@@ -273,8 +283,8 @@ corpora:
 sbuf evaluate
 ```
 
-The JSON report includes recall, ranking, scope and lifecycle errors, conflicts,
-and context cost. Its usefulness comparison shows results with and without
+The JSON report includes recall, ranking, scope and lifecycle errors, reviewed
+relation pairs, and context cost. Its usefulness comparison shows results with and without
 receipt feedback, including missing memory, retrieval misses, ignored results,
 stale or incorrect records, later reuse, and proposal review outcomes. The
 capture-policy report scores host assessments for correct abstention, proposal

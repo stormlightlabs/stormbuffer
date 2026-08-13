@@ -58,13 +58,23 @@ citations while selecting only what fits the requested budget.
 
 ## Use a project store
 
-When knowledge belongs to one repository, run the same commands with
-`--project` from that repository:
+When knowledge belongs to one repository, initialize its store from that
+repository. `--project` searches that store together with applicable global
+memory:
 
 ```sh
 sbuf --project init
 sbuf --project status
 ```
+
+Use `--local` when you need strict repository isolation:
+
+```sh
+sbuf --local search "repository-only note"
+```
+
+The local view never opens the global store. Both views use the same project
+identity, which remains stable if the repository directory is renamed.
 
 See [The memory loop](/docs/concepts/memory-workflow/) for what belongs in each
 store. [Backup and recovery](/docs/workflows/backup-recovery/) explains how to

@@ -58,7 +58,8 @@ Place the copied `SKILL.md` in the skill directory used by your agent.
 
 The skill expects `sbuf` to be installed and a store to be initialized.
 
-The downloadable skill uses `--project` to select the nearest `.sbuf/` store.
+The downloadable skill uses `--project` for the nearest project's composed
+project-and-global view.
 Install it only for repositories where the agent should use project memory.
 
 ## Verification

@@ -316,24 +316,25 @@ fn reconcile(paths: &core::StorePaths, output: &Echo) -> bool {
 }
 
 fn prepare_retrieval_stores(
-    scope: StoreScope,
+    _scope: StoreScope,
     paths: core::StorePaths,
     output: &Echo,
     embedder: Option<&dyn core::Embedder>,
 ) -> Option<Vec<core::StorePaths>> {
-    let mut stores = vec![paths];
-    if scope == StoreScope::Project {
-        let global = match resolve(StoreScope::Global) {
-            Ok(paths) => paths,
-            Err(error) => {
-                report_error(error, output);
-                return None;
-            }
-        };
-        if global.root.join("store.toml").is_file() {
-            stores.push(global);
+    let cwd = match std::env::current_dir() {
+        Ok(cwd) => cwd,
+        Err(error) => {
+            report_error(anyhow::Error::new(error), output);
+            return None;
         }
-    }
+    };
+    let stores = match core::retrieval_stores(&paths, &cwd) {
+        Ok(stores) => stores,
+        Err(error) => {
+            report_error(anyhow::Error::new(error), output);
+            return None;
+        }
+    };
     if !stores.iter().all(|paths| reconcile(paths, output)) {
         return None;
     }

@@ -112,15 +112,17 @@ impl Default for SearchOptions {
 impl SearchOptions {
     /// Builds the default scope policy for a store.
     ///
-    /// Project stores search their own scope and the global scope; global stores search only the
-    /// global scope.
+    /// Project views include applicable global records. Local and global views stay within their
+    /// selected store.
     pub fn for_store(paths: &StorePaths) -> Self {
         let current_scope = current_scope(paths);
         let mut allowed_scopes = Vec::new();
         if let Some(scope) = current_scope.clone() {
             allowed_scopes.push(scope);
         }
-        if !allowed_scopes.iter().any(|scope| scope == "global") {
+        if paths.scope == StoreScope::Project
+            && !allowed_scopes.iter().any(|scope| scope == "global")
+        {
             allowed_scopes.push("global".to_owned());
         }
         Self {
@@ -355,7 +357,7 @@ struct ProjectedRecord {
 pub fn index_path(paths: &StorePaths) -> PathBuf {
     match paths.scope {
         StoreScope::Global => paths.cache.join("global.sqlite3"),
-        StoreScope::Project => paths.root.join("index.sqlite3"),
+        StoreScope::Project | StoreScope::Local => paths.root.join("index.sqlite3"),
     }
 }
 
@@ -727,6 +729,7 @@ pub fn search_stores(
     options.mode = RetrievalMode::Lexical;
     let mut hits = Vec::new();
     for paths in stores {
+        crate::record_scope(paths)?;
         let index = Index::open_at(&active_index_path(paths)?)?;
         hits.extend(index.search_hits(paths, query, &options)?);
     }
@@ -752,6 +755,7 @@ pub fn search_stores_with_embedder(
     let mut lexical = Vec::new();
     let mut semantic = Vec::new();
     for paths in stores {
+        crate::record_scope(paths)?;
         let index = Index::open_at(&active_index_path(paths)?)?;
         if options.mode != RetrievalMode::Semantic {
             let mut lexical_options = options.clone();
@@ -1426,6 +1430,7 @@ impl Index {
     }
 
     fn sync_canonical(&mut self, paths: &StorePaths) -> crate::Result<SyncReport> {
+        let expected_scope = crate::record_scope(paths)?;
         let files = collect_markdown_paths(&paths.records)?;
         let projected = self.projected_records()?;
         let by_path: HashMap<_, _> = projected
@@ -1452,6 +1457,16 @@ impl Index {
                     continue;
                 }
             };
+            if record.scope != expected_scope {
+                report.invalid_files.push(SyncInvalidFile {
+                    path: path_string.clone(),
+                    error: "record is outside the selected store scope".to_owned(),
+                });
+                if self.delete_projection_by_path(&path_string)? {
+                    report.removed += 1;
+                }
+                continue;
+            }
             if let Some(first) = seen_ids.insert(record.id, path.clone()) {
                 report.invalid_files.push(SyncInvalidFile {
                     path: path_string.clone(),
@@ -2015,27 +2030,9 @@ fn fingerprint_value(hasher: &mut blake3::Hasher, value: &str) {
 }
 
 fn current_scope(paths: &StorePaths) -> Option<String> {
-    match paths.scope {
-        StoreScope::Global => Some("global".to_owned()),
-        StoreScope::Project => {
-            let name = paths
-                .root
-                .parent()
-                .and_then(Path::file_name)
-                .and_then(|value| value.to_str())?;
-            let sanitized: String = name
-                .chars()
-                .map(|character| {
-                    if character.is_whitespace() || character == ':' || character.is_control() {
-                        '-'
-                    } else {
-                        character
-                    }
-                })
-                .collect();
-            (!sanitized.is_empty()).then(|| format!("project:{sanitized}"))
-        }
-    }
+    crate::record_scope(paths)
+        .ok()
+        .map(|scope| scope.as_str().to_owned())
 }
 
 fn scope_rank(scope: &str, current: Option<&str>) -> u8 {

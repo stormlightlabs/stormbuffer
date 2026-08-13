@@ -30,7 +30,7 @@ pub(crate) fn run_install(scope: StoreScope, arguments: SkillInstallArgs, output
 fn install(scope: StoreScope, directory: &Path, force: bool) -> Result<PathBuf> {
     let (skill_directory, contents) = match scope {
         StoreScope::Global => ("stormbuffer-global-memory", global_skill()),
-        StoreScope::Project => ("stormbuffer-memory", PROJECT_SKILL.to_owned()),
+        StoreScope::Project | StoreScope::Local => ("stormbuffer-memory", PROJECT_SKILL.to_owned()),
     };
     let destination = directory.join(skill_directory).join(SKILL_FILE);
 

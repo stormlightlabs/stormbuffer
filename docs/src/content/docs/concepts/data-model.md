@@ -32,7 +32,7 @@ format_version = 1
 id = "01989af2-4305-7b19-88b1-e8ae4ea9a02b"
 title = "Keep project memory out of source control"
 kind = "decision"
-scope = "project:stormbuffer"
+scope = "project:01989af2-4305-7b19-88b1-e8ae4ea9a03b"
 status = "active"
 access = "agent"
 created_at = "2026-08-05T20:09:00-05:00"
@@ -53,7 +53,7 @@ Project memory is private unless the team chooses to share it.
 - `format_version` is required and must be `1`.
 - Unknown frontmatter fields are rejected instead of being silently discarded.
 - IDs are non-nil UUIDs.
-- Scopes are `global` or `project:<name>`, access is `human` or `agent`, and source kinds
+- Scopes are `global` or `project:<project-id>`, access is `human` or `agent`, and source kinds
   are `conversation`, `document`, `issue`, or `url`.
 - Timestamps use RFC 3339 and `updated_at` cannot precede `created_at`.
 
@@ -62,6 +62,11 @@ and `archived → active` for restore. Superseded records are terminal.
 
 The body is readable Markdown and is preserved exactly through parse/render round
 trips, while frontmatter gives Stormbuffer the fields it needs for policy and retrieval.
+
+For a project store, `.sbuf/store.toml` holds the stable project ID used in
+record scopes and a separate editable project name. Renaming the repository or
+changing that display name does not change its identity. Back up `store.toml`
+with the Markdown records; the SQLite index can be rebuilt from them.
 
 ## Lifecycle and boundaries
 

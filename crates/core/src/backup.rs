@@ -6,9 +6,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::repository::{RecordRepository, StoredRecord, write_atomic};
-use crate::{
-    Error, Record, RecordId, RecordStatus, StorePaths, StoreScope, parse_markdown, render_markdown,
-};
+use crate::{Error, Record, RecordId, RecordStatus, StorePaths, parse_markdown, render_markdown};
 
 pub const EXPORT_FORMAT_VERSION: u32 = 1;
 pub const MAX_EXPORT_ARCHIVE_BYTES: usize = 16 * 1024 * 1024;
@@ -217,7 +215,7 @@ pub fn export_store(paths: &StorePaths) -> crate::Result<ExportBundle> {
     exported.sort_by(|left, right| left.path.cmp(&right.path));
     Ok(ExportBundle {
         format_version: EXPORT_FORMAT_VERSION,
-        source_scope: expected_scope(paths),
+        source_scope: expected_scope(paths)?,
         records: exported,
     })
 }
@@ -285,7 +283,7 @@ pub fn import_store(
         .iter()
         .map(|stored| (stored.record().id, stored.clone()))
         .collect();
-    let expected_scope = expected_scope(paths);
+    let expected_scope = expected_scope(paths)?;
     let mut archive_ids = HashSet::new();
     let mut plans = Vec::new();
     let mut report = ImportReport::default();
@@ -564,36 +562,8 @@ fn validate_archive_path(index: usize, path: &str) -> crate::Result<()> {
     }
 }
 
-fn expected_scope(paths: &StorePaths) -> String {
-    match paths.scope {
-        StoreScope::Global => "global".to_owned(),
-        StoreScope::Project => {
-            let name = paths
-                .root
-                .parent()
-                .and_then(Path::file_name)
-                .and_then(|name| name.to_str())
-                .unwrap_or("local");
-            let sanitized: String = name
-                .chars()
-                .map(|character| {
-                    if character.is_whitespace() || character == ':' || character.is_control() {
-                        '-'
-                    } else {
-                        character
-                    }
-                })
-                .collect();
-            format!(
-                "project:{}",
-                if sanitized.is_empty() {
-                    "local"
-                } else {
-                    &sanitized
-                }
-            )
-        }
-    }
+fn expected_scope(paths: &StorePaths) -> crate::Result<String> {
+    crate::record_scope(paths).map(|scope| scope.as_str().to_owned())
 }
 
 fn existing_identity<'a>(

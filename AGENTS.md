@@ -16,11 +16,6 @@ SvelteKit documentation site and a local web editor.
   affects stored data.
 - No legacy or compatibility anything.
 
-## Herdr Pi orchestration
-
-When the user explicitly requests Herdr/Pi delegation, use the project-local
-`$orchestrate` skill. Use no more than two Pi instances.
-
 ## Project memory
 
 Use `$stormbuffer-memory` once when work depends on prior project decisions,
@@ -33,6 +28,10 @@ and fail soft when Stormbuffer is unavailable or has no useful evidence.
   output, and caches must be disposable and rebuildable.
 - `stormbuffer-core` owns models, validation, policy, repository operations,
   indexing, retrieval, mutation, and context compilation.
+- Project record scopes come from the stable project ID in `store.toml`, never
+  from a directory name.
+  `--project` composes project and applicable global memory whereas `--local`
+  stays within the nearest project store.
 - The CLI, JSON protocol, MCP server, and web server are adapters. They call the
   core and do not edit records/databases directly or duplicate policy.
 - Keep records readable and repairable without Stormbuffer. Preserve

@@ -1,3 +1,5 @@
 format_version = 1
 scope = "project"
 visibility = "shared"
+project_id = "f6bfca9d-1ad3-4010-9569-52c214b5d0c9"
+project_name = "agent-memory"

@@ -189,14 +189,6 @@ fn context_applies_filters_before_assembly_and_reports_budget_edges() {
         "agent",
         "filter-target agent evidence",
     );
-    write_record(
-        &paths,
-        "01989af2-4305-7b19-88b1-e8ae4ea9c105",
-        "project:other",
-        "active",
-        "human",
-        "filter-target other-scope evidence",
-    );
     sync_store(&paths).expect("sync");
 
     let human = context_store(
@@ -243,8 +235,7 @@ fn context_applies_filters_before_assembly_and_reports_budget_edges() {
         },
     )
     .expect("scope context");
-    assert_eq!(other_scope.blocks.len(), 1);
-    assert_eq!(other_scope.blocks[0].scope, "project:other");
+    assert!(other_scope.blocks.is_empty());
 
     let inactive = context_store(
         &paths,

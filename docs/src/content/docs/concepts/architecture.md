@@ -32,9 +32,13 @@ Use `sbuf status` to see which store is selected. Back up that store's Markdown 
 
 The global store holds memory that follows you across projects.
 
-A project store belongs to one repository and lives under `.sbuf/`.
+A project store belongs to one repository and lives under `.sbuf/`. Its
+`store.toml` gives it a stable identity that survives directory renames and
+distinguishes repositories with the same directory name.
 
-Commands use the global store by default. Add `--project` to select project memory.
+Commands use the global store by default. Add `--project` to combine the nearest
+project store with applicable global memory. Add `--local` to use only the
+nearest project store without opening the global store.
 
 See [Backup and recovery](/docs/workflows/backup-recovery/) when a project store
 must be shared or kept out of version control.

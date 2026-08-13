@@ -152,7 +152,7 @@ impl FromStr for ProposalActor {
 pub enum ProposalOutcome {
     Accepted,
     DuplicateOf,
-    ConflictsWith,
+    PossibleOverlap,
     RequiresApproval,
     Invalid,
 }
@@ -162,7 +162,7 @@ impl fmt::Display for ProposalOutcome {
         formatter.write_str(match self {
             Self::Accepted => "accepted",
             Self::DuplicateOf => "duplicate_of",
-            Self::ConflictsWith => "conflicts_with",
+            Self::PossibleOverlap => "possible_overlap",
             Self::RequiresApproval => "requires_approval",
             Self::Invalid => "invalid",
         })
@@ -353,7 +353,7 @@ impl Scope {
             return Ok(Self(value.to_owned()));
         }
         let Some(project) = value.strip_prefix("project:") else {
-            return Err("must be `global` or use the `project:<name>` form".to_owned());
+            return Err("must be `global` or use the `project:<uuid>` form".to_owned());
         };
         if project.is_empty()
             || project.chars().any(|character| {

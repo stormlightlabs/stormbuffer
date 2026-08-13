@@ -44,13 +44,13 @@ fn exchange(stdin: &mut impl Write, stdout: &mut impl BufRead, message: &str) ->
 }
 
 #[test]
-fn command_line_accepts_explicit_global_scope_and_rejects_mixed_scopes() {
+fn command_line_lists_store_views_and_rejects_mixed_scopes() {
     let help = Command::new(env!("CARGO_BIN_EXE_stormbuffer-mcp"))
         .arg("--help")
         .output()
         .expect("run help");
     assert!(help.status.success());
-    assert!(String::from_utf8_lossy(&help.stdout).contains("--global | --project"));
+    assert!(String::from_utf8_lossy(&help.stdout).contains("--global | --project | --local"));
 
     let root = temporary_project();
     let global_paths = stormbuffer_core::resolve_store_with_dirs(
@@ -121,7 +121,7 @@ fn command_line_accepts_explicit_global_scope_and_rejects_mixed_scopes() {
         .output()
         .expect("run conflicting scopes");
     assert_eq!(conflict.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&conflict.stderr).contains("conflicts"));
+    assert!(String::from_utf8_lossy(&conflict.stderr).contains("select only one"));
     fs::remove_dir_all(root).expect("remove test directory");
 }
 

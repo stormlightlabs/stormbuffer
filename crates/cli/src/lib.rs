@@ -60,7 +60,9 @@ fn parse(args: Vec<OsString>) -> Result<Cli, clap::Error> {
 }
 
 fn run_command(cli: Cli, output: Echo) -> i32 {
-    let scope = if cli.project {
+    let scope = if cli.local {
+        StoreScope::Local
+    } else if cli.project {
         StoreScope::Project
     } else {
         StoreScope::Global

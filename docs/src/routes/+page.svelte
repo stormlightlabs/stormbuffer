@@ -40,7 +40,7 @@ Initialized shared project store at .sbuf
 <span class="prompt">$</span> sbuf --project search "canonical records" --limit 1
 <span class="result">Canonical records survive projection failures</span>
 Markdown records are the source of truth. SQLite, FTS, and vectors are rebuildable.
-<span class="meta">decision · project:agent-memory · prefix</span></code></pre>
+<span class="meta">decision · Project memory · prefix</span></code></pre>
 		</figure>
 	</section>
 

@@ -115,7 +115,7 @@ adapter for evaluating a configured host model.
 ### SB-403 — Implement candidate review and provenance policy
 
 Added propose, approve, and reject flows with source validation,
-duplicate/conflict checks, supersession links, and direct activation only for
+duplicate/overlap checks, supersession links, and direct activation only for
 permitted callers.
 
 ### SB-404 — Publish the versioned JSON invocation protocol
@@ -138,7 +138,7 @@ example and curated memories that help agents work on Stormbuffer.
 ### SB-501 — Add intent-level memory mutations
 
 Added compact remember and update requests to the versioned JSON protocol.
-Remember records one source and reports validation, duplicate, conflict, and
+Remember records one source and reports validation, duplicate, overlap, and
 approval outcomes. Update preserves the active record while creating a linked
 replacement candidate; approval atomically activates it and supersedes the old
 record.
@@ -207,24 +207,14 @@ worthiness into core.
 
 ### SB-509 — Correct overlap semantics and build a relation corpus
 
-**What to build:** Preserve exact normalized-body equality as the deterministic
-duplicate fast path. Treat a different body with the same normalized title,
-kind, and scope as possible overlap rather than proven conflict. Build a
-reviewed pair corpus for semantic relation evaluation.
-
-**Acceptance criteria:**
-
-- [ ] Exact matches still return `duplicate_of` deterministically.
-- [ ] Same-title records with different bodies do not claim a contradiction
-      without relation evidence.
-- [ ] The corpus covers paraphrase, one-way refinement, contradiction,
-      compatible additions, temporal change, conditional differences, related
-      records, and unrelated records.
-- [ ] Process and protocol tests describe the revised result and its human
-      review path.
-
-**Verification:** Run repository and protocol tests, then compare the old
-title/body heuristic with the reviewed relation corpus.
+Kept normalized body equality as the deterministic `duplicate_of` path and
+reclassified same-title records with different bodies as `possible_overlap`.
+They remain candidates for human approval rather than being labeled as proven
+contradictions. A reviewed pair corpus now covers paraphrase, one-way
+refinement, contradiction, compatible additions, temporal change, conditional
+differences, related records, and unrelated records. Repository and protocol
+tests cover the review path, and the evaluation report compares the old
+title/body heuristic with the reviewed judgments.
 
 ### SB-510 — Add advisory semantic relation analysis
 
@@ -255,33 +245,14 @@ enabling review warnings.
 
 ### SB-511 — Separate project context from repository isolation
 
-**What to build:** Give project stores a stable canonical identity and separate
-the composed project view from strict nearest-repository retrieval. A project
-view may include applicable global records; strict local retrieval must use
-only the nearest `.sbuf/`.
-
-**Acceptance criteria:**
-
-- [ ] `store.toml` stores a stable project ID and an editable project name, with
-      validation and initialization tests.
-- [ ] Renaming a repository directory does not change its project identity or
-      make its existing records fall outside the current project scope.
-- [ ] Two repositories with the same directory name do not share a semantic
-      project identity.
-- [ ] `--project` selects the composed project view and `--local` selects only
-      the nearest repository store. Their behavior is unambiguous for search,
-      context, status, mutations, and machine-readable invocation.
-- [ ] Strict local retrieval never opens or returns records from the global
-      store; project retrieval retains applicable global context.
-- [ ] Project identity is canonical metadata. Any SQLite fields are disposable
-      projections and can be rebuilt without losing identity.
-- [ ] Scope derivation is owned by `stormbuffer-core` rather than duplicated in
-      CLI and protocol adapters.
-
-**Verification:** Initialize two same-named repositories, rename one, and test
-project and strict-local retrieval through core, CLI, and JSON protocol
-boundaries. Rebuild each index and confirm that project identity and filtering
-are unchanged.
+Project stores now keep a stable ID and editable validated name in
+`store.toml`. Record scopes use that ID, so repository renames and same-named
+directories cannot change or conflate project identity. `--project` selects a
+composed project-and-global view, while `--local` restricts CLI, JSON, and MCP
+operations to the nearest `.sbuf/` without opening the global store. Core owns
+scope and retrieval-store derivation for every adapter. Tests cover
+initialization, name validation, same-named projects, directory rename, strict
+local isolation, composed retrieval, and identity-preserving reindexing.
 
 ### SB-512 — Expand store status and safe repair
 
@@ -374,7 +345,7 @@ stdio without duplicating storage, ranking, or policy.
 ### SB-602 — Add the behavioral agent skill
 
 Documented when agents should search, compile context, propose
-durable memory, report conflicts, and avoid storing unsuitable material.
+durable memory, report possible overlaps, and avoid storing unsuitable material.
 
 ### SB-603 — Harden packaging and releases
 

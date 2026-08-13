@@ -104,6 +104,53 @@ fn atomic_replacements_are_always_parseable_to_unlocked_readers() {
 }
 
 #[test]
+fn repository_rejects_records_outside_the_selected_store_scope() {
+    let store = TempStore::new();
+    let repository = store.repository();
+    let stored = repository.add(fixture_record()).expect("add fixture");
+    let mut foreign = stored.record().clone();
+    foreign.scope = "project:01989af2-4305-7b19-88b1-e8ae4ea9a099"
+        .parse()
+        .expect("foreign scope");
+    fs::write(
+        stored.path(),
+        render_markdown(&foreign).expect("render foreign record"),
+    )
+    .expect("move record outside the store scope");
+
+    assert!(matches!(
+        repository.find(foreign.id),
+        Err(Error::Repository {
+            source: stormbuffer_core::RepositoryError::ScopeDenied { .. }
+        })
+    ));
+    assert!(matches!(
+        repository.archive(foreign.id),
+        Err(Error::Repository {
+            source: stormbuffer_core::RepositoryError::ScopeDenied { .. }
+        })
+    ));
+}
+
+#[test]
+fn replacement_cannot_move_a_record_outside_the_selected_store_scope() {
+    let store = TempStore::new();
+    let repository = store.repository();
+    let stored = repository.add(fixture_record()).expect("add fixture");
+    let mut replacement = stored.record().clone();
+    replacement.scope = "project:01989af2-4305-7b19-88b1-e8ae4ea9a099"
+        .parse()
+        .expect("foreign scope");
+
+    assert!(matches!(
+        repository.replace_if_unchanged(&stored, replacement),
+        Err(Error::Repository {
+            source: stormbuffer_core::RepositoryError::ScopeDenied { .. }
+        })
+    ));
+}
+
+#[test]
 fn competing_mutation_reports_busy_without_leaking_the_store_path() {
     let store = TempStore::new();
     let repository = store.repository();
@@ -402,7 +449,7 @@ fn approval_revalidates_user_edited_candidate_provenance() {
 }
 
 #[test]
-fn missing_provenance_is_invalid_and_conflicting_human_proposals_stay_candidates() {
+fn missing_provenance_is_invalid_and_same_title_human_proposals_require_review() {
     let store = TempStore::new();
     let repository = store.repository();
     let existing = repository.add(fixture_record()).expect("add fixture");
@@ -416,16 +463,23 @@ fn missing_provenance_is_invalid_and_conflicting_human_proposals_stay_candidates
     assert_eq!(invalid.outcome, ProposalOutcome::Invalid);
     assert_eq!(repository.list(true).expect("list records").len(), 1);
 
-    let mut conflict = existing.record().clone();
-    conflict.id = RecordId::new_v7();
-    conflict.body = "A conflicting claim with the same title".to_owned();
+    let mut overlap = existing.record().clone();
+    overlap.id = RecordId::new_v7();
+    overlap.body = "A different claim with the same title".to_owned();
     let result = repository
-        .propose(conflict, ProposalActor::Human)
-        .expect("conflicting proposal result");
-    assert_eq!(result.outcome, ProposalOutcome::ConflictsWith);
-    let id = result.record_id.parse().expect("conflict id");
+        .propose(overlap, ProposalActor::Human)
+        .expect("overlap proposal result");
+    assert_eq!(result.outcome, ProposalOutcome::PossibleOverlap);
+    let id = result.record_id.parse().expect("overlap id");
     assert_eq!(
-        repository.find(id).expect("find conflict").record().status,
+        repository.find(id).expect("find overlap").record().status,
         RecordStatus::Candidate
+    );
+    assert_eq!(
+        repository
+            .approve(id)
+            .expect("approve after review")
+            .outcome,
+        ProposalOutcome::Accepted
     );
 }

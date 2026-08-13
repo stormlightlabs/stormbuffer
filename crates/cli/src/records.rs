@@ -392,16 +392,13 @@ pub(super) fn run_forget(scope: StoreScope, arguments: ForgetArgs, output: &Echo
 
 fn draft_record(
     paths: &core::StorePaths,
-    scope: StoreScope,
+    _scope: StoreScope,
     title: Option<String>,
     kind: Option<String>,
     body: Option<String>,
 ) -> AnyhowResult<core::Record> {
     let now = core::Timestamp::now_utc();
-    let scope_name = match scope {
-        StoreScope::Global => "global".to_owned(),
-        StoreScope::Project => format!("project:{}", project_scope_name(paths)),
-    };
+    let record_scope = core::record_scope(paths).context("could not read the store identity")?;
     Ok(core::Record {
         id: core::RecordId::new_v7(),
         title: title.unwrap_or_else(|| "Untitled memory".to_owned()),
@@ -410,7 +407,7 @@ fn draft_record(
             .parse()
             .map_err(anyhow::Error::msg)
             .context("invalid memory kind")?,
-        scope: core::Scope::parse(&scope_name).map_err(anyhow::Error::msg)?,
+        scope: record_scope,
         status: core::RecordStatus::Active,
         access: core::Access::Human,
         created_at: now,
@@ -425,30 +422,6 @@ fn draft_record(
         }],
         body: body.unwrap_or_else(|| "Write the memory here.".to_owned()),
     })
-}
-
-fn project_scope_name(paths: &core::StorePaths) -> String {
-    let name = paths
-        .root
-        .parent()
-        .and_then(Path::file_name)
-        .and_then(|name| name.to_str())
-        .unwrap_or("local");
-    let sanitized: String = name
-        .chars()
-        .map(|character| {
-            if character.is_whitespace() || character == ':' || character.is_control() {
-                '-'
-            } else {
-                character
-            }
-        })
-        .collect();
-    if sanitized.is_empty() {
-        "local".to_owned()
-    } else {
-        sanitized
-    }
 }
 
 fn parse_id(value: &str) -> AnyhowResult<core::RecordId> {

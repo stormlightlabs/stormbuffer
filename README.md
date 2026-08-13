@@ -34,6 +34,11 @@ sbuf --project add --title "Test command" --kind procedure
 sbuf --project search test
 ```
 
+`--project` combines the nearest project store with applicable global memory.
+Use `--local` for strict nearest-store retrieval that never opens the global
+store. Project identity is stored in `.sbuf/store.toml`, so renaming the
+repository does not change its memory scope.
+
 Agents can use the versioned JSON protocol without prompts or formatted output:
 
 ```sh

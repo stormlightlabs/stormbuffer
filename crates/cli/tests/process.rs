@@ -67,23 +67,27 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let home = directory.join("home");
-    let data = directory.join("data");
-    let cache = directory.join("cache");
+    run_json_with_store_environment(directory, directory, arguments, input)
+}
+
+fn run_json_with_store_environment<I, S>(
+    directory: &Path,
+    root: &Path,
+    arguments: I,
+    input: &str,
+) -> Output
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let mut command = Command::new(binary());
     command
         .current_dir(directory)
         .args(arguments)
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("LOCALAPPDATA", &data)
-        .env("APPDATA", &data)
-        .env("XDG_DATA_HOME", &data)
-        .env("XDG_CACHE_HOME", &cache)
-        .env("STORMBUFFER_TEST_MODE", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    with_store_environment(&mut command, root);
     let mut child = command.spawn().expect("run CLI JSON protocol");
     child
         .stdin
@@ -427,6 +431,13 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
         ],
     );
     assert_eq!(project_add.status.code(), Some(0));
+    let status = run_with_store_environment(&project, &root, ["--project", "status", "--json"]);
+    let status: serde_json::Value =
+        serde_json::from_slice(&status.stdout).expect("parse project status");
+    let project_scope = format!(
+        "project:{}",
+        status["project_id"].as_str().expect("project id")
+    );
 
     let search = run_with_store_environment(
         &project,
@@ -443,7 +454,7 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
         serde_json::from_slice(&search.stdout).expect("parse search results");
     let results = results.as_array().expect("search result array");
     assert_eq!(results.len(), 2);
-    assert_eq!(results[0]["scope"], "project:demo");
+    assert_eq!(results[0]["scope"], project_scope);
     assert_eq!(results[1]["scope"], "global");
 
     let human_search =
@@ -451,11 +462,72 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
     assert_eq!(human_search.status.code(), Some(0));
     let human_search = String::from_utf8_lossy(&human_search.stdout);
     assert!(human_search.contains("Project collision card\n  ID: "));
-    assert!(human_search.contains("  Kind: fact  Scope: project:demo"));
+    assert!(human_search.contains(&format!("  Kind: fact  Scope: {project_scope}")));
     assert!(human_search.contains("\n  Score: "));
     assert!(!human_search.contains('\t'));
     assert!(!human_search.contains('\u{202e}'));
     assert!(!human_search.contains('\u{2028}'));
+
+    let local_proposal = run_json_with_store_environment(
+        &project,
+        &root,
+        ["--local", "invoke", "propose"],
+        r#"{"version":1,"title":"Local agent scope","kind":"fact","access":"agent","body":"strict local protocol memory","sources":[{"kind":"document","reference":"test.md","actor":"human"}]}"#,
+    );
+    assert_eq!(local_proposal.status.code(), Some(0));
+    let local_proposal: serde_json::Value =
+        serde_json::from_slice(&local_proposal.stdout).expect("parse local proposal");
+    let local_candidate = local_proposal["result"]["record_id"]
+        .as_str()
+        .expect("local candidate id");
+    let local_approval =
+        run_with_store_environment(&project, &root, ["--local", "approve", local_candidate]);
+    assert_eq!(local_approval.status.code(), Some(0));
+
+    fs::write(
+        root.join("data/stormbuffer/records/invalid.md"),
+        "invalid global record",
+    )
+    .expect("write invalid global record");
+    let local = run_with_store_environment(
+        &project,
+        &root,
+        ["--local", "search", "from project memory", "--json"],
+    );
+    assert_eq!(local.status.code(), Some(0));
+    let local_results: serde_json::Value =
+        serde_json::from_slice(&local.stdout).expect("parse local results");
+    let local_results = local_results.as_array().expect("local result array");
+    assert!(!local_results.is_empty());
+    assert!(
+        local_results
+            .iter()
+            .all(|result| result["scope"] == project_scope)
+    );
+
+    let local_invoke = run_json_with_store_environment(
+        &project,
+        &root,
+        ["--local", "invoke", "search"],
+        r#"{"version":1,"query":"strict local protocol memory"}"#,
+    );
+    assert_eq!(local_invoke.status.code(), Some(0));
+    let local_envelope: serde_json::Value =
+        serde_json::from_slice(&local_invoke.stdout).expect("parse local invoke result");
+    assert_eq!(
+        local_envelope["result"]
+            .as_array()
+            .expect("local invoke result array")
+            .len(),
+        1
+    );
+
+    let project_with_invalid_global = run_with_store_environment(
+        &project,
+        &root,
+        ["--project", "search", "scope collision", "--json"],
+    );
+    assert_eq!(project_with_invalid_global.status.code(), Some(1));
 
     fs::remove_dir_all(root).expect("remove test directory");
 }
@@ -748,19 +820,17 @@ fn invoke_remember_and_update_enforce_candidate_review() {
         serde_json::from_slice(&duplicate.stdout).expect("duplicate envelope");
     assert_eq!(duplicate["result"]["outcome"], "duplicate_of");
 
-    let conflict = run_json(
+    let overlap = run_json(
         &root,
         ["--project", "invoke", "remember"],
-        r#"{"version":1,"title":"Intent memory","kind":"fact","body":"A conflicting memory.","source":{"kind":"document","reference":"TODO.md#SB-501","actor":"human"}}"#,
+        r#"{"version":1,"title":"Intent memory","kind":"fact","body":"A different memory.","source":{"kind":"document","reference":"TODO.md#SB-501","actor":"human"}}"#,
     );
-    let conflict: serde_json::Value =
-        serde_json::from_slice(&conflict.stdout).expect("conflict envelope");
-    assert_eq!(conflict["result"]["outcome"], "conflicts_with");
-    let conflict_id = conflict["result"]["record_id"]
-        .as_str()
-        .expect("conflict id");
+    let overlap: serde_json::Value =
+        serde_json::from_slice(&overlap.stdout).expect("overlap envelope");
+    assert_eq!(overlap["result"]["outcome"], "possible_overlap");
+    let overlap_id = overlap["result"]["record_id"].as_str().expect("overlap id");
     assert!(
-        run(&root, ["--project", "reject", conflict_id])
+        run(&root, ["--project", "reject", overlap_id])
             .status
             .success()
     );
@@ -967,6 +1037,8 @@ fn skill_install_is_offline_idempotent_and_requires_force_for_conflicts() {
     assert!(project_skill.contains("name: stormbuffer-memory"));
     assert!(project_skill.contains("sbuf --project invoke search"));
     assert!(project_skill.contains("Project retrieval can also return global records"));
+    assert!(project_skill.contains("possible_overlap"));
+    assert!(!project_skill.contains("conflicts_with"));
     assert!(!project_skill.contains("--global"));
 
     let help = run(&root, ["skill", "install", "--help"]);

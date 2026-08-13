@@ -81,9 +81,24 @@ pub(super) fn run_status(scope: StoreScope, json: bool, output: &Echo) -> i32 {
             .visibility
             .map(|visibility| format!("\"{visibility}\""))
             .unwrap_or_else(|| "null".to_owned());
+        let (project_id, project_name) = status.project.as_ref().map_or_else(
+            || ("null".to_owned(), "null".to_owned()),
+            |project| {
+                (
+                    format!("\"{}\"", project.id),
+                    format!("\"{}\"", json_escape(&project.name)),
+                )
+            },
+        );
         output.line(&format!(
-            "{{\"scope\":\"{}\",\"root\":\"{}\",\"initialized\":{},\"visibility\":{},\"record_count\":{}}}",
-            status.scope, root, status.initialized, visibility, status.record_count
+            "{{\"scope\":\"{}\",\"root\":\"{}\",\"initialized\":{},\"visibility\":{},\"project_id\":{},\"project_name\":{},\"record_count\":{}}}",
+            status.scope,
+            root,
+            status.initialized,
+            visibility,
+            project_id,
+            project_name,
+            status.record_count
         ));
         return 0;
     }
@@ -98,6 +113,10 @@ pub(super) fn run_status(scope: StoreScope, json: bool, output: &Echo) -> i32 {
     output.field("State", state);
     if let Some(visibility) = status.visibility {
         output.field("Visibility", visibility);
+    }
+    if let Some(project) = status.project {
+        output.field("Project ID", project.id);
+        output.field("Project name", project.name);
     }
     output.field("Records", status.record_count);
     0

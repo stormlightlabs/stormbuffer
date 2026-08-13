@@ -96,7 +96,7 @@ printf '%s\n' '{"version":1,"title":"Release constraint","kind":"fact","body":"T
 
 Keep the returned `record_id` and `outcome`. `requires_approval` needs a person to run
 `sbuf --project approve <record-id>`. `duplicate_of` means stop instead of writing another
-copy. `conflicts_with` requires human review before proposing a correction. Use `invoke update`
+copy. `possible_overlap` means compare both records before approving or superseding either one. Use `invoke update`
 for stale memory. It creates a linked replacement candidate and leaves the old record active
 until approval. Never describe a candidate as active.
 

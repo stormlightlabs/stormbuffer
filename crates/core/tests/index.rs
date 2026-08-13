@@ -176,6 +176,33 @@ fn sync_removes_deleted_records_and_reindex_switches_projection() {
 }
 
 #[test]
+fn sync_rejects_invalid_store_metadata_and_foreign_record_scopes() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    write_record(
+        &paths,
+        "foreign.md",
+        "01989af2-4305-7b19-88b1-e8ae4ea9a08b",
+        "Foreign scope",
+        "project:01989af2-4305-7b19-88b1-e8ae4ea9a099",
+        "scope boundary",
+        "This record must not enter the global projection.",
+    );
+    let report = sync_store(&paths).expect("sync reports foreign scope");
+    assert_eq!(report.invalid_files.len(), 1);
+    assert!(
+        search_store(&paths, "scope boundary", SearchOptions::default())
+            .expect("search valid store")
+            .is_empty()
+    );
+
+    fs::write(paths.root.join("store.toml"), "not valid metadata").expect("corrupt metadata");
+    assert!(sync_store(&paths).is_err());
+    assert!(search_store(&paths, "scope boundary", SearchOptions::default()).is_err());
+}
+
+#[test]
 fn search_matches_filename_commands_aliases_and_unicode() {
     let store = TempStore::new();
     let paths = store.paths();
@@ -223,6 +250,10 @@ fn project_search_includes_global_and_rebuild_preserves_manual_edits() {
     };
     initialize_store(&global, StoreInitMode::Default).expect("initialize global");
     initialize_store(&project, StoreInitMode::Default).expect("initialize project");
+    let project_scope = stormbuffer_core::record_scope(&project)
+        .expect("project scope")
+        .as_str()
+        .to_owned();
     write_record(
         &global,
         "global.md",
@@ -237,7 +268,7 @@ fn project_search_includes_global_and_rebuild_preserves_manual_edits() {
         "project.md",
         "01989af2-4305-7b19-88b1-e8ae4ea9a05b",
         "Project recovery",
-        "project:demo-project",
+        &project_scope,
         "local recovery",
         "A recoverable index starts with the project record.",
     );
@@ -262,7 +293,7 @@ fn project_search_includes_global_and_rebuild_preserves_manual_edits() {
     )
     .expect("search both scopes");
     assert_eq!(results.len(), 2);
-    assert_eq!(results[0].scope, "project:demo-project");
+    assert_eq!(results[0].scope, project_scope);
     assert_eq!(results[1].scope, "global");
 
     let moved = project.records.join("moved-project.md");
@@ -352,6 +383,60 @@ fn project_search_includes_global_and_rebuild_preserves_manual_edits() {
         fs::read(invalid).expect("read invalid after sync"),
         invalid_bytes
     );
+}
+
+#[test]
+fn renamed_project_keeps_its_scope_when_reindexed_locally() {
+    let store = TempStore::new();
+    let original_directory = store.root.join("before");
+    let original_root = original_directory.join(".sbuf");
+    let original = StorePaths {
+        scope: StoreScope::Project,
+        records: original_root.join("records"),
+        cache: original_root.join("cache"),
+        root: original_root,
+    };
+    initialize_store(&original, StoreInitMode::Default).expect("initialize project");
+    let project_scope = stormbuffer_core::record_scope(&original)
+        .expect("project scope")
+        .as_str()
+        .to_owned();
+    write_record(
+        &original,
+        "identity.md",
+        "01989af2-4305-7b19-88b1-e8ae4ea9a06b",
+        "Stable project identity",
+        &project_scope,
+        "renamed project",
+        "Renaming a project does not change its memory scope.",
+    );
+    sync_store(&original).expect("sync original project");
+
+    let renamed_directory = store.root.join("after");
+    fs::rename(&original_directory, &renamed_directory).expect("rename project directory");
+    let renamed_root = renamed_directory.join(".sbuf");
+    let renamed = StorePaths {
+        scope: StoreScope::Local,
+        records: renamed_root.join("records"),
+        cache: renamed_root.join("cache"),
+        root: renamed_root,
+    };
+
+    assert_eq!(
+        stormbuffer_core::record_scope(&renamed)
+            .expect("renamed project scope")
+            .as_str(),
+        project_scope
+    );
+    reindex_store(&renamed).expect("reindex renamed project");
+    let results = search_store(
+        &renamed,
+        "renamed project",
+        SearchOptions::for_store(&renamed),
+    )
+    .expect("search renamed project");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].scope, project_scope);
 }
 
 #[test]

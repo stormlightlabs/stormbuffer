@@ -18,8 +18,14 @@ pub(super) fn run_mcp(scope: StoreScope, arguments: McpArgs, output: &Echo) -> i
         .unwrap_or_else(|| OsString::from("stormbuffer-mcp"));
     let mut command = Command::new(executable);
     command.arg("--stdio");
-    if scope == StoreScope::Project {
-        command.arg("--project");
+    match scope {
+        StoreScope::Global => {}
+        StoreScope::Project => {
+            command.arg("--project");
+        }
+        StoreScope::Local => {
+            command.arg("--local");
+        }
     }
     if arguments.allow_writes {
         command.arg("--allow-writes");

@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use stormbuffer_core::{
     Access, ContextOptions, DeterministicEmbedder, Embedder, Embedding, Error, RetrievalMode,
     SearchOptions, StoreInitMode, StorePaths, StoreScope, context_stores_with_embedder, index_path,
-    initialize_store, rebuild_vector_index, reindex_store_with_embedder,
+    initialize_store, rebuild_vector_index, record_scope, reindex_store_with_embedder,
     search_stores_with_embedder, sync_store,
 };
 
@@ -42,6 +42,16 @@ impl TempStore {
             root: self.root.clone(),
             records: self.root.join("records"),
             cache: self.root.join("cache"),
+        }
+    }
+
+    fn project_paths(&self, name: &str) -> StorePaths {
+        let root = self.root.join(name).join(".sbuf");
+        StorePaths {
+            scope: StoreScope::Project,
+            records: root.join("records"),
+            cache: root.join("cache"),
+            root,
         }
     }
 }
@@ -82,52 +92,59 @@ actor = "test"
 #[test]
 fn vector_backfill_records_metadata_and_applies_scope_kind_and_active_filters() {
     let store = TempStore::new();
-    let paths = store.paths();
-    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    let alpha_paths = store.project_paths("alpha");
+    let beta_paths = store.project_paths("beta");
+    initialize_store(&alpha_paths, StoreInitMode::Default).expect("initialize alpha");
+    initialize_store(&beta_paths, StoreInitMode::Default).expect("initialize beta");
+    let alpha_scope = record_scope(&alpha_paths).expect("alpha scope").to_string();
+    let beta_scope = record_scope(&beta_paths).expect("beta scope").to_string();
     write_record(
-        &paths,
+        &alpha_paths,
         "01989af2-4305-7b19-88b1-e8ae4ea9a201",
-        "project:alpha",
+        &alpha_scope,
         "fact",
         "active",
         "alpha deployment procedure",
     );
     write_record(
-        &paths,
+        &beta_paths,
         "01989af2-4305-7b19-88b1-e8ae4ea9a202",
-        "project:beta",
+        &beta_scope,
         "fact",
         "active",
         "beta deployment procedure",
     );
     write_record(
-        &paths,
+        &alpha_paths,
         "01989af2-4305-7b19-88b1-e8ae4ea9a203",
-        "project:alpha",
+        &alpha_scope,
         "procedure",
         "archived",
         "archived deployment procedure",
     );
-    sync_store(&paths).expect("sync");
+    sync_store(&alpha_paths).expect("sync alpha");
+    sync_store(&beta_paths).expect("sync beta");
     let embedder = DeterministicEmbedder::new("semantic-v1", 24).expect("embedder");
-    let first_metadata = rebuild_vector_index(&paths, &embedder).expect("vector backfill");
+    let first_metadata = rebuild_vector_index(&alpha_paths, &embedder).expect("vector backfill");
+    rebuild_vector_index(&beta_paths, &embedder).expect("beta vector backfill");
     let first_table = first_metadata.table_name.clone();
-    let second_metadata = rebuild_vector_index(&paths, &embedder).expect("reuse vector index");
+    let second_metadata =
+        rebuild_vector_index(&alpha_paths, &embedder).expect("reuse vector index");
     assert_eq!(first_metadata.index_id, second_metadata.index_id);
 
-    let mut options = SearchOptions::for_store(&paths);
+    let mut options = SearchOptions::for_store(&alpha_paths);
     options.mode = RetrievalMode::Semantic;
-    options.allowed_scopes = Some(vec!["project:alpha".to_owned()]);
+    options.allowed_scopes = Some(vec![alpha_scope.clone()]);
     options.allowed_kinds = Some(vec!["fact".to_owned()]);
     let results = search_stores_with_embedder(
-        &[paths.clone()],
+        &[alpha_paths.clone(), beta_paths.clone()],
         "deployment procedure",
         options.clone(),
         &embedder,
     )
     .expect("semantic search");
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].scope, "project:alpha");
+    assert_eq!(results[0].scope, alpha_scope);
     assert_eq!(results[0].status, "active");
     assert_eq!(results[0].kind, "fact");
     assert!(
@@ -137,12 +154,11 @@ fn vector_backfill_records_metadata_and_applies_scope_kind_and_active_filters() 
             .any(|reason| reason.starts_with("vector:"))
     );
     let mut context_search = options.clone();
-    context_search.allowed_scopes =
-        Some(vec!["project:alpha".to_owned(), "project:beta".to_owned()]);
+    context_search.allowed_scopes = Some(vec![alpha_scope, beta_scope]);
     context_search.allowed_kinds = None;
     context_search.limit = 1;
     let context = context_stores_with_embedder(
-        &[paths.clone()],
+        &[alpha_paths.clone(), beta_paths.clone()],
         "deployment procedure",
         ContextOptions {
             budget: 100,
@@ -154,12 +170,17 @@ fn vector_backfill_records_metadata_and_applies_scope_kind_and_active_filters() 
     assert_eq!(context.blocks.len(), 1);
     options.allowed_access = Some(vec![Access::Agent]);
     assert!(
-        search_stores_with_embedder(&[paths.clone()], "deployment procedure", options, &embedder,)
-            .expect("inaccessible search")
-            .is_empty()
+        search_stores_with_embedder(
+            &[alpha_paths.clone(), beta_paths],
+            "deployment procedure",
+            options,
+            &embedder,
+        )
+        .expect("inaccessible search")
+        .is_empty()
     );
 
-    let connection = rusqlite::Connection::open(index_path(&paths)).expect("open index");
+    let connection = rusqlite::Connection::open(index_path(&alpha_paths)).expect("open index");
     let metadata: (String, i64) = connection
         .query_row(
             "SELECT model_version, dimension FROM vector_indexes WHERE active = 1",
@@ -174,7 +195,7 @@ fn vector_backfill_records_metadata_and_applies_scope_kind_and_active_filters() 
     assert_eq!(vector_indexes, 1);
 
     let replacement = DeterministicEmbedder::new("semantic-v2", 24).expect("replacement");
-    rebuild_vector_index(&paths, &replacement).expect("replace vector index");
+    rebuild_vector_index(&alpha_paths, &replacement).expect("replace vector index");
     let old_table_count: i64 = connection
         .query_row(
             "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",

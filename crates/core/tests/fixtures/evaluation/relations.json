@@ -1,0 +1,59 @@
+{
+  "revision": "m6-relation-pairs-1",
+  "pairs": [
+    {
+      "id": "normalized-exact-match",
+      "relation": "equivalent",
+      "left": {"title":"Use cargo fmt","kind":"decision","scope":"project:alpha","body":"Run cargo fmt before review."},
+      "right": {"title":"  use CARGO fmt ","kind":"decision","scope":"project:alpha","body":" Run  cargo fmt before review. "}
+    },
+    {
+      "id": "paraphrase",
+      "relation": "equivalent",
+      "left": {"title":"Release checks","kind":"decision","scope":"project:alpha","body":"Run every release check before publishing."},
+      "right": {"title":"Release checks","kind":"decision","scope":"project:alpha","body":"Publishing requires the complete release test suite."}
+    },
+    {
+      "id": "one-way-refinement",
+      "relation": "refinement",
+      "left": {"title":"Search defaults","kind":"decision","scope":"project:alpha","body":"Search uses semantic retrieval by default."},
+      "right": {"title":"Search defaults","kind":"decision","scope":"project:alpha","body":"Search uses semantic retrieval by default and falls back to lexical retrieval when the model is unavailable."}
+    },
+    {
+      "id": "contradiction",
+      "relation": "contradiction",
+      "left": {"title":"Network access","kind":"decision","scope":"project:alpha","body":"The service may access the network."},
+      "right": {"title":"Network access","kind":"decision","scope":"project:alpha","body":"The service must never access the network."}
+    },
+    {
+      "id": "compatible-additions",
+      "relation": "compatible_addition",
+      "left": {"title":"Release checks","kind":"decision","scope":"project:alpha","body":"Run clippy before release."},
+      "right": {"title":"Release checks","kind":"decision","scope":"project:alpha","body":"Run the documentation build before release."}
+    },
+    {
+      "id": "temporal-change",
+      "relation": "temporal_change",
+      "left": {"title":"Support window","kind":"fact","scope":"project:alpha","body":"Version 1 is supported through June."},
+      "right": {"title":"Support window","kind":"fact","scope":"project:alpha","body":"Version 2 is supported beginning in July."}
+    },
+    {
+      "id": "conditional-difference",
+      "relation": "conditional_difference",
+      "left": {"title":"Output format","kind":"decision","scope":"project:alpha","body":"Interactive commands use styled output."},
+      "right": {"title":"Output format","kind":"decision","scope":"project:alpha","body":"Machine-readable commands use unstyled JSON."}
+    },
+    {
+      "id": "related",
+      "relation": "related",
+      "left": {"title":"Storage design","kind":"fact","scope":"project:alpha","body":"Markdown records are canonical."},
+      "right": {"title":"Storage design","kind":"fact","scope":"project:alpha","body":"SQLite indexes can be rebuilt."}
+    },
+    {
+      "id": "unrelated",
+      "relation": "unrelated",
+      "left": {"title":"Editor theme","kind":"preference","scope":"project:alpha","body":"Use a dark editor theme."},
+      "right": {"title":"Release checks","kind":"decision","scope":"project:alpha","body":"Run clippy before release."}
+    }
+  ]
+}

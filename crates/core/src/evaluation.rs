@@ -7,12 +7,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 mod capture_policy;
+mod relations;
 mod usefulness;
 
 pub use capture_policy::{
     CaptureDisposition, CaptureEvent, CapturePolicyReport, CaptureReason,
     run_synthetic_capture_policy_evaluation,
 };
+pub use relations::{RelationHeuristicReport, run_relation_heuristic_evaluation};
 pub use usefulness::{
     ProposalOutcomeRates, UsefulnessBreakdown, UsefulnessComparisonReport, UsefulnessReport,
     run_synthetic_usefulness_evaluation,
@@ -22,7 +24,7 @@ use crate::{
     ContextOptions, DeterministicEmbedder, Embedder, LocalEmbedder, PlatformDirs, Record,
     RecordKind, RecordStatus, Scope, SearchOptions, Source, SourceKind, StoreInitMode, StorePaths,
     StoreScope, Timestamp, context_stores, context_stores_with_embedder, ensure_default_model,
-    initialize_store, rebuild_vector_index, render_markdown, search_stores,
+    initialize_store, rebuild_vector_index, record_scope, render_markdown, search_stores,
 };
 
 const CORPUS_JSON: &str = include_str!("../tests/fixtures/evaluation/corpus.json");
@@ -60,6 +62,96 @@ struct FixtureRecord {
     body: String,
 }
 
+struct EvaluationStores {
+    paths: Vec<StorePaths>,
+    scopes: HashMap<String, String>,
+    store_by_scope: HashMap<String, usize>,
+}
+
+impl EvaluationStores {
+    fn initialize(root: &std::path::Path) -> crate::Result<Self> {
+        let definitions = [
+            ("global", StoreScope::Global, "global"),
+            ("project:alpha", StoreScope::Project, "alpha/.sbuf"),
+            ("project:beta", StoreScope::Project, "beta/.sbuf"),
+        ];
+        let mut paths = Vec::with_capacity(definitions.len());
+        let mut scopes = HashMap::new();
+        let mut store_by_scope = HashMap::new();
+        for (fixture_scope, store_scope, directory) in definitions {
+            let store_root = root.join(directory);
+            let store_paths = StorePaths {
+                scope: store_scope,
+                records: store_root.join("records"),
+                cache: store_root.join("cache"),
+                root: store_root,
+            };
+            initialize_store(&store_paths, StoreInitMode::Default)?;
+            scopes.insert(
+                fixture_scope.to_owned(),
+                record_scope(&store_paths)?.to_string(),
+            );
+            store_by_scope.insert(fixture_scope.to_owned(), paths.len());
+            paths.push(store_paths);
+        }
+        Ok(Self {
+            paths,
+            scopes,
+            store_by_scope,
+        })
+    }
+
+    fn scope(&self, fixture_scope: &str) -> crate::Result<&str> {
+        self.scopes
+            .get(fixture_scope)
+            .map(String::as_str)
+            .ok_or_else(|| crate::Error::invalid_input("unknown evaluation fixture scope"))
+    }
+
+    fn write_record(&self, fixture: &FixtureRecord, operation: &'static str) -> crate::Result<()> {
+        let store = self
+            .store_by_scope
+            .get(&fixture.scope)
+            .and_then(|index| self.paths.get(*index))
+            .ok_or_else(|| crate::Error::invalid_input("unknown evaluation fixture scope"))?;
+        let mut fixture = fixture.clone();
+        fixture.scope = self.scope(&fixture.scope)?.to_owned();
+        let record = fixture_record(&fixture)?;
+        let path = store.records.join(format!("{}.md", record.id));
+        fs::write(&path, render_markdown(&record)?)
+            .map_err(|source| crate::Error::io(operation, source))
+    }
+
+    fn sync(&self) -> crate::Result<()> {
+        for paths in &self.paths {
+            crate::sync_store(paths)?;
+        }
+        Ok(())
+    }
+
+    fn remap_queries(&self, queries: &[EvaluationQuery]) -> crate::Result<Vec<EvaluationQuery>> {
+        queries
+            .iter()
+            .cloned()
+            .map(|mut query| {
+                query.scope = self.scope(&query.scope)?.to_owned();
+                Ok(query)
+            })
+            .collect()
+    }
+
+    fn remap_questions(&self, questions: &[RagQuestion]) -> crate::Result<Vec<RagQuestion>> {
+        questions
+            .iter()
+            .cloned()
+            .map(|mut question| {
+                question.scope = self.scope(&question.scope)?.to_owned();
+                Ok(question)
+            })
+            .collect()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EvaluationQuery {
     pub id: String,
@@ -88,6 +180,7 @@ pub struct EvaluationReport {
     pub metrics: BTreeMap<String, EvaluationModeReport>,
     pub usefulness: UsefulnessComparisonReport,
     pub capture_policy: CapturePolicyReport,
+    pub relation_heuristic: RelationHeuristicReport,
     pub thresholds: BTreeMap<String, f64>,
     pub passed: bool,
 }
@@ -319,39 +412,27 @@ fn run_grounded_evaluation(
     }
 
     let root = temporary_root();
-    let paths = StorePaths {
-        scope: StoreScope::Global,
-        root: root.clone(),
-        records: root.join("records"),
-        cache: root.join("cache"),
-    };
     let result = (|| {
-        initialize_store(&paths, StoreInitMode::Default)?;
+        let stores = EvaluationStores::initialize(&root)?;
         for record in &fixture.records {
-            let record = fixture_record(record)?;
-            let path = paths.records.join(format!("{}.md", record.id));
-            fs::write(&path, render_markdown(&record)?)
-                .map_err(|source| crate::Error::io("write RAG evaluation record", source))?;
+            stores.write_record(record, "write RAG evaluation record")?;
         }
-        crate::sync_store(&paths)?;
+        stores.sync()?;
+        let questions = stores.remap_questions(&fixture.questions)?;
 
-        let mut question_reports = Vec::with_capacity(fixture.questions.len());
+        let mut question_reports = Vec::with_capacity(questions.len());
         let mut retrieval_failures = Vec::new();
         let mut context_failures = Vec::new();
         let mut generation_failures = Vec::new();
         let mut metric_totals = GroundedMetricTotals::default();
-        for question in &fixture.questions {
+        for question in &questions {
             let search = SearchOptions {
                 limit: 20,
                 current_scope: Some(question.scope.clone()),
                 allowed_scopes: Some(vec![question.scope.clone()]),
                 ..SearchOptions::default()
             };
-            let search_results = search_stores(
-                std::slice::from_ref(&paths),
-                &question.query,
-                search.clone(),
-            )?;
+            let search_results = search_stores(&stores.paths, &question.query, search.clone())?;
             let retrieved_record_ids = unique_ids(
                 search_results
                     .iter()
@@ -373,7 +454,7 @@ fn run_grounded_evaluation(
             }
 
             let context = context_stores(
-                std::slice::from_ref(&paths),
+                &stores.paths,
                 &question.query,
                 ContextOptions {
                     budget: question.budget,
@@ -750,38 +831,28 @@ fn run_evaluation_with_embedder(
         crate::Error::invalid_input(format!("invalid evaluation queries: {error}"))
     })?;
     let root = temporary_root();
-    let paths = StorePaths {
-        scope: StoreScope::Global,
-        root: root.clone(),
-        records: root.join("records"),
-        cache: root.join("cache"),
-    };
     let result = (|| {
-        initialize_store(&paths, StoreInitMode::Default)?;
+        let stores = EvaluationStores::initialize(&root)?;
         for fixture in &corpus.records {
-            let record = fixture_record(fixture)?;
-            let path = paths.records.join(format!("{}.md", fixture.id));
-            fs::write(&path, render_markdown(&record)?)
-                .map_err(|source| crate::Error::io("write evaluation record", source))?;
+            stores.write_record(fixture, "write evaluation record")?;
         }
-        crate::sync_store(&paths)?;
-        rebuild_vector_index(&paths, embedder)?;
-        let allowed_scopes = corpus
-            .records
-            .iter()
-            .map(|record| record.scope.clone())
-            .collect::<HashSet<_>>();
+        stores.sync()?;
+        for paths in &stores.paths {
+            rebuild_vector_index(paths, embedder)?;
+        }
+        let queries = stores.remap_queries(&queries.queries)?;
+        let allowed_scopes = stores.scopes.values().cloned().collect::<HashSet<_>>();
 
         let mut metrics = BTreeMap::new();
         metrics.insert(
             "fts-only".to_owned(),
-            evaluate_mode(&paths, &queries.queries, None, &allowed_scopes)?,
+            evaluate_mode(&stores.paths, &queries, None, &allowed_scopes)?,
         );
         metrics.insert(
             "vector-only".to_owned(),
             evaluate_mode(
-                &paths,
-                &queries.queries,
+                &stores.paths,
+                &queries,
                 Some((embedder, crate::RetrievalMode::Semantic)),
                 &allowed_scopes,
             )?,
@@ -789,8 +860,8 @@ fn run_evaluation_with_embedder(
         metrics.insert(
             "hybrid".to_owned(),
             evaluate_mode(
-                &paths,
-                &queries.queries,
+                &stores.paths,
+                &queries,
                 Some((embedder, crate::RetrievalMode::Hybrid)),
                 &allowed_scopes,
             )?,
@@ -801,6 +872,7 @@ fn run_evaluation_with_embedder(
         let thresholds = thresholds();
         let usefulness = run_synthetic_usefulness_evaluation()?;
         let capture_policy = run_synthetic_capture_policy_evaluation()?;
+        let relation_heuristic = run_relation_heuristic_evaluation()?;
         let passed = capture_policy.passed
             && metrics
                 .values()
@@ -808,10 +880,11 @@ fn run_evaluation_with_embedder(
         Ok(EvaluationReport {
             corpus_revision: corpus.revision,
             model_version: embedder.model_version().to_owned(),
-            query_count: queries.queries.len(),
+            query_count: queries.len(),
             metrics,
             usefulness,
             capture_policy,
+            relation_heuristic,
             thresholds,
             passed,
         })
@@ -821,7 +894,7 @@ fn run_evaluation_with_embedder(
 }
 
 fn evaluate_mode(
-    paths: &StorePaths,
+    paths: &[StorePaths],
     queries: &[EvaluationQuery],
     semantic: Option<(&dyn Embedder, crate::RetrievalMode)>,
     allowed_scopes: &HashSet<String>,
@@ -835,7 +908,7 @@ fn evaluate_mode(
     let mut context_tokens = 0.0;
     let mut useful_memories = 0.0;
     for query in queries {
-        let mut options = SearchOptions::for_store(paths);
+        let mut options = SearchOptions::for_store(&paths[0]);
         // Deliberately search every fixture scope so cross-scope leakage is measured
         // instead of being hidden by the normal store policy filter.
         options.allowed_scopes = Some(allowed_scopes.iter().cloned().collect());
@@ -844,14 +917,9 @@ fn evaluate_mode(
         let results = match semantic {
             Some((embedder, mode)) => {
                 options.mode = mode;
-                crate::search_stores_with_embedder(
-                    &[paths.clone()],
-                    &query.query,
-                    options.clone(),
-                    embedder,
-                )?
+                crate::search_stores_with_embedder(paths, &query.query, options.clone(), embedder)?
             }
-            None => search_stores(&[paths.clone()], &query.query, options.clone())?,
+            None => search_stores(paths, &query.query, options.clone())?,
         };
         let expected: HashSet<_> = query.expected_record_ids.iter().collect();
         if results.iter().any(|result| result.scope != query.scope) {
@@ -887,7 +955,7 @@ fn evaluate_mode(
             Some((embedder, mode)) => {
                 options.mode = mode;
                 context_stores_with_embedder(
-                    &[paths.clone()],
+                    paths,
                     &query.query,
                     ContextOptions {
                         budget: 40,
@@ -897,7 +965,7 @@ fn evaluate_mode(
                 )?
             }
             None => context_stores(
-                &[paths.clone()],
+                paths,
                 &query.query,
                 ContextOptions {
                     budget: 40,
@@ -1059,6 +1127,8 @@ mod tests {
         assert_eq!(report.query_count, 5);
         assert_eq!(report.usefulness.revision, "m5-usefulness-1");
         assert!(report.capture_policy.passed);
+        assert_eq!(report.relation_heuristic.normalized_duplicate_errors, 0);
+        assert!(report.relation_heuristic.false_conflict_count > 0);
         assert!(report.metrics["fts-only"].wrong_scope_retrieval_rate > 0.0);
         assert!(report.metrics["vector-only"].wrong_scope_retrieval_rate > 0.0);
         for mode in ["fts-only", "vector-only", "hybrid"] {

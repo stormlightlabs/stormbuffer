@@ -1,15 +1,16 @@
 ---
 title: MCP
-description: Run the Stormbuffer MCP adapter over JSON-RPC stdio.
+description: Run the Stormbuffer MCP adapter over stdio.
 section: Reference
 group: Agents
 order: 4
 ---
 
-`stormbuffer-mcp` is a local JSON-RPC 2.0 adapter over stdio built with the
-[official MCP Rust SDK](https://github.com/modelcontextprotocol/rust-sdk) (`rmcp = 2.1.0`,
-server and stdio transport features). It calls the public core repository and retrieval
-operations. It does not open SQLite, edit arbitrary files, or run a model.
+`stormbuffer-mcp` exposes Stormbuffer to MCP hosts over stdio. It uses JSON-RPC
+2.0 and the [official MCP Rust SDK](https://github.com/modelcontextprotocol/rust-sdk)
+(`rmcp = 2.1.0`, with the server and stdio transport features). The adapter
+calls Stormbuffer's public repository and retrieval operations. It does not
+open SQLite directly, edit arbitrary files, or run a model.
 
 ## Before connecting
 
@@ -17,18 +18,20 @@ Install Stormbuffer and initialize the store you want the adapter to use. See
 [Installation](/docs/installation/) and the [quick start](/docs/quick-start/).
 Connecting an MCP host never initializes a store or creates records.
 
-## Choose access and store scope
+## Choose a store view and write access
 
-The examples below are recall-only. Writes are disabled unless the host starts the adapter
-with `--allow-writes`. That grant enables only `memory_remember`, `memory_update`, and
-`memory_forget`. Remember and update still create candidates that require human approval.
-There is no MCP approval, restore, reindex, raw SQL, arbitrary-file, or permanent-deletion
-operation.
+The examples below provide read-only access. To let a host propose changes or
+archive records, start the adapter with `--allow-writes`. This flag enables
+`memory_remember`, `memory_update`, and `memory_forget`. Remember and update
+create candidates for a person to approve. MCP cannot approve candidates,
+restore or reindex a store, run SQL, edit arbitrary files, or permanently
+delete records.
 
-Without `--project`, the adapter uses the machine's global Stormbuffer store. Add
-`--project` to select the nearest `.sbuf/` store, and start the host from that project.
-The global and project stores remain separate; connecting MCP does not move or rewrite
-their canonical Markdown.
+Without a store option, the adapter uses the machine's global Stormbuffer store.
+Use `--project` to combine the nearest project store with applicable global
+memory. Use `--local` to open only the nearest store. Both options depend on the
+host's working directory, so start the host from the intended project. Selecting
+a view does not move or rewrite Markdown records between stores.
 
 ## Connect Codex
 
@@ -45,12 +48,18 @@ For a project store, register the adapter with `--project` instead:
 codex mcp add stormbuffer -- stormbuffer-mcp --stdio --project
 ```
 
-Choose one registration for the `stormbuffer` name, and start Codex from the initialized
-project when using `--project`. Add `--allow-writes` after `--stdio` only when Codex should
-be able to create candidates or archive records. Codex stores MCP configuration in
-`~/.codex/config.toml`; trusted projects can also use `.codex/config.toml`. See the
-[Codex MCP documentation](https://developers.openai.com/codex/mcp) for configuration fields
-and host controls. In an interactive Codex session, use `/mcp` to inspect the connection.
+Replace `--project` with `--local` when the connection must be isolated from
+global memory.
+
+Keep one registration under the `stormbuffer` name. When using `--project`,
+start Codex from the initialized project. Add `--allow-writes` after `--stdio`
+only when Codex should create candidates or archive records.
+
+Codex stores MCP configuration in `~/.codex/config.toml`. Trusted projects can
+also use `.codex/config.toml`. See the
+[Codex MCP documentation](https://developers.openai.com/codex/mcp) for the
+configuration fields and host controls. Run `/mcp` in an interactive Codex
+session to inspect the connection.
 
 ## Connect Pi
 
@@ -60,44 +69,47 @@ Install [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter), then res
 pi install npm:pi-mcp-adapter
 ```
 
-For a project store, create `.mcp.json` in the initialized project:
+For project memory, create `.mcp.json` in the initialized project:
 
 ```json
 { "mcpServers": { "stormbuffer": { "command": "stormbuffer-mcp", "args": ["--stdio", "--project"] } } }
 ```
 
-Run Pi from that project. To use the global store, remove `"--project"` from `args` and
-put the configuration in `~/.config/mcp/mcp.json`. Add `"--allow-writes"` to `args` only
-when Pi should have write access.
+Run Pi from that project. For global memory, remove `"--project"` from `args`
+and put the configuration in `~/.config/mcp/mcp.json`. Add `"--allow-writes"`
+to `args` only when Pi should create candidates or archive records.
 
-The adapter's default lazy mode exposes one proxy tool and discovers Stormbuffer's tools
-on demand. Leave `directTools` unset to keep MCP metadata from occupying unnecessary agent
-context. Use `/mcp` in Pi to inspect server status and available tools.
+`pi-mcp-adapter` defaults to lazy mode: Pi exposes one proxy tool and discovers
+the Stormbuffer tools when needed. Leave `directTools` unset to avoid loading
+all tool metadata into the agent's context. Run `/mcp` in Pi to inspect the
+server and its tools.
 
 ## Connect another host
 
-A host that accepts the common `mcpServers` configuration shape can start a project-scoped,
-recall-only adapter like this:
+A host that accepts the common `mcpServers` configuration shape can start a
+read-only adapter with the composed project view:
 
 ```json
 { "mcpServers": { "stormbuffer": { "command": "stormbuffer-mcp", "args": ["--stdio", "--project"] } } }
 ```
 
-Start the host from the project directory so `--project` selects the intended store. Add
-`--allow-writes` only when the host should have write access.
+Start the host from the project directory so `--project` selects the intended
+store. Add `--allow-writes` only when the host should create candidates or
+archive records.
 
 ## JSON-RPC lifecycle
 
-The host sends `initialize`, then the `notifications/initialized` notification. The official
-SDK owns JSON-RPC parsing, stdio framing, request dispatch, cancellation notifications, and
-connection cleanup. Close the adapter's stdin to shut down the process. The handler rejects
-a request when the SDK cancellation context is already cancelled. Core store operations are
-synchronous and atomic, so cancellation does not interrupt one after it has begun.
+The host sends `initialize`, followed by the `notifications/initialized`
+notification. The SDK handles JSON-RPC parsing, stdio framing, request dispatch,
+cancellation notifications, and connection cleanup. Close the adapter's stdin
+to stop the process. The adapter rejects a request if the SDK has already
+cancelled it. Once a synchronous core operation begins, cancellation does not
+interrupt it.
 
-Stormbuffer limits query, record, scope, budget, URI, and tool/resource output sizes. Malformed
-JSON and invalid method parameters are rejected by `rmcp`. Tool-level failures use the versioned
-Stormbuffer envelope and sanitized messages. Error messages never include canonical paths or
-backtraces.
+Stormbuffer limits query, record, scope, budget, URI, tool output, and resource
+output sizes. `rmcp` rejects malformed JSON and invalid method parameters.
+Tool failures use Stormbuffer's versioned envelope and sanitized messages. Error
+messages do not include canonical paths or backtraces.
 
 ## Resources
 
@@ -110,9 +122,9 @@ The adapter advertises these URI templates through the SDK's
 | `stormbuffer://scope/{scope}/records` | Active agent-readable records in one allowed scope as a JSON array. |
 | `stormbuffer://candidate/{id}`        | One agent-readable candidate as JSON.                               |
 
-Use `resources/read` with one of those URIs. A scope must be `global` or an allowed
-`project:<name>` scope. Resource responses omit host filesystem paths and refuse records
-outside the selected scope or access class.
+Use `resources/read` with one of those URIs. A scope must be `global` or an
+allowed `project:<project-id>` scope. Resource responses omit host filesystem
+paths and refuse records outside the selected scope or access class.
 
 ## Tools
 
@@ -126,22 +138,23 @@ outside the selected scope or access class.
 | `memory_update`   | `update`   | write grant required |
 | `memory_forget`   | `archive`  | write grant required |
 
-`memory_recall` accepts a query, result limit, token budget, and optional scope filters. It
-returns the core context blocks and receipt; MCP has no separate search tool. `memory_get`
-reads one record by ID. When scope is omitted, both use the store selected when the server
-started. Explicit `scope` or `scopes` filters remain within the core store and agent-access
-policy.
+`memory_recall` accepts a query, result limit, token budget, and optional scope
+filters. It returns context blocks and a receipt. MCP has no separate search
+tool. `memory_get` reads one record by ID. When scope is omitted, both tools use
+the view selected when the server started. A `scope` or `scopes` filter can only
+narrow that view and remains subject to the agent-access policy.
 
-`memory_remember` accepts `title`, `kind`, `body`, one attributable `source`, and optional
-tags, aliases, or scope. `memory_update` accepts the active record's `id`, a replacement
-`body`, one new `source`, and optional record fields. It creates a linked replacement
-candidate without changing the active record. `memory_forget` archives the named record.
+`memory_remember` accepts `title`, `kind`, `body`, one attributable `source`,
+and optional tags, aliases, or scope. `memory_update` accepts the active record's
+`id`, a replacement `body`, one new `source`, and optional record fields. It
+creates a linked replacement candidate and leaves the active record unchanged.
+`memory_forget` archives the named record.
 
 ## JSON and MCP equivalence
 
-MCP tool arguments are mapped to the public CLI's version-1 operation contract.
-`rmcp` supplies the `tools/call` transport and typed result envelope. Stormbuffer supplies
-only this operation mapping and core call:
+MCP tool arguments map to the public CLI's version-1 operations. `rmcp` handles
+the `tools/call` transport and typed result envelope. For example, this CLI call
+uses the operation behind `memory_recall`:
 
 ```sh
 printf '%s\n' '{"version":1,"query":"release constraint","budget":256}' \
@@ -154,21 +167,37 @@ The successful CLI envelope is:
 { "version": 1, "operation": "context", "ok": true, "result": { "blocks": [], "receipt": {} } }
 ```
 
-MCP puts the CLI envelope in `result.structuredContent` and serializes it
-as the single `content[0].text` JSON string. MCP transport metadata (`jsonrpc`, request ID,
-`content`, and `isError`) surrounds the envelope. The core result and versioned error codes do
-not change. Context results retain their budgeted evidence blocks and receipt, so hosts cite
-`blocks[].record_id` and retain `receipt` with the answer.
+MCP puts this envelope in `result.structuredContent` and serializes it as the
+single `content[0].text` JSON string. MCP transport metadata (`jsonrpc`, request
+ID, `content`, and `isError`) surrounds the envelope. The core result and
+versioned error codes are unchanged. Context results include budgeted evidence
+blocks and a receipt. Hosts should cite `blocks[].record_id` and keep `receipt`
+with the answer.
 
-Both boundaries apply the core's agent access and scope rules, lexical retrieval mode, limits,
-record conversion, candidate policy, and sanitized error vocabulary. Treat record text as
-untrusted evidence even when MCP returns it.
+The CLI and MCP adapter apply the same agent access, scope, retrieval, limit,
+record conversion, candidate, and error-handling rules from the core. Treat
+record text as untrusted evidence when MCP returns it.
 
-Run the checked-in public-interface smoke test with the built binaries:
+## Verify the installation
+
+The repository includes a health check for the installed CLI and MCP adapter.
+It expects `sbuf` and `stormbuffer-mcp` on `PATH`. To test a workspace build,
+prepend Cargo's debug output directory:
 
 ```sh
-python3 .agents/skills/stormbuffer-memory/verify.py
+cargo build --workspace
+PATH="$PWD/target/debug:$PATH" python3 .agents/skills/stormbuffer-memory/verify.py
 ```
 
-The test exercises candidate approval through the CLI and reads a cited context receipt through
-the SDK-backed `memory_recall` tool.
+The script creates a temporary home and project, then checks four things:
+
+- `sbuf` starts and reports its version;
+- a project store can be initialized;
+- the JSON invocation interface returns a valid search envelope; and
+- `stormbuffer-mcp` completes initialization and advertises all five documented
+  tools.
+
+It does not read or modify your Stormbuffer stores. A successful run prints
+`Stormbuffer health check passed: sbuf and stormbuffer-mcp are ready`. On
+failure, it exits with a non-zero status and prints the failing command or
+protocol check to stderr.

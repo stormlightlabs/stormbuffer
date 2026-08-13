@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use serde_json::{Map, Value, json};
 
 pub const INVOKE_VERSION: u64 = 1;
@@ -247,20 +245,14 @@ fn invocation_stores(
     paths: &crate::StorePaths,
     allowed_scopes: &[String],
 ) -> Result<Vec<crate::StorePaths>, InvokeFailure> {
-    let mut stores = vec![paths.clone()];
-    if paths.scope == crate::StoreScope::Project {
-        let cwd = std::env::current_dir().map_err(|_| {
-            InvokeFailure::new("internal_error", "could not resolve the global store")
-        })?;
-        let global = crate::resolve_store(crate::StoreScope::Global, &cwd).map_err(|_| {
-            InvokeFailure::new("internal_error", "could not resolve the global store")
-        })?;
-        if global.root.join("store.toml").is_file()
-            && allowed_scopes.iter().any(|scope| scope == "global")
-        {
-            stores.push(global);
-        }
-    }
+    let cwd = std::env::current_dir()
+        .map_err(|_| InvokeFailure::new("internal_error", "could not resolve selected stores"))?;
+    let mut stores =
+        crate::retrieval_stores(paths, &cwd).map_err(|error| map_core_error(&error))?;
+    stores.retain(|store| {
+        store.scope != crate::StoreScope::Global
+            || allowed_scopes.iter().any(|scope| scope == "global")
+    });
     for store in &stores {
         let report = crate::sync_store(store).map_err(|error| map_core_error(&error))?;
         if !report.is_complete() {
@@ -391,7 +383,7 @@ fn invoke_remember(
     let record = parse_protocol_record(
         &Value::Object(record_map),
         None,
-        &default_protocol_scope(paths),
+        &default_protocol_scope(paths)?,
     )?;
     let result = crate::RecordRepository::new(paths.clone())
         .propose(record, crate::ProposalActor::Agent)
@@ -505,7 +497,7 @@ fn invoke_propose(
             "invoke proposals always require explicit human approval",
         ));
     }
-    let scope = default_protocol_scope(paths);
+    let scope = default_protocol_scope(paths)?;
     let record_value = if let Some(value) = map.get("record") {
         value.clone()
     } else {
@@ -624,35 +616,10 @@ fn parse_protocol_id(value: &str) -> Result<crate::RecordId, InvokeFailure> {
         .map_err(|_| InvokeFailure::new("invalid_request", "id must be a valid record identifier"))
 }
 
-fn default_protocol_scope(paths: &crate::StorePaths) -> String {
-    match paths.scope {
-        crate::StoreScope::Global => "global".to_owned(),
-        crate::StoreScope::Project => format!("project:{}", project_scope_name(paths)),
-    }
-}
-
-fn project_scope_name(paths: &crate::StorePaths) -> String {
-    let name = paths
-        .root
-        .parent()
-        .and_then(Path::file_name)
-        .and_then(|name| name.to_str())
-        .unwrap_or("local");
-    let sanitized: String = name
-        .chars()
-        .map(|character| {
-            if character.is_whitespace() || character == ':' || character.is_control() {
-                '-'
-            } else {
-                character
-            }
-        })
-        .collect();
-    if sanitized.is_empty() {
-        "local".to_owned()
-    } else {
-        sanitized
-    }
+fn default_protocol_scope(paths: &crate::StorePaths) -> Result<String, InvokeFailure> {
+    crate::record_scope(paths)
+        .map(|scope| scope.as_str().to_owned())
+        .map_err(|error| map_core_error(&error))
 }
 
 const PROTOCOL_RECORD_FIELDS: &[&str] = &[

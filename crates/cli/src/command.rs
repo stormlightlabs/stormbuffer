@@ -24,12 +24,16 @@ pub struct Cli {
     #[arg(long, global = true, value_enum, default_value_t = ColorMode::Auto)]
     pub color: ColorMode,
 
-    /// Use the nearest project store instead of the global store.
-    #[arg(long, global = true)]
+    /// Use the nearest project store together with applicable global memories.
+    #[arg(long, global = true, conflicts_with = "local")]
     pub project: bool,
 
+    /// Use only the nearest project store.
+    #[arg(long, global = true, conflicts_with_all = ["project", "global"])]
+    pub local: bool,
+
     /// Select the global store explicitly.
-    #[arg(long, global = true, conflicts_with = "project")]
+    #[arg(long, global = true, conflicts_with_all = ["project", "local"])]
     pub global: bool,
 
     #[command(subcommand)]

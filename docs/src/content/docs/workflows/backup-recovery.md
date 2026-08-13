@@ -32,8 +32,9 @@ same scope:
 sbuf --project import stormbuffer-memory.json --on-scope remap
 ```
 
-A scope remap changes `project:<name>` to the selected project's scope. Imports preserve IDs and
-Markdown when the selected policy does not require a change.
+A scope remap changes `project:<project-id>` to the selected project's stable
+scope. Imports preserve record IDs and Markdown when the selected policy does
+not require a change.
 
 ## Collisions
 
@@ -50,8 +51,9 @@ canonical files before using overwrite.
 
 ## Recovery
 
-Restore `.sbuf/store.toml`, `.sbuf/.gitignore`, and `.sbuf/records/` (or import an export archive),
-then rebuild projections:
+Restore `.sbuf/store.toml`, `.sbuf/.gitignore`, and `.sbuf/records/` (or import
+an export archive), then rebuild projections. `store.toml` contains the stable
+project identity and belongs in every project-store backup:
 
 ```sh
 sbuf --project sync

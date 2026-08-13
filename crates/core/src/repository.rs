@@ -185,8 +185,8 @@ impl RecordRepository {
             ));
         }
 
-        let conflict = matching_record(&records, &record, MatchKind::Conflict);
-        record.status = if conflict.is_some() {
+        let overlap = matching_record(&records, &record, MatchKind::Overlap);
+        record.status = if overlap.is_some() {
             RecordStatus::Candidate
         } else {
             match actor {
@@ -199,13 +199,13 @@ impl RecordRepository {
         let path = self.record_path(record.id);
         write_atomic(&path, markdown.as_bytes())?;
 
-        if let Some(existing) = conflict {
+        if let Some(existing) = overlap {
             return Ok(ProposalResult::new(
-                ProposalOutcome::ConflictsWith,
+                ProposalOutcome::PossibleOverlap,
                 record.id,
                 Some(existing.record.id),
                 Some(record.status),
-                "proposal conflicts with an existing active or candidate memory; explicit supersession is required",
+                "proposal may overlap an existing memory; review both records before approval or supersession",
             ));
         }
 
@@ -286,10 +286,10 @@ impl RecordRepository {
                 "update matches another memory",
             ));
         }
-        let conflict = matching_record_excluding_ids(
+        let overlap = matching_record_excluding_ids(
             &records,
             &replacement,
-            MatchKind::Conflict,
+            MatchKind::Overlap,
             &[old_id, replacement.id],
         );
         replacement.status = RecordStatus::Candidate;
@@ -297,13 +297,13 @@ impl RecordRepository {
         let markdown = render_markdown(&replacement)?;
         write_atomic(&self.record_path(replacement.id), markdown.as_bytes())?;
 
-        if let Some(existing) = conflict {
+        if let Some(existing) = overlap {
             return Ok(ProposalResult::new(
-                ProposalOutcome::ConflictsWith,
+                ProposalOutcome::PossibleOverlap,
                 replacement.id,
                 Some(existing.record.id),
                 Some(RecordStatus::Candidate),
-                "update conflicts with another memory",
+                "update may overlap another memory; review both records before approval",
             ));
         }
         Ok(ProposalResult::new(
@@ -356,18 +356,6 @@ impl RecordRepository {
                 "candidate duplicates an existing memory",
             ));
         }
-        if let Some(existing) =
-            matching_record_excluding_ids(&records, &current.record, MatchKind::Conflict, &excluded)
-        {
-            return Ok(ProposalResult::new(
-                ProposalOutcome::ConflictsWith,
-                id,
-                Some(existing.record.id),
-                Some(RecordStatus::Candidate),
-                "candidate conflicts with an existing memory; supersede it explicitly before approval",
-            ));
-        }
-
         let mut replacement = current.record.clone();
         replacement.transition_to(RecordStatus::Active)?;
         replacement.updated_at = later_timestamp(replacement.created_at);
@@ -472,6 +460,7 @@ impl RecordRepository {
         replacement: Record,
     ) -> Result<StoredRecord, Error> {
         replacement.validate()?;
+        self.validate_store_scope(&replacement)?;
         if replacement.id != current.record.id {
             return Err(Error::repository(RepositoryError::ImmutableId));
         }
@@ -646,6 +635,7 @@ impl RecordRepository {
             )
         })?;
         let record = parse_markdown(path, &markdown)?;
+        self.validate_store_scope(&record)?;
         Ok(StoredRecord {
             path: path.to_path_buf(),
             markdown,
@@ -658,34 +648,7 @@ impl RecordRepository {
     }
 
     fn validate_store_scope(&self, record: &Record) -> Result<(), Error> {
-        let allowed = match self.paths.scope {
-            super::StoreScope::Global => record.scope.as_str() == "global",
-            super::StoreScope::Project => {
-                let expected = self
-                    .paths
-                    .root
-                    .parent()
-                    .and_then(Path::file_name)
-                    .and_then(|name| name.to_str())
-                    .map(|name| {
-                        let sanitized: String = name
-                            .chars()
-                            .map(|character| {
-                                if character.is_whitespace()
-                                    || character == ':'
-                                    || character.is_control()
-                                {
-                                    '-'
-                                } else {
-                                    character
-                                }
-                            })
-                            .collect();
-                        format!("project:{sanitized}")
-                    });
-                expected.as_deref() == Some(record.scope.as_str())
-            }
-        };
+        let allowed = crate::record_scope(&self.paths)? == record.scope;
         if allowed {
             Ok(())
         } else {
@@ -778,7 +741,7 @@ impl RecordRepository {
 #[derive(Clone, Copy)]
 enum MatchKind {
     Duplicate,
-    Conflict,
+    Overlap,
 }
 
 fn matching_record<'a>(
@@ -816,7 +779,7 @@ fn matching_record_excluding_ids<'a>(
             && normalize(&existing.title) == normalize(&record.title)
             && match kind {
                 MatchKind::Duplicate => normalize(&existing.body) == normalize(&record.body),
-                MatchKind::Conflict => normalize(&existing.body) != normalize(&record.body),
+                MatchKind::Overlap => normalize(&existing.body) != normalize(&record.body),
             }
     })
 }
@@ -881,6 +844,10 @@ pub(crate) fn acquire_store_mutation_lock(paths: &StorePaths) -> Result<Mutation
             root: paths.root.clone(),
         }));
     }
+    acquire_store_initialization_lock(paths)
+}
+
+pub(crate) fn acquire_store_initialization_lock(paths: &StorePaths) -> Result<MutationLock, Error> {
     fs::create_dir_all(paths.root.join(LOCK_DIRECTORY))
         .map_err(|source| Error::io("create the store lock directory", source))?;
     MutationLock::acquire(&paths.root.join(LOCK_DIRECTORY).join(MUTATION_LOCK))
