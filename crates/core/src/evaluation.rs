@@ -6,6 +6,18 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+mod capture_policy;
+mod usefulness;
+
+pub use capture_policy::{
+    CaptureDisposition, CaptureEvent, CapturePolicyReport, CaptureReason,
+    run_synthetic_capture_policy_evaluation,
+};
+pub use usefulness::{
+    ProposalOutcomeRates, UsefulnessBreakdown, UsefulnessComparisonReport, UsefulnessReport,
+    run_synthetic_usefulness_evaluation,
+};
+
 use crate::{
     ContextOptions, DeterministicEmbedder, Embedder, LocalEmbedder, PlatformDirs, Record,
     RecordKind, RecordStatus, Scope, SearchOptions, Source, SourceKind, StoreInitMode, StorePaths,
@@ -74,6 +86,8 @@ pub struct EvaluationReport {
     pub model_version: String,
     pub query_count: usize,
     pub metrics: BTreeMap<String, EvaluationModeReport>,
+    pub usefulness: UsefulnessComparisonReport,
+    pub capture_policy: CapturePolicyReport,
     pub thresholds: BTreeMap<String, f64>,
     pub passed: bool,
 }
@@ -785,14 +799,19 @@ fn run_evaluation_with_embedder(
             verify_checked_summary(&corpus.revision, &metrics)?;
         }
         let thresholds = thresholds();
-        let passed = metrics
-            .values()
-            .all(|report| meets_thresholds(report, &thresholds));
+        let usefulness = run_synthetic_usefulness_evaluation()?;
+        let capture_policy = run_synthetic_capture_policy_evaluation()?;
+        let passed = capture_policy.passed
+            && metrics
+                .values()
+                .all(|report| meets_thresholds(report, &thresholds));
         Ok(EvaluationReport {
             corpus_revision: corpus.revision,
             model_version: embedder.model_version().to_owned(),
             query_count: queries.queries.len(),
             metrics,
+            usefulness,
+            capture_policy,
             thresholds,
             passed,
         })
@@ -1038,6 +1057,8 @@ mod tests {
         let report = run_synthetic_evaluation().expect("evaluation");
         assert_eq!(report.corpus_revision, "m3-fixture-1");
         assert_eq!(report.query_count, 5);
+        assert_eq!(report.usefulness.revision, "m5-usefulness-1");
+        assert!(report.capture_policy.passed);
         assert!(report.metrics["fts-only"].wrong_scope_retrieval_rate > 0.0);
         assert!(report.metrics["vector-only"].wrong_scope_retrieval_rate > 0.0);
         for mode in ["fts-only", "vector-only", "hybrid"] {

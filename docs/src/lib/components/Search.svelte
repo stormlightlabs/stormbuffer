@@ -370,15 +370,16 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.75rem 1rem;
-		padding-top: 0.15rem;
+		padding-top: 0.75rem;
 		border-top: 1px solid var(--line);
 		color: var(--muted);
 		font-size: 0.72rem;
 	}
 
 	.dialog-footer kbd {
-		margin-right: 0.2rem;
-		font-size: 0.62rem;
+		margin-top: 0.25rem;
+		margin-right: 0.25rem;
+		font-size: 0.625rem;
 	}
 
 	@keyframes search-dialog-in {

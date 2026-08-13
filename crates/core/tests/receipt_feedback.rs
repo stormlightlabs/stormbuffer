@@ -45,6 +45,7 @@ fn checked_in_judgments_cover_every_feedback_outcome() {
             ProposalFeedbackOutcome::Edited,
             ProposalFeedbackOutcome::Rejected,
             ProposalFeedbackOutcome::Superseding,
+            ProposalFeedbackOutcome::Duplicate,
         ])
     );
 }
@@ -61,9 +62,9 @@ fn rebuilt_projection_joins_by_receipt_and_contains_no_content_fields() {
     let second = rebuild_receipt_feedback_projection(&projection, &feedback)
         .expect("rebuild feedback projection");
     assert_eq!(first, second);
-    assert_eq!(second.receipt_count, 4);
-    assert_eq!(second.evidence_count, 4);
-    assert_eq!(second.proposal_count, 4);
+    assert_eq!(second.receipt_count, 6);
+    assert_eq!(second.evidence_count, 5);
+    assert_eq!(second.proposal_count, 5);
 
     let connection = Connection::open(&projection).expect("open rebuilt projection");
     let joined: Vec<(String, String)> = connection
@@ -82,10 +83,10 @@ fn rebuilt_projection_joins_by_receipt_and_contains_no_content_fields() {
     assert_eq!(
         joined,
         vec![
-            ("included".to_owned(), "approved".to_owned()),
-            ("cited".to_owned(), "edited".to_owned()),
+            ("included".to_owned(), "edited".to_owned()),
             ("ignored".to_owned(), "rejected".to_owned()),
             ("corrected".to_owned(), "superseding".to_owned()),
+            ("cited".to_owned(), "duplicate".to_owned()),
         ]
     );
 
@@ -114,8 +115,8 @@ fn rebuilt_projection_joins_by_receipt_and_contains_no_content_fields() {
 #[test]
 fn content_fields_are_rejected_from_judgments() {
     let with_prompt = FEEDBACK_JSON.replacen(
-        "\"recorded_at\": \"2026-08-12T14:00:00Z\"",
-        "\"recorded_at\": \"2026-08-12T14:00:00Z\", \"prompt\": \"secret\"",
+        "\"recorded_at\": \"2026-08-12T14:00:30Z\"",
+        "\"recorded_at\": \"2026-08-12T14:00:30Z\", \"prompt\": \"secret\"",
         1,
     );
     let error = parse_receipt_feedback_file(&with_prompt).expect_err("reject prompt content");

@@ -173,31 +173,18 @@ exposed no repeatable gap that warrants a separate brief primitive.
 
 Added opaque IDs and timestamps to retrieval receipts. Checked-in JSON
 judgments classify retrieved evidence as included, cited, ignored, or corrected
-and resulting proposals as approved, edited, rejected, or superseding. The
-rebuildable SQLite projection retains only receipt and record IDs, timestamps,
-and outcomes; judgment parsing rejects raw prompts, answers, and transcripts.
+and resulting proposals as approved, edited, rejected, superseding, or
+duplicate. The rebuildable SQLite projection retains only receipt and record
+IDs, timestamps, and outcomes; judgment parsing rejects raw prompts, answers,
+and transcripts.
 
 ### SB-506 — Measure memory usefulness
 
-**What to build:** Join aggregate receipt feedback to the offline corpus so
-evaluations distinguish absent memory, retrieval misses, ignored results, and
-stale or incorrect memory. Report whether retrieved memory affected later work
-and whether proposed memory survived human review.
-
-**Blocked by:** SB-505
-
-**Acceptance criteria:**
-
-- [ ] Reports distinguish knowledge that was never captured, memory that
-      retrieval missed, retrieved memory the agent ignored, and retrieved
-      memory that was stale or incorrect.
-- [ ] Reports include retrieved-and-used rate, stale corrections, context cost
-      per used memory, and time to later reuse.
-- [ ] Reports include proposal approval, edit, rejection, and duplicate rates.
-- [ ] Evaluation output contains no raw prompts or transcripts.
-
-**Verification:** Run the retrieval evaluation corpus with and without receipt
-feedback and compare the reported metrics.
+Joined aggregate receipt feedback to the offline corpus. The evaluation now
+compares results with and without feedback, separates absent memory, retrieval
+misses, ignored results, and stale or incorrect memory, and reports use, context
+cost, later reuse, corrections, and every proposal review outcome. Its fixtures
+and serialized report contain no raw prompts or transcripts.
 
 ### SB-507 — Install the global agent skill from the CLI
 
@@ -209,29 +196,14 @@ atomically. Process tests cover both scopes and every installation outcome.
 
 ### SB-508 — Evaluate the host capture policy
 
-**What to build:** Define a structured host assessment for named capture
-events. It records the event, an abstain/propose/update/checkpoint disposition,
-and a stable reason, with at most one atomic candidate. Exercise the installed
-skill against realistic conversation scenarios instead of testing a separate
-hand-written decision tree.
-
-**Blocked by:** SB-505
-
-**Acceptance criteria:**
-
-- [ ] Scenarios cover durable corrections, accepted decisions, tentative
-      discussion, routine completion, repository-authoritative knowledge,
-      confirmed root causes, and necessary handoffs.
-- [ ] Expected results include correct abstention reasons as well as proposals,
-      updates, and checkpoints.
-- [ ] Evaluation reports proposal precision, missed-memory judgments, and
-      approval, edit, rejection, and duplicate outcomes.
-- [ ] Assessments and feedback store no raw prompts or transcripts.
-- [ ] Capture worthiness remains a host decision; core receives only an
-      admitted candidate and continues to own validation and lifecycle policy.
-
-**Verification:** Run the checked-in capture scenarios against the packaged
-skill and inspect the assessment and receipt-feedback output.
+Added a structured, revisioned host assessment for named capture events, stable
+reasons, four dispositions, and at most one atomic candidate. Checked-in
+scenarios cover corrections, decisions, tentative and routine work,
+repository-authoritative knowledge, confirmed root causes, and necessary
+handoffs. The installed-skill test exercises the packaged policy, while the
+evaluation reports abstentions, proposal precision, missed judgments, and
+review outcomes without storing conversation content or moving capture
+worthiness into core.
 
 ### SB-509 — Correct overlap semantics and build a relation corpus
 

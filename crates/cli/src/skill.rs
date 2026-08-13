@@ -65,19 +65,19 @@ fn global_skill() -> String {
     PROJECT_SKILL
         .replacen("name: stormbuffer-memory", "name: stormbuffer-global-memory", 1)
         .replacen(
-            "Use Stormbuffer's public CLI JSON or MCP interfaces when work depends on prior project decisions, conventions, commands, architecture, or unfinished work; retrieve and cite evidence, then propose only small durable memories.",
-            "Use Stormbuffer's global store when work depends on cross-project preferences, decisions, conventions, procedures, or unfinished context; retrieve and cite evidence, then propose only small durable memories.",
+            "Retrieve and cite Stormbuffer project memory when prior decisions, conventions, commands, architecture, or unfinished work may affect a task. Propose at most one durable memory after a named capture event.",
+            "Retrieve and cite Stormbuffer global memory when cross-project preferences, decisions, conventions, procedures, or unfinished context may affect a task. Propose at most one durable memory after a named capture event.",
             1,
         )
         .replace("--project", "--global")
         .replacen(
-            "Keep the project store as the default boundary",
-            "Keep the global store as the boundary",
+            "Use the project store by default",
+            "Use the global store as the boundary",
             1,
         )
         .replacen(
-            "Project retrieval can also return global records. Ignore them unless the task asks for global\ncontext or a record directly constrains this project. Never widen scope merely because a result\nis available.",
-            "Global retrieval stays within the global store. Never widen beyond that boundary merely because\nother memory is available.",
+            "Project retrieval can also return global records. Ignore them unless the task asks for global\ncontext or a record directly constrains this project. Available results do not widen the task's\nscope.",
+            "Global retrieval stays within the global store. Available results do not widen the task's scope.",
             1,
         )
 }

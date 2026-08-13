@@ -59,15 +59,15 @@ Only a person using the CLI can permanently delete one.
 
 ### Better capture
 
-The maintained agent skill should express memory use as a small decision tree.
-It recalls when prior durable context may affect the work, considers capture
+The maintained agent skill expresses memory use as a small decision tree. It
+recalls when prior durable context may affect the work, considers capture
 only after a high-signal event, and otherwise takes no memory action. A capture
 event permits evaluation; it does not guarantee a proposal.
 
-Make that host decision observable and testable. At a capture boundary, the
-host should classify the event, choose whether to abstain, propose, update, or
-checkpoint, and give a stable reason. Tests should exercise realistic
-conversation scenarios against the installed policy, including corrections,
+That host decision is observable and testable. At a capture boundary, the host
+classifies the event, chooses whether to abstain, propose, update, or
+checkpoint, and gives a stable reason. Tests exercise realistic scenarios
+against the installed policy, including corrections,
 accepted decisions, tentative discussion, routine completion, and knowledge
 already preserved in the repository. No-proposal is a valid outcome.
 
@@ -89,16 +89,16 @@ gap that requires a separate brief or working-memory primitive.
 
 ### Measure usefulness
 
-Add feedback tied to retrieval receipts. Store no raw prompts or transcripts.
-The feedback should distinguish knowledge that was never captured, memory that
-retrieval missed, retrieved memory the agent ignored, and retrieved memory that
-was stale or incorrect. It should also show whether a memory was used, cited,
-corrected, or followed by a reviewed proposal.
+Feedback tied to retrieval receipts distinguishes knowledge that was never
+captured, memory that retrieval missed, retrieved memory the agent ignored, and
+retrieved memory that was stale or incorrect. It also shows whether a memory
+was used, cited, corrected, or followed by a reviewed proposal. Reports store
+no raw prompts or transcripts.
 
-Measure time to first cited recall, proposal approval, edit, rejection, and
-duplicate rates, retrieved-and-used rate, stale-memory corrections, context
-cost per used memory, and time to later reuse. Use repeatable failures to decide
-whether Stormbuffer next needs better capture, retrieval, or maintenance.
+The evaluation reports time to later reuse, proposal approval, edit, rejection,
+and duplicate rates, retrieved-and-used rate, stale-memory corrections, and
+context cost per used memory. Repeatable failures decide whether Stormbuffer
+next needs better capture, retrieval, or maintenance.
 
 ## Pre-web retrieval and maintenance
 

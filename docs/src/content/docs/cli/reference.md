@@ -264,19 +264,27 @@ a fresh projection before replacing the old one. If a watch or reindex process i
 canonical Markdown remains authoritative and the previous projection is preserved. Run `sync`
 or `reindex` again to recover.
 
-## Evaluate retrieval
+## Evaluate retrieval and memory policy
 
-`evaluate` runs the checked-in retrieval corpus against lexical, semantic, and
-hybrid search:
+`evaluate` runs the checked-in retrieval, usefulness, and host capture-policy
+corpora:
 
 ```sh
 sbuf evaluate
 ```
 
 The JSON report includes recall, ranking, scope and lifecycle errors, conflicts,
-and context cost. It also reports whether the pinned model is unavailable and
-how to acquire it. This command is for maintainers evaluating retrieval changes;
-normal use does not require it.
+and context cost. Its usefulness comparison shows results with and without
+receipt feedback, including missing memory, retrieval misses, ignored results,
+stale or incorrect records, later reuse, and proposal review outcomes. The
+capture-policy report scores host assessments for correct abstention, proposal
+precision, missed judgments, and later review outcomes.
+
+These are offline, content-free evaluations. The capture-policy evaluator
+scores judgments supplied by a host and does not decide what deserves capture.
+The report also explains how to acquire the pinned model when it is unavailable.
+
+This command is generally used for debugging. Normal use does not require it.
 
 ## Permanently delete a record
 

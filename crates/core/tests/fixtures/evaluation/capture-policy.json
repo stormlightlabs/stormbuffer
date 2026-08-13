@@ -1,0 +1,24 @@
+{
+  "revision": "m5-capture-policy-1",
+  "policy_revision": "stormbuffer-capture-v1",
+  "scenarios": [
+    {"id":"durable-correction","event":"durable_correction","expected_disposition":"update","expected_reason":"existing_memory_is_stale"},
+    {"id":"accepted-decision","event":"accepted_decision","expected_disposition":"propose","expected_reason":"durable_accepted_decision"},
+    {"id":"tentative-discussion","event":"tentative_discussion","expected_disposition":"abstain","expected_reason":"tentative_or_unsettled"},
+    {"id":"routine-completion","event":"routine_completion","expected_disposition":"abstain","expected_reason":"no_capture_event"},
+    {"id":"repository-knowledge","event":"repository_authoritative_knowledge","expected_disposition":"abstain","expected_reason":"repository_already_preserves_knowledge"},
+    {"id":"confirmed-root-cause","event":"confirmed_root_cause","expected_disposition":"propose","expected_reason":"durable_confirmed_root_cause"},
+    {"id":"necessary-handoff","event":"necessary_handoff","expected_disposition":"checkpoint","expected_reason":"cross_session_state_is_not_recoverable"},
+    {"id":"duplicate-decision","event":"accepted_decision","expected_disposition":"propose","expected_reason":"durable_accepted_decision"}
+  ],
+  "assessments": [
+    {"scenario_id":"durable-correction","event":"durable_correction","disposition":"update","reason":"existing_memory_is_stale","candidate":{"record_id":"019c1e10-1004-7000-8000-000000000004","kind":"decision"},"receipt_id":"019c1e10-0004-7000-8000-000000000004"},
+    {"scenario_id":"accepted-decision","event":"accepted_decision","disposition":"propose","reason":"durable_accepted_decision","candidate":{"record_id":"019c1e10-1001-7000-8000-000000000001","kind":"decision"},"receipt_id":"019c1e10-0001-7000-8000-000000000001"},
+    {"scenario_id":"tentative-discussion","event":"tentative_discussion","disposition":"abstain","reason":"tentative_or_unsettled","candidate":null,"receipt_id":null},
+    {"scenario_id":"routine-completion","event":"routine_completion","disposition":"abstain","reason":"no_capture_event","candidate":null,"receipt_id":null},
+    {"scenario_id":"repository-knowledge","event":"repository_authoritative_knowledge","disposition":"abstain","reason":"repository_already_preserves_knowledge","candidate":null,"receipt_id":null},
+    {"scenario_id":"confirmed-root-cause","event":"confirmed_root_cause","disposition":"propose","reason":"durable_confirmed_root_cause","candidate":{"record_id":"019c1e10-1002-7000-8000-000000000002","kind":"fact"},"receipt_id":"019c1e10-0002-7000-8000-000000000002"},
+    {"scenario_id":"necessary-handoff","event":"necessary_handoff","disposition":"checkpoint","reason":"cross_session_state_is_not_recoverable","candidate":{"record_id":"019c1e10-1003-7000-8000-000000000003","kind":"checkpoint"},"receipt_id":"019c1e10-0003-7000-8000-000000000003"},
+    {"scenario_id":"duplicate-decision","event":"accepted_decision","disposition":"propose","reason":"durable_accepted_decision","candidate":{"record_id":"019c1e10-1005-7000-8000-000000000005","kind":"decision"},"receipt_id":"019c1e10-0005-7000-8000-000000000005"}
+  ]
+}

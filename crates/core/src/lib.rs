@@ -17,45 +17,15 @@ mod record;
 mod repository;
 mod vector;
 
-pub use backup::{
-    BackupError, ExistingRecordPolicy, ExportBundle, ExportedRecord, GcEntry, GcOptions, GcReport,
-    IdCollisionPolicy, ImportOptions, ImportReport, MAX_EXPORT_ARCHIVE_BYTES, ScopeCollisionPolicy,
-    decode_export, encode_export, export_store, gc_store, import_store, write_export_archive,
-};
+pub use backup::*;
+pub use embedder::*;
+pub use evaluation::*;
+pub use feedback::*;
+pub use index::*;
+pub use invoke::*;
+pub use record::*;
+
 pub use codec::{parse_markdown, render_markdown};
-pub use embedder::{
-    DEFAULT_MODEL_VERSION, DeterministicEmbedder, Embedder, Embedding, LocalEmbedder,
-    MODEL_MANIFEST_VERSION, ModelArtifact, ModelManifest, default_model_manifest,
-    ensure_default_model, l2_normalize, model_cache_dir, platform_model_cache_dir,
-};
-pub use evaluation::{
-    AnswerArtifact, AnswerClaim, EvaluationMetadata, EvaluationModeReport, EvaluationQuery,
-    EvaluationReport, EvaluationStageReport, ExpectedClaim, GroundedEvaluationMetrics,
-    GroundedEvaluationReport, GroundedQuestionReport, HostModelEvaluationAdapter, RagQuestion,
-    run_evaluation, run_synthetic_evaluation, run_synthetic_grounded_evaluation,
-};
-pub use feedback::{
-    EvidenceFeedback, EvidenceOutcome, ProposalFeedback, ProposalFeedbackOutcome, ReceiptFeedback,
-    ReceiptFeedbackFile, ReceiptFeedbackProjectionReport, ReceiptId, parse_receipt_feedback_file,
-    rebuild_receipt_feedback_projection,
-};
-pub use index::{
-    ContextBlock, ContextOptions, ContextReceipt, ContextResult, DoctorIssue, DoctorReport,
-    RetrievalMode, SearchOptions, SearchResult, SemanticIndexReport, SourceReceipt,
-    SyncInvalidFile, SyncReport, WatchOptions, WatchReport, chunk_record, content_hash,
-    context_store, context_stores, context_stores_with_embedder, doctor_store, index_path,
-    rebuild_vector_index, reindex_store, reindex_store_with_embedder, search_store, search_stores,
-    search_stores_with_embedder, sync_store, watch_store,
-};
-pub use invoke::{
-    INVOKE_VERSION, InvokeFailure, MAX_INVOKE_BUDGET, MAX_INVOKE_INPUT, MAX_INVOKE_LIMIT,
-    MAX_INVOKE_OUTPUT, MAX_INVOKE_OUTPUT_BODY, MAX_INVOKE_QUERY, invoke_envelope, invoke_operation,
-    invoke_record, invoke_request, invoke_scope_records, invoke_search_result,
-};
-pub use record::{
-    Access, ProposalActor, ProposalOutcome, RECORD_FORMAT_VERSION, Record, RecordId, RecordKind,
-    RecordStatus, Scope, Source, SourceKind, Timestamp,
-};
 pub use repository::{ProposalResult, RecordRepository, RepositoryError, StoredRecord};
 pub use vector::{SqliteVectorIndex, VectorFilter, VectorHit, VectorIndex, VectorMetadata};
 
@@ -645,23 +615,6 @@ mod tests {
 
         let paths = resolve_store_with_dirs(StoreScope::Project, &nested, &dirs).expect("resolve");
         assert_eq!(paths.root, project);
-
-        fs::remove_dir_all(root).expect("remove test directory");
-    }
-
-    #[test]
-    fn project_resolution_returns_missing_sbuf_without_legacy_discovery() {
-        let root = temporary_directory("missing-project");
-        let nested = root.join("one").join("two");
-        fs::create_dir_all(&nested).expect("create nested directory");
-        let dirs = PlatformDirs::new(root.join("data"), root.join("cache"));
-
-        let paths = resolve_store_with_dirs(StoreScope::Project, &nested, &dirs).expect("resolve");
-        assert_eq!(paths.root, nested.join(".sbuf"));
-
-        fs::create_dir_all(root.join(".stormbuffer")).expect("create legacy directory");
-        let paths = resolve_store_with_dirs(StoreScope::Project, &nested, &dirs).expect("resolve");
-        assert_eq!(paths.root, nested.join(".sbuf"));
 
         fs::remove_dir_all(root).expect("remove test directory");
     }

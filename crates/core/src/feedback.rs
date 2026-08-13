@@ -94,6 +94,7 @@ pub enum ProposalFeedbackOutcome {
     Edited,
     Rejected,
     Superseding,
+    Duplicate,
 }
 
 impl ProposalFeedbackOutcome {
@@ -103,6 +104,7 @@ impl ProposalFeedbackOutcome {
             Self::Edited => "edited",
             Self::Rejected => "rejected",
             Self::Superseding => "superseding",
+            Self::Duplicate => "duplicate",
         }
     }
 }
@@ -251,7 +253,7 @@ fn build_projection(path: &Path, feedback: &ReceiptFeedbackFile) -> crate::Resul
              CREATE TABLE proposal_feedback (
                receipt_id TEXT PRIMARY KEY REFERENCES receipt_feedback(receipt_id) ON DELETE CASCADE,
                record_id TEXT NOT NULL,
-               outcome TEXT NOT NULL CHECK (outcome IN ('approved', 'edited', 'rejected', 'superseding'))
+               outcome TEXT NOT NULL CHECK (outcome IN ('approved', 'edited', 'rejected', 'superseding', 'duplicate'))
              );",
         )
         .map_err(|source| db_error("create the receipt feedback projection", source))?;

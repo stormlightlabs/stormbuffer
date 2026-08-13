@@ -46,12 +46,12 @@ candidate.
 
 Each active record should:
 
-- make sense without the original conversation;
-- cover one fact, decision, procedure, or checkpoint;
-- name an attributable source;
-- live in the narrowest useful scope;
-- change a likely future decision or action; and
-- be easy to correct, supersede, archive, or delete.
+- make sense without the original conversation
+- cover one fact, decision, procedure, or checkpoint
+- name an attributable source
+- live in the narrowest useful scope
+- change a likely future decision or action
+- be easy to correct, supersede, archive, or delete
 
 Judge the store by later retrieval. An agent should find the relevant evidence
 within the context budget, cite it, and use it. Record count says little if
