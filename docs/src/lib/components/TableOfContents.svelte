@@ -1,7 +1,19 @@
 <script lang="ts">
 	import type { DocHeading } from '$lib/content/types';
+	import { startScrollSpy } from '$lib/scroll-spy';
 
 	let { headings }: { headings: DocHeading[] } = $props();
+	let activeHeading = $state<string | null>(null);
+
+	$effect(() => {
+		const elements = headings
+			.map((heading) => document.getElementById(heading.slug))
+			.filter((heading): heading is HTMLElement => heading instanceof HTMLElement);
+
+		return startScrollSpy(elements, (heading) => {
+			activeHeading = heading;
+		});
+	});
 </script>
 
 {#if headings.length > 0}
@@ -9,8 +21,9 @@
 		<p class="toc-title">On this page</p>
 		<ul>
 			{#each headings as heading (heading.slug)}
-				<li class:toc-subitem={heading.level === 3}>
-					<a href={`#${heading.slug}`}>{heading.title}</a>
+				<li class:toc-subitem={heading.level === 3} class:active={heading.slug === activeHeading}>
+					<a href={`#${heading.slug}`} aria-current={heading.slug === activeHeading ? 'location' : undefined}
+						>{heading.title}</a>
 				</li>
 			{/each}
 		</ul>
@@ -44,7 +57,18 @@
 	}
 
 	.toc li {
+		position: relative;
 		line-height: 1.35;
+	}
+
+	.toc li.active::before {
+		position: absolute;
+		top: 0.15em;
+		bottom: 0.15em;
+		left: -1.05rem;
+		width: 2px;
+		background: var(--gold-bright);
+		content: '';
 	}
 
 	.toc li.toc-subitem {
@@ -57,7 +81,12 @@
 		text-decoration: none;
 	}
 
-	.toc a:hover {
+	.toc a:hover,
+	.toc a[aria-current='location'] {
 		color: var(--teal-dark);
+	}
+
+	.toc a[aria-current='location'] {
+		font-weight: 650;
 	}
 </style>
