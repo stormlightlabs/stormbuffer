@@ -494,6 +494,7 @@ fn invoke_remember(
         None,
         &default_protocol_scope(paths)?,
     )?;
+    reject_secret_candidate(&record)?;
     let result = crate::RecordRepository::new(paths.clone())
         .propose(record, crate::ProposalActor::Agent)
         .map_err(|error| map_core_error(&error))?;
@@ -540,11 +541,22 @@ fn invoke_update(
         Some(old.record()),
         old.record().scope.as_str(),
     )?;
+    reject_secret_candidate(&replacement)?;
     let result = repository
         .propose_update(target_id, replacement)
         .map_err(|error| map_core_error(&error))?;
     serde_json::to_value(result)
         .map_err(|_| InvokeFailure::new("internal_error", "could not encode update result"))
+}
+
+fn reject_secret_candidate(record: &crate::Record) -> Result<(), InvokeFailure> {
+    if crate::secret_guard::contains_likely_secret(record) {
+        return Err(InvokeFailure::new(
+            "secret_detected",
+            "candidate contains credential-like material; remove it before retrying",
+        ));
+    }
+    Ok(())
 }
 
 fn ensure_agent_write(map: &Map<String, Value>) -> Result<(), InvokeFailure> {

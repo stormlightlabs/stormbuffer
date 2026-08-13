@@ -107,6 +107,46 @@ mod tests {
     }
 
     #[test]
+    fn agent_write_secret_errors_are_sanitized_at_the_mcp_boundary() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("stormbuffer-mcp-secret-{suffix}"));
+        let paths = core::StorePaths {
+            scope: core::StoreScope::Global,
+            records: root.join("records"),
+            cache: root.join("cache"),
+            root: root.clone(),
+        };
+        core::initialize_store(&paths, core::StoreInitMode::Default).expect("initialize store");
+        let secret = "ghp_0123456789abcdefghijklmnop";
+        let arguments = serde_json::from_value(serde_json::json!({
+            "title": "Unsafe MCP candidate",
+            "kind": "fact",
+            "body": format!("credential: {secret}"),
+            "source": {"kind": "conversation", "reference": "mcp-test", "actor": "agent"}
+        }))
+        .expect("tool arguments");
+
+        let result = McpServer::new(paths.clone(), true)
+            .call_sync("remember", arguments, false)
+            .expect("structured rejection");
+        let structured = result.structured_content.expect("structured result");
+        assert_eq!(structured["error"]["code"], "secret_detected");
+        assert!(!structured.to_string().contains(secret));
+        assert_eq!(
+            fs::read_dir(&paths.records)
+                .expect("read records")
+                .filter_map(Result::ok)
+                .count(),
+            0
+        );
+
+        fs::remove_dir_all(root).expect("remove temporary store");
+    }
+
+    #[test]
     fn recall_uses_the_supplied_embedder_for_hybrid_retrieval() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)

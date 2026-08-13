@@ -18,6 +18,7 @@ mod invoke;
 mod maintenance;
 mod record;
 mod repository;
+mod secret_guard;
 mod vector;
 
 pub use backup::*;

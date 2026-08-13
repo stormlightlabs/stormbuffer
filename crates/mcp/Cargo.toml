@@ -20,3 +20,6 @@ rmcp.workspace = true
 serde_json.workspace = true
 stormbuffer-core = { package = "stormbuffer-core", version = "=0.1.0", path = "../core" }
 tokio.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true

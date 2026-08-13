@@ -164,6 +164,14 @@ and optional tags, aliases, or scope. `memory_update` accepts the active record'
 creates a linked replacement candidate and leaves the active record unchanged.
 `memory_forget` archives the named record.
 
+### Secret Handling
+
+`memory_remember` and `memory_update` reject private keys, authorization
+credentials, recognized API tokens, and passwords embedded in URLs. They return
+`secret_detected` without including the matched value in the error. Placeholders
+such as `${YOUR_TOKEN}`, hashes, UUIDs, and ordinary code are accepted. Markdown
+edited directly is not checked.
+
 ## JSON and MCP equivalence
 
 MCP tool arguments map to the public CLI's version-1 operations. `rmcp` handles

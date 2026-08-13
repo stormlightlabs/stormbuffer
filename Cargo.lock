@@ -1582,6 +1582,7 @@ name = "stormbuffer-mcp"
 version = "0.1.0"
 dependencies = [
  "rmcp",
+ "rusqlite",
  "serde_json",
  "stormbuffer-core",
  "tokio",

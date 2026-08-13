@@ -4,49 +4,14 @@
 
 ### SB-701 — Finish the hybrid MCP recall boundary
 
-**What to build:** Test hybrid `memory_recall` through the MCP server with a
+Tested hybrid `memory_recall` through the MCP server with a
 deterministic injected embedder, and report why semantic retrieval fell back to
 lexical retrieval.
 
-**Acceptance criteria:**
-
-- [x] An MCP integration test returns the expected record through hybrid
-      retrieval without downloading the production embedding model.
-- [x] The receipt identifies hybrid retrieval, the embedding model and version,
-      and semantic/vector ranking evidence where applicable.
-- [x] Receipts, status, or diagnostics distinguish an intentionally unavailable
-      embedder, a missing model, an unavailable or busy vector projection, and
-      an embedding execution failure without exposing record contents or paths.
-- [x] Each semantic failure mode falls back to lexical retrieval with a valid
-      receipt.
-- [x] A transient embedder initialization failure does not silently disable
-      semantic retrieval for the process lifetime unless that behavior is
-      intentional and documented.
-
-**Verification:** Run the focused MCP protocol tests with the deterministic
-embedder and each semantic failure fixture.
-
 ### SB-702 — Build a realistic software-agent memory benchmark
 
-**What to build:** Expand the deterministic evaluation corpus to roughly
-100–300 canonical memories and at least 100 retrieval questions across several
-simulated projects and historical revisions.
-
-**Acceptance criteria:**
-
-- [x] Fixtures cover exact facts, paraphrases, decisions, procedures,
-      checkpoints, temporal changes, scope collisions, distractors,
-      insufficient evidence, and prompt-like text inside records.
-- [x] Project knowledge does not leak across project stores, and inactive or
-      superseded records do not displace applicable active records.
-- [x] Evaluation reports recall@k, MRR, scope violations, inactive or
-      superseded leakage, context precision, context token efficiency,
-      citation and provenance correctness, and abstention quality.
-- [x] The corpus and queries are deterministic, checked into the repository,
-      and large enough that ranking cannot be tuned to a few hand-picked cases.
-
-**Verification:** Run the retrieval evaluation with a fixed seed and confirm
-that its results match the checked-in expected metric output.
+Expanded the deterministic evaluation corpus to roughly 100–300 canonical memories
+and at least 100 retrieval questions across several simulated projects and historical revisions.
 
 ### SB-703 — Characterize scale and retrieval latency
 
@@ -55,13 +20,13 @@ at about 100, 1,000, and 10,000 records and measures cold and warm behavior.
 
 **Acceptance criteria:**
 
-- [ ] The harness measures reconciliation, FTS, vector, and hybrid retrieval,
+- [x] The harness measures reconciliation, FTS, vector, and hybrid retrieval,
       context compilation, incremental reindexing, and warm MCP recall.
-- [ ] Results include p50, p95, maximum latency, index size, and vector index
+- [x] Results include p50, p95, maximum latency, index size, and vector index
       size for each supported store size.
-- [ ] The benchmark records its environment and inputs so another developer can
+- [x] The benchmark records its environment and inputs so another developer can
       reproduce and compare results. A 50,000-record run may remain optional.
-- [ ] No storage or caching redesign is added without a measured bottleneck. If
+- [x] No storage or caching redesign is added without a measured bottleneck. If
       per-recall freshness work dominates, evaluate a persisted generation or
       freshness marker before a daemon or complex cache.
 
@@ -76,14 +41,14 @@ writes.
 
 **Acceptance criteria:**
 
-- [ ] Detection covers PEM private keys, obvious bearer or authorization
+- [x] Detection covers PEM private keys, obvious bearer or authorization
       headers, strong common API-token prefixes, and reliably identifiable
       credential-bearing URLs.
-- [ ] Rejection returns an actionable validation error that does not echo the
+- [x] Rejection returns an actionable validation error that does not echo the
       secret, log the candidate body, or write a canonical record.
-- [ ] Tests cover every supported pattern and ordinary code, hashes, UUIDs, and
+- [x] Tests cover every supported pattern and ordinary code, hashes, UUIDs, and
       example placeholders that must remain valid.
-- [ ] Direct human editing remains outside this automated-write safeguard.
+- [x] Direct human editing remains outside this automated-write safeguard.
 
 **Verification:** Run focused core and adapter tests for accepted and rejected
 `remember` and `update` requests, including an assertion that errors contain no

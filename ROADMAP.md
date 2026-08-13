@@ -5,11 +5,17 @@ sourced project knowledge as readable files under human control.
 
 ## Version 0.1.0 hardening
 
-The release also needs core rejection of high-confidence secrets in agent
-writes, tokenizer-aware embedding chunks, optional source revision metadata,
-and CI across supported platforms. Multiple chunks from one record will be
-considered only if the benchmark shows that the current diversity rule loses
-necessary evidence.
+Core agent writes now reject high-confidence secrets before canonical Markdown
+is written. The release still needs tokenizer-aware embedding chunks, optional
+source revision metadata, and CI across supported platforms. Multiple chunks
+from one record will be considered only if the benchmark shows that the current
+diversity rule loses necessary evidence.
+
+The scale baseline now covers 100, 1,000, and 10,000 records with deterministic
+local embeddings. At 10,000 records, warm MCP recall had a 1.65-second median,
+while warm reconciliation alone had a 1.24-second median. Freshness work is the
+first bottleneck to investigate. Evaluate a persisted generation or freshness
+marker before considering a daemon or broader cache redesign.
 
 ## Agent host lifecycle integrations
 

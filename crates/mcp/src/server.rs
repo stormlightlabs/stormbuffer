@@ -63,7 +63,11 @@ impl McpServer {
         self.allow_writes
     }
 
-    pub(crate) fn call_sync(
+    /// Calls the same synchronous adapter boundary used by MCP tool handlers.
+    ///
+    /// This is primarily useful to integration tests and benchmark harnesses
+    /// that must exclude transport overhead.
+    pub fn call_sync(
         &self,
         operation: &'static str,
         arguments: JsonObject,
