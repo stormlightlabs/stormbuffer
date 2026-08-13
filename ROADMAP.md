@@ -121,12 +121,11 @@ project that identity for filtering, but it must remain rebuildable from the
 canonical store and records. Do not duplicate a project name across every
 record unless independent record export requires it.
 
-Round out the existing lifecycle and recovery commands before building the web
-editor. Expand `status` with lifecycle counts, canonical and disposable disk
-usage, index and model versions, and last successful synchronization. Add
-preview and verification paths for import and export. `doctor --repair` may fix
-only disposable state; malformed or ambiguous canonical records still require a
-person.
+The lifecycle and recovery commands expose the selected view's lifecycle
+counts, canonical and disposable disk usage, index and model versions, and last
+successful synchronization. `doctor --repair` fixes only disposable state;
+malformed or ambiguous canonical records still require a person. Add preview
+and verification paths for import and export before building the web editor.
 
 Give people one candidate inbox and a read-only `audit` command for possible
 duplicates, refinements, stale checkpoints, unresolved candidates, and broken

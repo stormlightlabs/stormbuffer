@@ -91,7 +91,9 @@ sbuf --project root
 ## Inspect a store
 
 `status` reports the selected view, root path, initialization state, visibility,
-record count, and project identity when applicable:
+project identity when applicable, lifecycle counts, canonical and disposable
+disk usage, index and embedding versions, and the last successful
+synchronization:
 
 ```sh
 sbuf status
@@ -261,6 +263,7 @@ can be rebuilt:
 sbuf --project sync
 sbuf --project reindex
 sbuf --project doctor
+sbuf --project doctor --repair
 ```
 
 `sync` reconciles new, edited, moved, invalid, and deleted Markdown files. Repeating it without
@@ -268,11 +271,16 @@ changes skips records whose content hash is unchanged. Run `sbuf --project watch
 at intervals. The watcher is optional because `search` and `context`
 synchronize before reading the index.
 
-Use `doctor` to inspect canonical records and the selected projection. Its diagnostics include
-a repair command. If an index is missing, stale, or corrupt, run `reindex`. Stormbuffer builds
-a fresh projection before replacing the old one. If a watch or reindex process is interrupted,
-canonical Markdown remains authoritative and the previous projection is preserved. Run `sync`
-or `reindex` again to recover.
+Use `doctor` to inspect canonical records and the selected projection. Add
+`--repair` to rebuild a missing, stale, or corrupt projection and remove stale
+locks or temporary metadata reported by `doctor`. Repair never changes canonical
+Markdown. A malformed canonical record requires the manual action shown in the
+diagnostic. Repeating repair after the store is healthy makes no changes.
+
+Stormbuffer builds a fresh projection before replacing the old one. If a watch
+or reindex process is interrupted, canonical Markdown remains authoritative and
+the previous projection is preserved. Run `sync`, `reindex`, or `doctor
+--repair` to recover.
 
 ## Evaluate retrieval and memory policy
 
@@ -284,11 +292,21 @@ sbuf evaluate
 ```
 
 The JSON report includes recall, ranking, scope and lifecycle errors, reviewed
-relation pairs, and context cost. Its usefulness comparison shows results with and without
-receipt feedback, including missing memory, retrieval misses, ignored results,
-stale or incorrect records, later reuse, and proposal review outcomes. The
-capture-policy report scores host assessments for correct abstention, proposal
-precision, missed judgments, and later review outcomes.
+relation pairs, and context cost. Relation analysis runs in shadow mode: the
+hybrid index selects candidates, then a local analyzer reports its advisory
+relation, evidence, confidence band, and fingerprint. The report includes
+candidate recall, all-pairs analyzer accuracy, false contradictions, and
+abstentions. These shadow metrics are reported for review and do not affect the
+evaluation's release pass/fail result.
+
+Embeddings never determine contradiction, and advisory results never change a
+record.
+
+The usefulness comparison shows results with and without receipt feedback,
+including missing memory, retrieval misses, ignored results, stale or incorrect
+records, later reuse, and proposal review outcomes. The capture-policy report
+scores host assessments for correct abstention, proposal precision, missed
+judgments, and later review outcomes.
 
 These are offline, content-free evaluations. The capture-policy evaluator
 scores judgments supplied by a host and does not decide what deserves capture.

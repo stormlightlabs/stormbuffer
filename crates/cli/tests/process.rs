@@ -173,6 +173,23 @@ fn init_root_and_status_work_for_project_and_global_stores() {
         String::from_utf8_lossy(&project_root.stdout).trim(),
         expected_project_root.to_string_lossy()
     );
+    let project_status = run(&project, ["--project", "status", "--json"]);
+    let project_status: serde_json::Value =
+        serde_json::from_slice(&project_status.stdout).expect("parse project status");
+    assert_eq!(
+        project_status["view"],
+        "project with applicable global memory"
+    );
+    assert_eq!(project_status["scope"], "project");
+    assert!(project_status["lifecycle"].is_object());
+    assert!(project_status["disk_usage"].is_object());
+    assert!(project_status["index_version"].is_number());
+
+    let local_status = run(&project, ["--local", "status", "--json"]);
+    let local_status: serde_json::Value =
+        serde_json::from_slice(&local_status.stdout).expect("parse local status");
+    assert_eq!(local_status["view"], "strict local");
+    assert_eq!(local_status["scope"], "local");
 
     let mut global_command = Command::new(binary());
     global_command.current_dir(&project).arg("init");
@@ -190,7 +207,11 @@ fn init_root_and_status_work_for_project_and_global_stores() {
     with_store_environment(&mut global_status_command, &root);
     let global_status = global_status_command.output().expect("run global status");
     assert_eq!(global_status.status.code(), Some(0));
-    assert!(String::from_utf8_lossy(&global_status.stdout).contains("\"initialized\":true"));
+    let global_status: serde_json::Value =
+        serde_json::from_slice(&global_status.stdout).expect("parse global status");
+    assert_eq!(global_status["view"], "global");
+    assert_eq!(global_status["scope"], "global");
+    assert_eq!(global_status["initialized"], true);
 
     fs::remove_dir_all(root).expect("remove test directory");
 }
@@ -225,6 +246,34 @@ fn doctor_reports_readiness_and_an_actionable_semantic_setup() {
     );
     assert!(!stdout.contains("(repair:"), "{stdout}");
 
+    fs::remove_dir_all(root).expect("remove test directory");
+}
+
+#[test]
+fn doctor_repair_recovers_disposable_projection_and_metadata() {
+    let root = temporary_directory("doctor-repair");
+    let init = run(&root, ["--project", "init"]);
+    assert_eq!(init.status.code(), Some(0));
+    let store = root.join(".sbuf");
+    fs::write(store.join("index.sqlite3"), b"corrupt").expect("corrupt projection");
+    fs::create_dir_all(store.join("tmp")).expect("create temp directory");
+    fs::write(store.join("tmp/stale"), b"stale").expect("write stale metadata");
+
+    let repair = run(&root, ["--project", "doctor", "--repair"]);
+    assert_eq!(
+        repair.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&repair.stderr)
+    );
+    let output = String::from_utf8_lossy(&repair.stdout);
+    assert!(output.contains("Repaired: rebuilt the disposable search projection"));
+    assert!(output.contains("Repaired: removed stale disposable metadata"));
+    assert!(!store.join("tmp/stale").exists());
+
+    let repeated = run(&root, ["--project", "doctor", "--repair"]);
+    assert_eq!(repeated.status.code(), Some(0));
+    assert!(!String::from_utf8_lossy(&repeated.stdout).contains("Repaired:"));
     fs::remove_dir_all(root).expect("remove test directory");
 }
 

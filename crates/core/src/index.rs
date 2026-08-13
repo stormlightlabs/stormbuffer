@@ -8,19 +8,19 @@ use std::time::Duration;
 
 use fs2::FileExt;
 use rusqlite::types::Value;
-use rusqlite::{Connection, OptionalExtension, Transaction, params, params_from_iter};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, params, params_from_iter};
 use serde::Serialize;
 
-use crate::embedder::{Embedder, default_model_is_ready};
+use crate::embedder::{Embedder, LocalEmbedder, default_model_is_ready};
 use crate::record::Access;
-use crate::repository::replace_file;
+use crate::repository::{acquire_store_mutation_lock, replace_file};
 use crate::vector::{
     SqliteVectorIndex, VectorDocument, VectorFilter, VectorIndex, VectorMetadata,
     register_sqlite_vec,
 };
 use crate::{Error, ReceiptId, Record, StorePaths, StoreScope, Timestamp};
 
-pub const INDEX_SCHEMA_VERSION: u32 = 4;
+pub const INDEX_SCHEMA_VERSION: u32 = 5;
 /// Version of the provider-neutral evidence envelope returned by `context`.
 pub const CONTEXT_CONTRACT_VERSION: &str = "stormbuffer-context-v1";
 const MAX_CHUNK_WORDS: usize = 160;
@@ -329,6 +329,100 @@ pub struct DoctorReport {
     pub issues: Vec<DoctorIssue>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct DoctorRepairReport {
+    pub diagnosis: DoctorReport,
+    pub repaired: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ProjectionStatus {
+    pub index_version: Option<u32>,
+    pub embedding_version: Option<String>,
+    pub last_successful_sync: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct AdvisoryRelationProjection {
+    pub left_record_id: String,
+    pub right_record_id: String,
+    pub relation: String,
+    pub evidence_json: String,
+    pub confidence: String,
+    pub analyzer_fingerprint: String,
+}
+
+pub fn replace_advisory_relation_projection(
+    paths: &StorePaths,
+    relations: &[AdvisoryRelationProjection],
+) -> crate::Result<()> {
+    let destination = active_index_path(paths)?;
+    let _lock = ProjectionLock::acquire(&destination)?;
+    let mut index = Index::open_at(&destination)?;
+    let transaction = index
+        .connection
+        .transaction()
+        .map_err(|source| db_error("begin advisory relation projection", source))?;
+    transaction
+        .execute("DELETE FROM advisory_relations", [])
+        .map_err(|source| db_error("clear advisory relation projection", source))?;
+    for relation in relations {
+        transaction
+            .execute(
+                "INSERT INTO advisory_relations(left_record_id, right_record_id, relation, evidence_json, confidence, analyzer_fingerprint) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    relation.left_record_id,
+                    relation.right_record_id,
+                    relation.relation,
+                    relation.evidence_json,
+                    relation.confidence,
+                    relation.analyzer_fingerprint,
+                ],
+            )
+            .map_err(|source| db_error("write advisory relation projection", source))?;
+    }
+    transaction
+        .commit()
+        .map_err(|source| db_error("commit advisory relation projection", source))
+}
+
+pub fn inspect_projection_status(paths: &StorePaths) -> ProjectionStatus {
+    let path = match active_index_path(paths) {
+        Ok(path) => path,
+        Err(_) => return ProjectionStatus::default(),
+    };
+    let connection = match Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+        Ok(connection) => connection,
+        Err(_) => return ProjectionStatus::default(),
+    };
+    let index_version = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .ok();
+    let last_successful_sync = connection
+        .query_row(
+            "SELECT value FROM index_metadata WHERE key = 'last_sync'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten();
+    let embedding_version = connection
+        .query_row(
+            "SELECT model_version FROM vector_indexes WHERE active = 1 ORDER BY index_id DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten();
+    ProjectionStatus {
+        index_version,
+        embedding_version,
+        last_successful_sync,
+    }
+}
+
 #[derive(Clone, Debug)]
 struct SearchHit {
     record_id: String,
@@ -361,7 +455,7 @@ pub fn index_path(paths: &StorePaths) -> PathBuf {
     }
 }
 
-fn active_index_path(paths: &StorePaths) -> crate::Result<PathBuf> {
+pub(crate) fn active_index_path(paths: &StorePaths) -> crate::Result<PathBuf> {
     let configured = index_path(paths);
     if paths.scope != StoreScope::Global || directory_supports_writes(&paths.cache) {
         return Ok(configured);
@@ -1081,11 +1175,60 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
         return Ok(report);
     }
 
-    let canonical = collect_markdown_paths(&paths.records).unwrap_or_default();
+    let expected_scope = match crate::record_scope(paths) {
+        Ok(scope) => scope,
+        Err(error) => {
+            issue(
+                &mut report,
+                "failure",
+                format!("canonical store metadata is invalid: {error}"),
+                "repair store.toml, then run `sbuf doctor`",
+            );
+            return Ok(report);
+        }
+    };
+    let canonical = match collect_markdown_paths(&paths.records) {
+        Ok(paths) => paths,
+        Err(error) => {
+            issue(
+                &mut report,
+                "failure",
+                format!("canonical records could not be scanned: {error}"),
+                "restore access to the records directory, then run `sbuf doctor`",
+            );
+            return Ok(report);
+        }
+    };
     let mut valid = HashMap::new();
+    let mut seen_ids = HashMap::new();
     for path in canonical {
         match read_canonical(&path) {
             Ok((record, markdown)) => {
+                if record.scope != expected_scope {
+                    issue(
+                        &mut report,
+                        "failure",
+                        format!(
+                            "canonical record {} is outside the selected store scope",
+                            path.display()
+                        ),
+                        "correct the record scope, then run `sbuf sync`",
+                    );
+                    continue;
+                }
+                if let Some(first) = seen_ids.insert(record.id, path.clone()) {
+                    issue(
+                        &mut report,
+                        "failure",
+                        format!(
+                            "canonical record {} duplicates the ID first seen at {}",
+                            path.display(),
+                            first.display()
+                        ),
+                        "give each record a unique ID, then run `sbuf sync`",
+                    );
+                    continue;
+                }
                 valid.insert(
                     path.display().to_string(),
                     (record.id.to_string(), content_hash(&markdown)),
@@ -1158,7 +1301,151 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
             "run `sbuf init` while online to download and verify the local model",
         );
     }
+    for path in repairable_metadata(paths)? {
+        issue(
+            &mut report,
+            "warning",
+            format!("stale disposable metadata remains at {}", path.display()),
+            "run `sbuf doctor --repair`",
+        );
+    }
     Ok(report)
+}
+
+pub fn repair_store(paths: &StorePaths) -> crate::Result<DoctorRepairReport> {
+    let diagnosis = doctor_store(paths)?;
+    if has_canonical_failure(&diagnosis) {
+        return Ok(DoctorRepairReport {
+            diagnosis,
+            repaired: Vec::new(),
+        });
+    }
+
+    let _mutation_lock = acquire_store_mutation_lock(paths)?;
+    let diagnosis = doctor_store(paths)?;
+    if has_canonical_failure(&diagnosis) {
+        return Ok(DoctorRepairReport {
+            diagnosis,
+            repaired: Vec::new(),
+        });
+    }
+
+    let mut repaired = Vec::new();
+    let projection_needs_rebuild = diagnosis.issues.iter().any(|issue| {
+        issue.message.contains("SQLite projection")
+            || issue.message.contains("projection is stale")
+            || issue.message.contains("projection contains deleted")
+            || issue.message.contains("not indexed")
+    });
+    if projection_needs_rebuild {
+        let embedder = LocalEmbedder::from_default_cache(paths).ok();
+        reindex_store_with_embedder(
+            paths,
+            embedder.as_ref().map(|embedder| embedder as &dyn Embedder),
+        )?;
+        repaired.push("rebuilt the disposable search projection".to_owned());
+    }
+    for path in repairable_metadata(paths)? {
+        match fs::remove_file(&path) {
+            Ok(()) => repaired.push(format!(
+                "removed stale disposable metadata {}",
+                path.display()
+            )),
+            Err(source) if source.kind() == io::ErrorKind::NotFound => {}
+            Err(source) => return Err(Error::io("remove stale disposable metadata", source)),
+        }
+    }
+    Ok(DoctorRepairReport {
+        diagnosis: doctor_store(paths)?,
+        repaired,
+    })
+}
+
+fn has_canonical_failure(report: &DoctorReport) -> bool {
+    report.issues.iter().any(|issue| {
+        issue.severity == "failure"
+            && (issue.message.contains("canonical")
+                || issue.message.contains("not initialized")
+                || issue.message.contains("records directory"))
+    })
+}
+
+fn repairable_metadata(paths: &StorePaths) -> crate::Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    collect_stale_lock_files(&paths.root.join("locks"), &mut files)?;
+    collect_disposable_files(&paths.root.join("tmp"), &mut files)?;
+    let index = index_path(paths);
+    if let Some(parent) = index.parent() {
+        let prefix = format!(
+            ".{}.",
+            index
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("index.sqlite3")
+        );
+        let entries = match fs::read_dir(parent) {
+            Ok(entries) => Some(entries),
+            Err(source) if source.kind() == io::ErrorKind::NotFound => None,
+            Err(source) => return Err(Error::io("inspect disposable metadata", source)),
+        };
+        if let Some(entries) = entries {
+            for entry in entries {
+                let entry =
+                    entry.map_err(|source| Error::io("inspect disposable metadata", source))?;
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if entry.path().is_file() && name.starts_with(&prefix) && name.ends_with(".tmp") {
+                    files.push(entry.path());
+                }
+            }
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+fn collect_disposable_files(directory: &Path, files: &mut Vec<PathBuf>) -> crate::Result<()> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => return Err(Error::io("inspect disposable metadata", source)),
+    };
+    for entry in entries {
+        let entry = entry.map_err(|source| Error::io("inspect disposable metadata", source))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|source| Error::io("inspect disposable metadata", source))?;
+        if file_type.is_dir() {
+            collect_disposable_files(&entry.path(), files)?;
+        } else if file_type.is_file() {
+            files.push(entry.path());
+        }
+    }
+    Ok(())
+}
+
+fn collect_stale_lock_files(directory: &Path, files: &mut Vec<PathBuf>) -> crate::Result<()> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => return Err(Error::io("inspect disposable metadata", source)),
+    };
+    for entry in entries {
+        let entry = entry.map_err(|source| Error::io("inspect disposable metadata", source))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|source| Error::io("inspect disposable metadata", source))?;
+        if file_type.is_file()
+            && entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "lock")
+            && entry.file_name() != "mutation.lock"
+        {
+            files.push(entry.path());
+        }
+    }
+    Ok(())
 }
 
 struct Index {
@@ -1954,6 +2241,23 @@ fn migrate(connection: &Connection) -> crate::Result<()> {
                 "ALTER TABLE vector_indexes ADD COLUMN canonical_fingerprint TEXT NOT NULL DEFAULT '';\n                 ALTER TABLE vector_indexes ADD COLUMN projection_fingerprint TEXT NOT NULL DEFAULT '';\n                 INSERT INTO index_metadata(key, value) VALUES ('vector_schema_version', '2') ON CONFLICT(key) DO UPDATE SET value=excluded.value;\n                 PRAGMA user_version = 4;",
             )
             .map_err(|source| db_error("apply index migration 4", source))?;
+    }
+    if version < 5 {
+        transaction
+            .execute_batch(
+                "CREATE TABLE advisory_relations (
+                   left_record_id TEXT NOT NULL,
+                   right_record_id TEXT NOT NULL,
+                   relation TEXT NOT NULL,
+                   evidence_json TEXT NOT NULL,
+                   confidence TEXT NOT NULL,
+                   analyzer_fingerprint TEXT NOT NULL,
+                   PRIMARY KEY(left_record_id, right_record_id, analyzer_fingerprint)
+                 );
+                 INSERT INTO index_metadata(key, value) VALUES ('relation_schema_version', '1') ON CONFLICT(key) DO UPDATE SET value=excluded.value;
+                 PRAGMA user_version = 5;",
+            )
+            .map_err(|source| db_error("apply index migration 5", source))?;
     }
     transaction
         .commit()

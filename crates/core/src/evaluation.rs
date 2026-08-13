@@ -14,17 +14,23 @@ pub use capture_policy::{
     CaptureDisposition, CaptureEvent, CapturePolicyReport, CaptureReason,
     run_synthetic_capture_policy_evaluation,
 };
-pub use relations::{RelationHeuristicReport, run_relation_heuristic_evaluation};
+pub use relations::{
+    AdvisoryRelation, ConfidenceBand, ConservativeRelationAnalyzer, LocalRelationAnalyzer,
+    RelationAnalysisReport, RelationHeuristicReport, RelationInference, RelationRecord,
+    run_relation_analysis_evaluation, run_relation_heuristic_evaluation,
+};
 pub use usefulness::{
     ProposalOutcomeRates, UsefulnessBreakdown, UsefulnessComparisonReport, UsefulnessReport,
     run_synthetic_usefulness_evaluation,
 };
 
 use crate::{
-    ContextOptions, DeterministicEmbedder, Embedder, LocalEmbedder, PlatformDirs, Record,
-    RecordKind, RecordStatus, Scope, SearchOptions, Source, SourceKind, StoreInitMode, StorePaths,
-    StoreScope, Timestamp, context_stores, context_stores_with_embedder, ensure_default_model,
-    initialize_store, rebuild_vector_index, record_scope, render_markdown, search_stores,
+    Access, AdvisoryRelationProjection, ContextOptions, DeterministicEmbedder, Embedder,
+    LocalEmbedder, PlatformDirs, Record, RecordId, RecordKind, RecordStatus, RetrievalMode, Scope,
+    SearchOptions, Source, SourceKind, StoreInitMode, StorePaths, StoreScope, Timestamp,
+    context_stores, context_stores_with_embedder, ensure_default_model, initialize_store,
+    rebuild_vector_index, record_scope, render_markdown, replace_advisory_relation_projection,
+    search_stores,
 };
 
 const CORPUS_JSON: &str = include_str!("../tests/fixtures/evaluation/corpus.json");
@@ -181,6 +187,7 @@ pub struct EvaluationReport {
     pub usefulness: UsefulnessComparisonReport,
     pub capture_policy: CapturePolicyReport,
     pub relation_heuristic: RelationHeuristicReport,
+    pub relation_analysis: RelationAnalysisReport,
     pub thresholds: BTreeMap<String, f64>,
     pub passed: bool,
 }
@@ -873,6 +880,8 @@ fn run_evaluation_with_embedder(
         let usefulness = run_synthetic_usefulness_evaluation()?;
         let capture_policy = run_synthetic_capture_policy_evaluation()?;
         let relation_heuristic = run_relation_heuristic_evaluation()?;
+        let relation_analysis = evaluate_relation_analysis(&root, embedder)?;
+        // Relation analysis is shadow-only and deliberately does not gate release pass/fail.
         let passed = capture_policy.passed
             && metrics
                 .values()
@@ -885,12 +894,137 @@ fn run_evaluation_with_embedder(
             usefulness,
             capture_policy,
             relation_heuristic,
+            relation_analysis,
             thresholds,
             passed,
         })
     })();
     let _ = fs::remove_dir_all(root);
     result
+}
+
+fn evaluate_relation_analysis(
+    evaluation_root: &std::path::Path,
+    embedder: &dyn Embedder,
+) -> crate::Result<RelationAnalysisReport> {
+    let relation_root = evaluation_root.join("relation-shadow");
+    let paths = StorePaths {
+        scope: StoreScope::Project,
+        records: relation_root.join("records"),
+        cache: relation_root.join("cache"),
+        root: relation_root,
+    };
+    initialize_store(&paths, StoreInitMode::Default)?;
+    let scope = record_scope(&paths)?;
+    let (_, pairs) = relations::relation_pairs()?;
+    let mut stored_pairs = Vec::with_capacity(pairs.len());
+    for pair in &pairs {
+        let left_id = write_relation_record(&paths, &scope, &pair.id, "left", &pair.left)?;
+        let right_id = write_relation_record(&paths, &scope, &pair.id, "right", &pair.right)?;
+        stored_pairs.push((pair, left_id, right_id));
+    }
+    crate::sync_store(&paths)?;
+    rebuild_vector_index(&paths, embedder)?;
+
+    let analyzer = ConservativeRelationAnalyzer;
+    let mut retrieved_pair_ids = HashSet::new();
+    let mut projections = Vec::new();
+    for (pair, left_id, right_id) in &stored_pairs {
+        let mut options = SearchOptions::for_store(&paths);
+        options.limit = 5;
+        options.mode = RetrievalMode::Hybrid;
+        let query = format!("{} {}", pair.left.title, pair.left.body);
+        let results = crate::search_stores_with_embedder(
+            std::slice::from_ref(&paths),
+            &query,
+            options,
+            embedder,
+        )?;
+        if results
+            .iter()
+            .any(|result| result.record_id == right_id.to_string())
+        {
+            retrieved_pair_ids.insert(pair.id.clone());
+            let inference = analyzer.analyze(&pair.left, &pair.right);
+            projections.push(AdvisoryRelationProjection {
+                left_record_id: left_id.to_string(),
+                right_record_id: right_id.to_string(),
+                relation: advisory_relation_name(inference.relation).to_owned(),
+                evidence_json: serde_json::to_string(&inference.evidence).map_err(|error| {
+                    crate::Error::invalid_input(format!(
+                        "could not encode advisory relation evidence: {error}"
+                    ))
+                })?,
+                confidence: confidence_name(inference.confidence).to_owned(),
+                analyzer_fingerprint: inference.analyzer_fingerprint,
+            });
+        }
+    }
+    replace_advisory_relation_projection(&paths, &projections)?;
+    run_relation_analysis_evaluation(&retrieved_pair_ids, &analyzer)
+}
+
+fn write_relation_record(
+    paths: &StorePaths,
+    scope: &Scope,
+    pair_id: &str,
+    side: &str,
+    fixture: &RelationRecord,
+) -> crate::Result<RecordId> {
+    let id = RecordId::new_v7();
+    let now = Timestamp::now_utc();
+    let kind = fixture.kind.parse().unwrap_or(RecordKind::Fact);
+    let record = Record {
+        id,
+        title: fixture
+            .title
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "),
+        kind,
+        scope: scope.clone(),
+        status: RecordStatus::Active,
+        access: Access::Agent,
+        created_at: now,
+        updated_at: now,
+        tags: vec!["relation-evaluation".to_owned()],
+        aliases: Vec::new(),
+        supersedes: Vec::new(),
+        sources: vec![Source {
+            kind: SourceKind::Document,
+            reference: format!("evaluation/relations.json#{pair_id}-{side}"),
+            actor: "stormbuffer-evaluation".to_owned(),
+        }],
+        body: fixture
+            .body
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "),
+    };
+    let record_path = paths.records.join(format!("{}.md", record.id));
+    fs::write(record_path, render_markdown(&record)?)
+        .map_err(|source| crate::Error::io("write relation evaluation record", source))?;
+    Ok(id)
+}
+
+fn advisory_relation_name(relation: AdvisoryRelation) -> &'static str {
+    match relation {
+        AdvisoryRelation::Equivalent => "equivalent",
+        AdvisoryRelation::Entails => "entails",
+        AdvisoryRelation::EntailedBy => "entailed_by",
+        AdvisoryRelation::Contradiction => "contradiction",
+        AdvisoryRelation::Related => "related",
+        AdvisoryRelation::Unrelated => "unrelated",
+        AdvisoryRelation::Unknown => "unknown",
+    }
+}
+
+fn confidence_name(confidence: ConfidenceBand) -> &'static str {
+    match confidence {
+        ConfidenceBand::Low => "low",
+        ConfidenceBand::Medium => "medium",
+        ConfidenceBand::High => "high",
+    }
 }
 
 fn evaluate_mode(
@@ -1129,6 +1263,16 @@ mod tests {
         assert!(report.capture_policy.passed);
         assert_eq!(report.relation_heuristic.normalized_duplicate_errors, 0);
         assert!(report.relation_heuristic.false_conflict_count > 0);
+        assert_eq!(report.relation_analysis.revision, "m6-relation-pairs-1");
+        assert!(report.relation_analysis.shadow_mode);
+        assert_eq!(report.relation_analysis.false_contradiction_count, 0);
+        assert!(
+            report
+                .relation_analysis
+                .retrieval_candidate_recall
+                .is_finite()
+        );
+        assert!(report.relation_analysis.abstention_count > 0);
         assert!(report.metrics["fts-only"].wrong_scope_retrieval_rate > 0.0);
         assert!(report.metrics["vector-only"].wrong_scope_retrieval_rate > 0.0);
         for mode in ["fts-only", "vector-only", "hybrid"] {

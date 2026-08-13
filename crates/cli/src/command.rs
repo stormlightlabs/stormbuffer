@@ -83,7 +83,7 @@ pub enum CliCommand {
     /// Remove disposable cache, projection, lock, and temporary data.
     Gc(GcArgs),
     /// Diagnose canonical data and projections.
-    Doctor,
+    Doctor(DoctorArgs),
     /// Export canonical records and provenance as a portable JSON archive.
     Export(PathArgs),
     /// Import a portable canonical-record archive.
@@ -273,6 +273,13 @@ pub struct GcArgs {
     /// Report disposable data without removing it.
     #[arg(long)]
     pub dry_run: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct DoctorArgs {
+    /// Repair only disposable state with one unambiguous recovery path.
+    #[arg(long)]
+    pub repair: bool,
 }
 
 #[derive(Args, Debug)]

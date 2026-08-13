@@ -4,8 +4,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use stormbuffer_core::{
-    SearchOptions, StoreInitMode, StorePaths, StoreScope, context_store, doctor_store, index_path,
-    initialize_store, invoke_request, reindex_store, search_store, search_stores, sync_store,
+    AdvisoryRelationProjection, INDEX_SCHEMA_VERSION, SearchOptions, StoreInitMode, StorePaths,
+    StoreScope, context_store, doctor_store, index_path, initialize_store, inspect_store,
+    invoke_request, reindex_store, repair_store, replace_advisory_relation_projection,
+    search_store, search_stores, sync_store,
 };
 
 struct TempStore {
@@ -123,7 +125,7 @@ fn sync_is_incremental_and_search_returns_attributable_results() {
     )
     .expect("context");
     assert!(context.receipt.used_tokens <= 3);
-    assert_eq!(context.receipt.index_version, 4);
+    assert_eq!(context.receipt.index_version, INDEX_SCHEMA_VERSION);
 }
 
 #[test]
@@ -490,6 +492,10 @@ fn global_store_uses_a_temporary_projection_when_its_cache_is_read_only() {
     assert!(fallback.starts_with(std::env::temp_dir()));
     assert_ne!(fallback, paths.cache.join("global.sqlite3"));
     assert!(fallback.is_file());
+    let status = inspect_store(&paths).expect("inspect fallback status");
+    assert_eq!(status.index_version, Some(INDEX_SCHEMA_VERSION));
+    assert!(status.last_successful_sync.is_some());
+    assert!(status.disposable_bytes >= fs::metadata(&fallback).expect("fallback metadata").len());
     assert_eq!(
         search_store(&paths, "disposable", SearchOptions::for_store(&paths))
             .expect("search fallback projection")
@@ -504,4 +510,251 @@ fn global_store_uses_a_temporary_projection_when_its_cache_is_read_only() {
     fs::set_permissions(&paths.cache, permissions).expect("restore cache permissions");
     fs::remove_dir_all(fallback.parent().expect("fallback directory"))
         .expect("remove fallback projection");
+}
+
+#[test]
+fn status_reports_lifecycle_disk_and_projection_details() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    for (index, status) in ["candidate", "active", "superseded", "archived"]
+        .into_iter()
+        .enumerate()
+    {
+        let path = write_record(
+            &paths,
+            &format!("{status}.md"),
+            &format!("019fdb80-0000-7000-8000-00000000001{index}"),
+            &format!("{status} record"),
+            "global",
+            status,
+            "Operational status fixture.",
+        );
+        if status != "active" {
+            let markdown = fs::read_to_string(&path).expect("read fixture");
+            fs::write(
+                &path,
+                markdown.replace("status = \"active\"", &format!("status = \"{status}\"")),
+            )
+            .expect("set lifecycle status");
+        }
+    }
+    sync_store(&paths).expect("sync");
+
+    let status = inspect_store(&paths).expect("inspect status");
+    assert_eq!(status.record_count, 4);
+    assert_eq!(status.lifecycle.candidate, 1);
+    assert_eq!(status.lifecycle.active, 1);
+    assert_eq!(status.lifecycle.superseded, 1);
+    assert_eq!(status.lifecycle.archived, 1);
+    assert!(status.canonical_bytes > 0);
+    assert!(status.disposable_bytes > 0);
+    assert_eq!(status.index_version, Some(INDEX_SCHEMA_VERSION));
+    assert!(status.last_successful_sync.is_some());
+}
+
+#[test]
+fn project_status_excludes_the_shared_global_cache() {
+    let store = TempStore::new();
+    let mut paths = store.paths();
+    paths.scope = StoreScope::Project;
+    paths.root = store.root.join("project/.sbuf");
+    paths.records = paths.root.join("records");
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    sync_store(&paths).expect("sync");
+
+    let before = inspect_store(&paths)
+        .expect("inspect project status")
+        .disposable_bytes;
+    fs::create_dir_all(&paths.cache).expect("create shared cache");
+    fs::write(paths.cache.join("global-projection.bin"), vec![0; 4096])
+        .expect("write shared cache fixture");
+    let after = inspect_store(&paths)
+        .expect("inspect project status with shared cache")
+        .disposable_bytes;
+
+    assert_eq!(after, before);
+}
+
+#[test]
+fn repair_rebuilds_only_disposable_state_and_is_idempotent() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    let record = write_record(
+        &paths,
+        "repair.md",
+        "019fdb80-0000-7000-8000-000000000020",
+        "Repair boundary",
+        "global",
+        "repair boundary",
+        "Canonical Markdown must survive projection repair unchanged.",
+    );
+    sync_store(&paths).expect("sync");
+    let marker = paths.root.join("store.toml");
+    let marker_before = fs::read(&marker).expect("read marker");
+    let record_before = fs::read(&record).expect("read canonical record");
+    fs::write(index_path(&paths), b"not a SQLite projection").expect("corrupt projection");
+    fs::create_dir_all(paths.root.join("locks")).expect("create locks");
+    fs::create_dir_all(paths.root.join("tmp")).expect("create tmp");
+    fs::write(paths.root.join("locks/stale.lock"), b"stale").expect("write stale lock");
+    fs::write(paths.root.join("locks/supersede.toml"), b"recovery journal")
+        .expect("write recovery journal");
+    fs::write(paths.root.join("tmp/stale.json"), b"stale").expect("write stale temp");
+
+    let repaired = repair_store(&paths).expect("repair store");
+    assert_eq!(repaired.diagnosis.failures, 0);
+    assert_eq!(repaired.repaired.len(), 3);
+    assert_eq!(fs::read(&marker).expect("read marker after"), marker_before);
+    assert_eq!(fs::read(&record).expect("read record after"), record_before);
+    assert!(!paths.root.join("locks/stale.lock").exists());
+    assert_eq!(
+        fs::read(paths.root.join("locks/supersede.toml")).expect("read recovery journal"),
+        b"recovery journal"
+    );
+    assert!(!paths.root.join("tmp/stale.json").exists());
+    assert_eq!(
+        search_store(&paths, "survive", SearchOptions::for_store(&paths))
+            .expect("search repaired projection")
+            .len(),
+        1
+    );
+
+    let repeated = repair_store(&paths).expect("repeat repair");
+    assert!(repeated.repaired.is_empty());
+    assert_eq!(
+        fs::read(marker).expect("read repeated marker"),
+        marker_before
+    );
+    assert_eq!(
+        fs::read(record).expect("read repeated record"),
+        record_before
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn repair_does_not_follow_symlinks_in_disposable_directories() {
+    use std::os::unix::fs::symlink;
+
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    sync_store(&paths).expect("sync");
+    let outside = store.root.join("outside.txt");
+    fs::write(&outside, b"outside the repair boundary").expect("write outside fixture");
+    fs::create_dir_all(paths.root.join("tmp")).expect("create tmp");
+    symlink(&outside, paths.root.join("tmp/outside-link")).expect("create symlink");
+
+    let repair = repair_store(&paths).expect("repair store");
+
+    assert!(repair.repaired.is_empty());
+    assert_eq!(
+        fs::read(outside).expect("read outside fixture"),
+        b"outside the repair boundary"
+    );
+}
+
+#[test]
+fn advisory_relations_are_discarded_when_the_projection_is_rebuilt() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    sync_store(&paths).expect("sync");
+    replace_advisory_relation_projection(
+        &paths,
+        &[AdvisoryRelationProjection {
+            left_record_id: "left".to_owned(),
+            right_record_id: "right".to_owned(),
+            relation: "unknown".to_owned(),
+            evidence_json: "[]".to_owned(),
+            confidence: "low".to_owned(),
+            analyzer_fingerprint: "test-analyzer".to_owned(),
+        }],
+    )
+    .expect("write advisory projection");
+    let before: i64 = rusqlite::Connection::open(index_path(&paths))
+        .expect("open projection")
+        .query_row("SELECT COUNT(*) FROM advisory_relations", [], |row| {
+            row.get(0)
+        })
+        .expect("count advisory rows");
+    assert_eq!(before, 1);
+
+    reindex_store(&paths).expect("rebuild projection");
+    let after: i64 = rusqlite::Connection::open(index_path(&paths))
+        .expect("open rebuilt projection")
+        .query_row("SELECT COUNT(*) FROM advisory_relations", [], |row| {
+            row.get(0)
+        })
+        .expect("count rebuilt advisory rows");
+    assert_eq!(after, 0);
+}
+
+#[test]
+fn repair_reports_canonical_failures_for_manual_intervention() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    fs::write(paths.records.join("invalid.md"), b"not a canonical record")
+        .expect("write invalid canonical record");
+    let invalid_before = fs::read(paths.records.join("invalid.md")).expect("read invalid record");
+
+    let repair = repair_store(&paths).expect("diagnose canonical failure");
+    assert!(repair.repaired.is_empty());
+    assert!(repair.diagnosis.failures > 0);
+    assert!(repair.diagnosis.issues.iter().any(|issue| {
+        issue.severity == "failure" && issue.repair.contains("repair the Markdown")
+    }));
+    assert_eq!(
+        fs::read(paths.records.join("invalid.md")).expect("read invalid record after repair"),
+        invalid_before
+    );
+    assert!(!index_path(&paths).exists());
+}
+
+#[test]
+fn repair_refuses_duplicate_and_out_of_scope_canonical_records() {
+    let store = TempStore::new();
+    let paths = store.paths();
+    initialize_store(&paths, StoreInitMode::Default).expect("initialize");
+    let first = write_record(
+        &paths,
+        "first.md",
+        "019fdb80-0000-7000-8000-000000000030",
+        "First",
+        "global",
+        "first",
+        "First canonical record.",
+    );
+    fs::copy(&first, paths.records.join("duplicate.md")).expect("copy duplicate record");
+    write_record(
+        &paths,
+        "wrong-scope.md",
+        "019fdb80-0000-7000-8000-000000000031",
+        "Wrong scope",
+        "project:019fdb80-0000-7000-8000-000000000032",
+        "wrong scope",
+        "This record belongs to another store.",
+    );
+
+    let repair = repair_store(&paths).expect("diagnose canonical invariants");
+
+    assert!(repair.repaired.is_empty());
+    assert!(repair.diagnosis.failures >= 2);
+    assert!(
+        repair
+            .diagnosis
+            .issues
+            .iter()
+            .any(|issue| issue.message.contains("duplicates the ID"))
+    );
+    assert!(
+        repair
+            .diagnosis
+            .issues
+            .iter()
+            .any(|issue| issue.message.contains("outside the selected store scope"))
+    );
+    assert!(!index_path(&paths).exists());
 }

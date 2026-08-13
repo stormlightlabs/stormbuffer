@@ -218,30 +218,15 @@ title/body heuristic with the reviewed judgments.
 
 ### SB-510 — Add advisory semantic relation analysis
 
-**What to build:** Retrieve a small set of related records with the existing
-hybrid index, then classify each candidate pair with a replaceable local
-relation analyzer. The analyzer may report equivalence, one-way entailment,
-contradiction, related, unrelated, or unknown.
-
-**Blocked by:** SB-506, SB-509
-
-**Acceptance criteria:**
-
-- [ ] Embeddings select candidate pairs but never determine contradiction by
-      similarity alone.
-- [ ] Pairwise analysis can abstain and reports evidence, a confidence band,
-      and an analyzer fingerprint.
-- [ ] The analyzer first runs in shadow mode and is compared with reviewed
-      corpus judgments.
-- [ ] Inferred relations are advisory and cannot approve, reject, merge,
-      supersede, archive, or edit a canonical record.
-- [ ] Model output and inferred relations live in a disposable, rebuildable
-      projection; Markdown remains canonical.
-- [ ] No record content is sent to a remote model.
-
-**Verification:** Evaluate deterministic, retrieval-only, and pairwise variants
-against the relation corpus. Inspect false contradictions and abstentions before
-enabling review warnings.
+The offline evaluator now retrieves candidate pairs through the hybrid index and
+classifies them with a replaceable local analyzer. Results can express
+equivalence, either direction of entailment, contradiction, related, unrelated,
+or unknown. Each result includes evidence, a confidence band, and an analyzer
+fingerprint. The reviewed corpus reports retrieval recall, all-pairs analyzer
+accuracy, false contradictions, and abstentions in shadow mode. Advisory
+relations live only in the rebuildable SQLite projection; rebuilding it discards
+them without changing canonical Markdown. No record content is sent to a remote
+model.
 
 ### SB-511 — Separate project context from repository isolation
 
@@ -256,27 +241,14 @@ local isolation, composed retrieval, and identity-preserving reindexing.
 
 ### SB-512 — Expand store status and safe repair
 
-**What to build:** Make `status` the single operational summary for a selected
-store, and let `doctor` repair disposable state when the repair has one
-unambiguous outcome.
-
-**Blocked by:** SB-511
-
-**Acceptance criteria:**
-
-- [ ] `status` reports lifecycle counts, canonical and disposable disk usage,
-      index and embedding versions, and the last successful synchronization.
-- [ ] Human and JSON output identify whether status describes the global,
-      project, or strict local view.
-- [ ] `doctor --repair` can rebuild or remove disposable projections, stale
-      locks, and temporary metadata reported by `doctor`.
-- [ ] `doctor --repair` never edits, archives, replaces, or deletes canonical
-      records and gives a concrete manual action for canonical failures.
-- [ ] Repeated repair is a no-op after the store becomes healthy.
-
-**Verification:** Corrupt each disposable component in an isolated store, run
-`doctor --repair`, and confirm that canonical Markdown is byte-for-byte
-unchanged. Exercise human and JSON status output at each store boundary.
+`status` now summarizes lifecycle counts, canonical and disposable disk usage,
+index and embedding versions, and the last successful synchronization. Human
+and JSON output name the global, composed project, or strict local view.
+`doctor --repair` rebuilds a missing, stale, or corrupt projection and removes
+the stale lock and temporary files that `doctor` reports. It refuses to repair
+malformed canonical records and gives a manual action instead. Tests corrupt
+disposable state, confirm canonical Markdown remains byte-for-byte unchanged,
+and verify that a second repair is a no-op.
 
 ### SB-513 — Add backup previews and guarded store destruction
 

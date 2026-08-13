@@ -259,13 +259,21 @@ pub(super) fn run_reindex(scope: StoreScope, output: &Echo) -> i32 {
     }
 }
 
-pub(super) fn run_doctor(scope: StoreScope, output: &Echo) -> i32 {
+pub(super) fn run_doctor(
+    scope: StoreScope,
+    arguments: crate::command::DoctorArgs,
+    output: &Echo,
+) -> i32 {
     let paths = match resolve(scope) {
         Ok(paths) => paths,
         Err(error) => return report_error(error, output),
     };
-    let report = match core::doctor_store(&paths) {
-        Ok(report) => report,
+    let (report, repaired) = match if arguments.repair {
+        core::repair_store(&paths).map(|repair| (repair.diagnosis, repair.repaired))
+    } else {
+        core::doctor_store(&paths).map(|report| (report, Vec::new()))
+    } {
+        Ok(result) => result,
         Err(error) => return report_error(anyhow::Error::new(error), output),
     };
     output.field("Store", scope);
@@ -276,6 +284,9 @@ pub(super) fn run_doctor(scope: StoreScope, output: &Echo) -> i32 {
         output.warning("lexical fallback")
     };
     output.field("Semantic retrieval", semantic_state);
+    for action in repaired {
+        output.line(&format!("{} {action}", output.success("Repaired:")));
+    }
     if report.issues.is_empty() {
         output.field("Status", output.success("healthy"));
         return 0;

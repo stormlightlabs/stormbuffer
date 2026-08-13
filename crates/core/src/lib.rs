@@ -399,6 +399,20 @@ pub struct StoreStatus {
     pub visibility: Option<StoreVisibility>,
     pub project: Option<ProjectIdentity>,
     pub record_count: usize,
+    pub lifecycle: LifecycleCounts,
+    pub canonical_bytes: u64,
+    pub disposable_bytes: u64,
+    pub index_version: Option<u32>,
+    pub embedding_version: Option<String>,
+    pub last_successful_sync: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct LifecycleCounts {
+    pub candidate: usize,
+    pub active: usize,
+    pub superseded: usize,
+    pub archived: usize,
 }
 
 struct StoreConfigWithVisibility {
@@ -460,11 +474,20 @@ pub fn inspect_store(paths: &StorePaths) -> Result<StoreStatus> {
         None
     };
     let initialized = config.is_some();
-    let record_count = if initialized && paths.records.is_dir() {
-        count_markdown_files(&paths.records)?
+    let lifecycle = if initialized && paths.records.is_dir() {
+        inspect_lifecycle(&paths.records)?
+    } else {
+        LifecycleCounts::default()
+    };
+    let record_count =
+        lifecycle.candidate + lifecycle.active + lifecycle.superseded + lifecycle.archived;
+    let canonical_bytes = if initialized {
+        file_bytes(&marker)? + directory_bytes(&paths.records)?
     } else {
         0
     };
+    let projection = inspect_projection_status(paths);
+    let disposable_bytes = disposable_bytes(paths)?;
 
     Ok(StoreStatus {
         scope: paths.scope,
@@ -473,6 +496,12 @@ pub fn inspect_store(paths: &StorePaths) -> Result<StoreStatus> {
         visibility: config.as_ref().map(|config| config.visibility),
         project: config.and_then(|config| config.project),
         record_count,
+        lifecycle,
+        canonical_bytes,
+        disposable_bytes,
+        index_version: projection.index_version,
+        embedding_version: projection.embedding_version,
+        last_successful_sync: projection.last_successful_sync,
     })
 }
 
@@ -490,8 +519,8 @@ fn project_store_root(cwd: &Path) -> PathBuf {
     }
 }
 
-fn count_markdown_files(directory: &Path) -> Result<usize> {
-    let mut count = 0;
+fn inspect_lifecycle(directory: &Path) -> Result<LifecycleCounts> {
+    let mut counts = LifecycleCounts::default();
     let entries =
         fs::read_dir(directory).map_err(|source| Error::io("inspect the records", source))?;
     for entry in entries {
@@ -500,12 +529,86 @@ fn count_markdown_files(directory: &Path) -> Result<usize> {
             .file_type()
             .map_err(|source| Error::io("inspect the records", source))?;
         if file_type.is_dir() {
-            count += count_markdown_files(&entry.path())?;
+            let nested = inspect_lifecycle(&entry.path())?;
+            counts.candidate += nested.candidate;
+            counts.active += nested.active;
+            counts.superseded += nested.superseded;
+            counts.archived += nested.archived;
         } else if file_type.is_file() && entry.path().extension().is_some_and(|ext| ext == "md") {
-            count += 1;
+            let path = entry.path();
+            let markdown = fs::read_to_string(&path)
+                .map_err(|source| Error::io("read a canonical record", source))?;
+            match parse_markdown(&path, &markdown)?.status {
+                RecordStatus::Candidate => counts.candidate += 1,
+                RecordStatus::Active => counts.active += 1,
+                RecordStatus::Superseded => counts.superseded += 1,
+                RecordStatus::Archived => counts.archived += 1,
+            }
         }
     }
-    Ok(count)
+    Ok(counts)
+}
+
+fn file_bytes(path: &Path) -> Result<u64> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() => Ok(metadata.len()),
+        Ok(_) => Ok(0),
+        Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(0),
+        Err(source) => Err(Error::io("inspect store disk usage", source)),
+    }
+}
+
+fn directory_bytes(directory: &Path) -> Result<u64> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(0),
+        Err(source) => return Err(Error::io("inspect store disk usage", source)),
+    };
+    let mut bytes = 0;
+    for entry in entries {
+        let entry = entry.map_err(|source| Error::io("inspect store disk usage", source))?;
+        let metadata = entry
+            .file_type()
+            .map_err(|source| Error::io("inspect store disk usage", source))?;
+        if metadata.is_dir() {
+            bytes += directory_bytes(&entry.path())?;
+        } else if metadata.is_file() {
+            bytes += file_bytes(&entry.path())?;
+        }
+    }
+    Ok(bytes)
+}
+
+fn disposable_bytes(paths: &StorePaths) -> Result<u64> {
+    let mut bytes = if paths.scope == StoreScope::Global {
+        directory_bytes(&paths.cache)?
+    } else {
+        0
+    };
+    let configured_index = index::index_path(paths);
+    let active_index = index::active_index_path(paths)?;
+    if active_index != configured_index {
+        for name in ["index.sqlite3", "index.sqlite3-wal", "index.sqlite3-shm"] {
+            bytes += file_bytes(&active_index.with_file_name(name))?;
+        }
+        if let Some(parent) = active_index.parent() {
+            bytes += file_bytes(&parent.join("projection.lock"))?;
+        }
+    }
+    if paths.scope.is_project_store() {
+        for name in [
+            "index.sqlite3",
+            "index.sqlite3-wal",
+            "index.sqlite3-shm",
+            "projection.lock",
+        ] {
+            bytes += file_bytes(&paths.root.join(name))?;
+        }
+    }
+    for name in ["tmp", "logs", "locks"] {
+        bytes += directory_bytes(&paths.root.join(name))?;
+    }
+    Ok(bytes)
 }
 
 fn create_marker(paths: &StorePaths, mode: StoreInitMode) -> Result<(bool, StoreVisibility)> {
@@ -842,12 +945,15 @@ mod tests {
     fn initialization_is_idempotent_and_status_counts_records() {
         let root = temporary_directory("initialization");
         let dirs = PlatformDirs::new(root.join("data"), root.join("cache"));
-        let paths = resolve_store_with_dirs(StoreScope::Project, &root, &dirs).expect("resolve");
+        let paths = resolve_store_with_dirs(StoreScope::Global, &root, &dirs).expect("resolve");
 
         assert!(initialize_store(&paths, StoreInitMode::Default).expect("initialize store"));
         assert!(!initialize_store(&paths, StoreInitMode::Default).expect("initialize store again"));
-        fs::write(paths.records.join("example.md"), "not a parsed record yet")
-            .expect("write record");
+        fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/valid/fact.md"),
+            paths.records.join("example.md"),
+        )
+        .expect("copy canonical record");
 
         let status = inspect_store(&paths).expect("inspect store");
         assert!(status.initialized);

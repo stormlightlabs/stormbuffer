@@ -3,7 +3,7 @@ use stormbuffer_core::{self as core, StoreInitMode, StoreScope};
 
 use crate::echo::Echo;
 use crate::index::{report_invalid_files, semantic_model_enabled};
-use crate::{FAILURE, json_escape, report_error, resolve};
+use crate::{FAILURE, report_error, resolve};
 
 pub(super) fn run_init(scope: StoreScope, shared: bool, output: &Echo) -> i32 {
     let paths = match resolve(scope) {
@@ -76,30 +76,35 @@ pub(super) fn run_status(scope: StoreScope, json: bool, output: &Echo) -> i32 {
     };
 
     if json {
-        let root = json_escape(&status.root.display().to_string());
-        let visibility = status
-            .visibility
-            .map(|visibility| format!("\"{visibility}\""))
-            .unwrap_or_else(|| "null".to_owned());
-        let (project_id, project_name) = status.project.as_ref().map_or_else(
-            || ("null".to_owned(), "null".to_owned()),
-            |project| {
-                (
-                    format!("\"{}\"", project.id),
-                    format!("\"{}\"", json_escape(&project.name)),
-                )
+        let project_id = status
+            .project
+            .as_ref()
+            .map(|project| project.id.to_string());
+        let project_name = status.project.as_ref().map(|project| project.name.as_str());
+        let value = serde_json::json!({
+            "view": view_name(status.scope),
+            "scope": status.scope.as_str(),
+            "root": status.root,
+            "initialized": status.initialized,
+            "visibility": status.visibility.map(|value| value.as_str()),
+            "project_id": project_id,
+            "project_name": project_name,
+            "record_count": status.record_count,
+            "lifecycle": {
+                "candidate": status.lifecycle.candidate,
+                "active": status.lifecycle.active,
+                "superseded": status.lifecycle.superseded,
+                "archived": status.lifecycle.archived,
             },
-        );
-        output.line(&format!(
-            "{{\"scope\":\"{}\",\"root\":\"{}\",\"initialized\":{},\"visibility\":{},\"project_id\":{},\"project_name\":{},\"record_count\":{}}}",
-            status.scope,
-            root,
-            status.initialized,
-            visibility,
-            project_id,
-            project_name,
-            status.record_count
-        ));
+            "disk_usage": {
+                "canonical_bytes": status.canonical_bytes,
+                "disposable_bytes": status.disposable_bytes,
+            },
+            "index_version": status.index_version,
+            "embedding_version": status.embedding_version,
+            "last_successful_sync": status.last_successful_sync,
+        });
+        output.line(&value.to_string());
         return 0;
     }
 
@@ -108,6 +113,7 @@ pub(super) fn run_status(scope: StoreScope, json: bool, output: &Echo) -> i32 {
     } else {
         output.warning("not initialized")
     };
+    output.field("View", view_name(status.scope));
     output.field("Scope", status.scope);
     output.field("Root", output.path(status.root.display()));
     output.field("State", state);
@@ -119,5 +125,39 @@ pub(super) fn run_status(scope: StoreScope, json: bool, output: &Echo) -> i32 {
         output.field("Project name", project.name);
     }
     output.field("Records", status.record_count);
+    output.field("Candidates", status.lifecycle.candidate);
+    output.field("Active", status.lifecycle.active);
+    output.field("Superseded", status.lifecycle.superseded);
+    output.field("Archived", status.lifecycle.archived);
+    output.field(
+        "Canonical disk",
+        format!("{} bytes", status.canonical_bytes),
+    );
+    output.field(
+        "Disposable disk",
+        format!("{} bytes", status.disposable_bytes),
+    );
+    output.field(
+        "Index version",
+        status
+            .index_version
+            .map_or_else(|| "unavailable".to_owned(), |value| value.to_string()),
+    );
+    output.field(
+        "Embedding version",
+        status.embedding_version.as_deref().unwrap_or("unavailable"),
+    );
+    output.field(
+        "Last sync",
+        status.last_successful_sync.as_deref().unwrap_or("never"),
+    );
     0
+}
+
+fn view_name(scope: StoreScope) -> &'static str {
+    match scope {
+        StoreScope::Global => "global",
+        StoreScope::Project => "project with applicable global memory",
+        StoreScope::Local => "strict local",
+    }
 }
