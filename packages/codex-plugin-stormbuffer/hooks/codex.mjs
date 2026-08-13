@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-import { spawnSync } from "node:child_process";
 import {
 	codexPromptOutput,
 	codexStopOutput,
-	contextFromOutput,
 	contextInvocation,
+	retrieveContext,
 } from "./lifecycle.mjs";
 
 const MAX_EVENT_BYTES = 64 * 1024;
@@ -23,25 +22,20 @@ async function readEvent() {
 	}
 }
 
-function recall(event) {
+async function recall(event) {
 	const invocation = contextInvocation(event?.prompt);
 	if (!invocation) return null;
-	const result = spawnSync(invocation.command, invocation.args, {
+	return retrieveContext(invocation, {
 		cwd: typeof event.cwd === "string" ? event.cwd : undefined,
-		input: invocation.input,
-		encoding: "utf8",
 		timeout: 5_000,
-		maxBuffer: 262_144,
-		stdio: ["pipe", "pipe", "ignore"],
 	});
-	return result.status === 0 ? contextFromOutput(result.stdout) : null;
 }
 
 const event = await readEvent();
 let output = {};
 try {
 	if (process.argv[2] === "prompt" && event) {
-		output = codexPromptOutput(recall(event));
+		output = codexPromptOutput(await recall(event));
 	} else if (process.argv[2] === "stop") {
 		output = codexStopOutput(event);
 	}

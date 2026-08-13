@@ -1,8 +1,8 @@
 {
 	"mcpServers": {
 		"stormbuffer": {
-			"command": "sbuf",
-			"args": ["mcp", "--stdio"]
+			"command": "node",
+			"args": ["${PLUGIN_ROOT}/hooks/mcp.mjs"]
 		}
 	}
 }

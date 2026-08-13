@@ -6,32 +6,23 @@ group: Get started
 order: 1
 ---
 
-Stormbuffer ships as a packaged release for Linux x86-64, macOS on Intel or Apple
-silicon, and Windows x86-64. Each archive includes the `sbuf` CLI, the
-`stormbuffer-mcp` adapter, man pages, shell completions, and project documentation.
+Stormbuffer has not published a release yet. Install the current version from a
+source checkout. The repository contains the `sbuf` CLI, the `stormbuffer-mcp`
+adapter, lifecycle plugins for Codex and Pi, and this documentation site.
 
-## Install
+## Install from source
 
-Download the archive for your platform and its `.sha256` file from the GitHub
-release. On Linux or macOS, verify and unpack it:
+Clone the repository and install the command-line programs with Cargo:
 
 ```sh
-archive=stormbuffer-0.1.0-x86_64-unknown-linux-gnu.tar.gz
-shasum -a 256 -c "$archive.sha256"
-tar -xzf "$archive"
-install -m 755 "${archive%.tar.gz}"/bin/* "$HOME/.local/bin/"
+git clone https://github.com/stormlightlabs/stormbuffer.git
+cd stormbuffer
+cargo install --path crates/cli --locked
+cargo install --path crates/mcp --locked
 ```
 
-On Windows, set `$archive` to the downloaded ZIP name and compare
-`Get-FileHash -Algorithm SHA256 $archive` with the value in the downloaded
-checksum file. Extract the ZIP and add its `bin` directory to `PATH`. The
-archive's `share` directory contains optional man pages and shell completions.
-
-## Build from a checkout
-
-Follow [Build from source](/docs/workflows/source-build/) to install the CLI and
-MCP adapter from a checkout. Man pages and shell completions are available in
-the GitHub release archives.
+The [source build guide](/docs/workflows/source-build/) covers prerequisites,
+updates, and the optional JavaScript workspace used by the host plugins.
 
 ## Confirm the installation
 
@@ -59,19 +50,22 @@ does not change its canonical Markdown. Re-run `sbuf init` after network access
 is restored.
 
 Continue with the [quick start](/docs/quick-start/) to choose and initialize a
-store.
+store. To add prompt-time recall, install the
+[Codex plugin](/docs/workflows/codex-plugin/) or
+[Pi plugin](/docs/workflows/pi-plugin/) from the same checkout.
 
 ## Upgrade
 
-Before an upgrade, export the selected store as described in
-[Backup and recovery](/docs/workflows/backup-recovery/). Replace the installed
-programs, then run `sbuf status` and `sbuf doctor`. Add `--project` when checking
-a project store.
+Before updating, export the selected store as described in
+[Backup and recovery](/docs/workflows/backup-recovery/). Pull the newer source,
+repeat the Cargo install commands, then run `sbuf status` and `sbuf doctor`. Add
+`--project` when checking a project store.
 
 ## Roll back
 
-Restore the previous programs and repeat the status and doctor checks. Read the
-newer release notes before rolling back across a record-format change.
+Check out the previous source revision, reinstall both programs, and repeat the
+status and doctor checks. Read the newer changelog entry before rolling back
+across a record-format change.
 
 ## Uninstall
 

@@ -47,12 +47,69 @@ printf '%s\n' \
   | sbuf --project invoke context
 ```
 
-### Further Reading
+## Agent installation
+
+Stormbuffer is not released yet. The commands below install from the current
+source checkout.
+
+### Skill
+
+Install the project-memory skill in an agent's project skill directory:
+
+```sh
+sbuf --project skill install --directory .agents/skills
+```
+
+Omit `--project` to install the global-memory variant. See the
+[agent skill guide](packages/docs/src/content/docs/workflows/agent-skill.md) for
+scope and installation-directory choices.
+
+### MCP
+
+Build the MCP server, then register its read-only project view with Codex:
+
+```sh
+cargo install --path crates/mcp --locked
+codex mcp add stormbuffer -- stormbuffer-mcp --stdio --project
+```
+
+Other hosts can start the same stdio command. The
+[MCP guide](packages/docs/src/content/docs/reference/mcp.md) covers Pi, global
+and local scopes, write access, resources, and tools.
+
+### Lifecycle plugins
+
+Prepare the workspace before installing either local plugin:
+
+```sh
+corepack enable
+pnpm install --frozen-lockfile
+```
+
+Install the Codex plugin from the repository root:
+
+```sh
+codex plugin marketplace add "$PWD"
+codex plugin add stormbuffer@stormbuffer-source
+```
+
+Install the Pi plugin from the same checkout:
+
+```sh
+pi install "$PWD/packages/pi-plugin-stormbuffer"
+```
+
+Keep the checkout in place after installation. See the detailed
+[Codex](packages/docs/src/content/docs/workflows/codex-plugin.md) and
+[Pi](packages/docs/src/content/docs/workflows/pi-plugin.md) plugin guides for
+scope selection, verification, updates, and removal.
+
+## Further reading
 
 See the [installation guide](packages/docs/src/content/docs/installation.md) or
 [quick start](packages/docs/src/content/docs/quick-start.md), and
-[MCP setup](packages/docs/src/content/docs/reference/mcp.md) for complete setup and
-integration instructions.
+[source build guide](packages/docs/src/content/docs/workflows/source-build.md)
+for complete setup instructions.
 
 ## Architecture
 

@@ -4,3 +4,9 @@ packages:
 allowBuilds:
   esbuild: true
   workerd: true
+
+onlyBuiltDependencies:
+  - '@google/genai'
+  - esbuild
+  - protobufjs
+  - workerd

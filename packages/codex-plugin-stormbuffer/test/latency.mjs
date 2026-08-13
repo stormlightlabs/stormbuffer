@@ -16,6 +16,16 @@ for (let index = 0; index <= iterations; index += 1) {
 	});
 	const elapsed = performance.now() - started;
 	if (result.status !== 0) throw new Error("Stormbuffer prompt hook failed");
+	let output;
+	try {
+		output = JSON.parse(result.stdout);
+	} catch {
+		throw new Error("Stormbuffer prompt hook returned malformed JSON");
+	}
+	const context = output?.hookSpecificOutput?.additionalContext;
+	if (typeof context !== "string" || !context.includes('"receipt_id"')) {
+		throw new Error("Stormbuffer prompt hook returned no recalled context");
+	}
 	if (index > 0) timings.push(elapsed);
 }
 

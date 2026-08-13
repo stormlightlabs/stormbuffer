@@ -20,53 +20,51 @@ marker before considering a daemon or broader cache redesign.
 
 ## Agent host lifecycle integrations
 
-Add prompt-time recall integrations in this order: Codex, Pi, then OpenCode.
-Each host adapter will pass only the current user prompt to the versioned
-`sbuf invoke context` protocol and inject a successful, bounded result before
-the first model call. It will retrieve once per user message, preserve receipts
-and record IDs, mark recalled text as untrusted evidence, and continue normally
-when Stormbuffer is unavailable or has no matching memory.
+Codex and Pi now provide prompt-time recall through host-native lifecycle
+plugins. OpenCode remains the next integration. Each completed adapter passes
+only the current user prompt to the versioned `sbuf invoke context` protocol and
+injects a successful, bounded result before the first model call. Each one
+retrieves once per host turn, preserves receipts and record IDs, marks recalled
+text as untrusted evidence, and continues normally when Stormbuffer is
+unavailable or has no matching memory.
 
 Scope must remain explicit and follow the CLI: global by default, project for
 combined project and applicable global memory, and local for strict nearest-
 store retrieval.
 
-Each integration will also use the host's stable end-of-turn boundary to ask
-the current model once whether the completed turn contains a capture event. The
-model will apply the skill's admission rules and, only when they pass, use the
+The Codex and Pi integrations use each host's stable end-of-turn boundary to
+ask the current model once whether the completed turn contains a capture event.
+The model applies the skill's admission rules and, only when they pass, uses the
 versioned CLI or explicitly write-enabled MCP `remember` or `update` interface
 to create a reviewable candidate. Routine completion produces no candidate.
-Lifecycle code will never edit canonical Markdown directly, approve a
-candidate, or activate memory. Prefer a guarded continuation of the current
-model context over transcript inspection.
+Lifecycle code never edits canonical Markdown directly, approves a candidate,
+or activates memory. Both integrations use guarded continuations rather than
+parsing transcripts.
 
 ### Codex
 
-Implement Codex first as a plugin bundle containing the Stormbuffer skill,
-read-only-by-default MCP configuration, and `UserPromptSubmit` and `Stop` hooks.
-Add a small CLI adapter that reads the prompt hook event, calls the shared
-context protocol, and emits `hookSpecificOutput.additionalContext`. At `Stop`,
-return one guarded continuation prompt that asks Codex to evaluate capture and
-use the skill's candidate workflow when warranted. Use `stop_hook_active` and
-an integration marker to prevent loops and suppress prompt-time recall for that
-internal continuation. Do not use `SessionEnd`: its output cannot steer Codex,
-while the documented
-[`Stop` hook](https://learn.chatgpt.com/docs/hooks#stop) can continue the turn
-with the model's existing context. Do not parse transcripts. Measure warm
-subprocess retrieval latency before enabling prompt-time recall by default.
+The Codex plugin bundles the Stormbuffer skill, read-only-by-default MCP
+configuration, and `UserPromptSubmit` and `Stop` hooks. Its adapter reads the
+prompt hook event, calls the shared context protocol, and emits
+`hookSpecificOutput.additionalContext`. At `Stop`, it returns one guarded
+continuation prompt that asks Codex to evaluate capture and use the skill's
+candidate workflow when warranted. `stop_hook_active` and an integration marker
+prevent loops and suppress prompt-time recall for that internal continuation.
+The adapter does not use `SessionEnd` or parse transcripts. Warm subprocess
+retrieval latency is covered by a repeatable package benchmark.
 
 ### Pi
 
-Package a Pi extension with the Stormbuffer skill after the Codex behavior is
-stable. Retrieve through `before_agent_start` and add the result as hidden,
-persistent custom context for that turn. Keep the existing Pi MCP adapter for
-memory operations instead of duplicating its tools in the extension. At
+The Pi package contains an extension and the Stormbuffer skill. It retrieves
+through `before_agent_start` and adds successful recall as hidden, persistent
+custom context for the turn. It keeps explicit memory operations in the
+existing skill or MCP adapter rather than duplicating tool schemas or policy.
+At
 [`agent_settled`](https://pi.dev/docs/latest/extensions#agent-start--agent-end--agent-settled),
-send one tagged custom follow-up with `triggerTurn: true` so the model evaluates
-capture after retries, compaction retries, and queued follow-ups are exhausted.
-Guard the resulting run from scheduling itself. The extension does not write
-records; the model may create a candidate through the existing skill or MCP
-interface when writes are enabled. Do not retrieve on every `context` event.
+the extension sends one tagged custom follow-up with `triggerTurn: true` after
+retries, compaction retries, and queued follow-ups are exhausted. The resulting
+run cannot schedule itself. The extension neither writes records nor retrieves
+through the repeated `context` event.
 
 ### OpenCode
 

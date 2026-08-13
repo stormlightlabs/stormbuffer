@@ -3,7 +3,9 @@
 	"private": true,
 	"packageManager": "pnpm@10.15.1",
 	"scripts": {
-		"check": "pnpm --recursive check",
-		"test": "pnpm --recursive test"
+		"check": "node scripts/sync-plugin-skill.mjs && pnpm --recursive check",
+		"prepare": "node scripts/sync-plugin-skill.mjs",
+		"sync:plugin-skill": "node scripts/sync-plugin-skill.mjs",
+		"test": "node scripts/sync-plugin-skill.mjs && pnpm --recursive test"
 	}
 }

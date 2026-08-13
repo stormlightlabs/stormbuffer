@@ -138,23 +138,23 @@ once to evaluate the completed turn for a capture event.
 
 **Acceptance criteria:**
 
-- [ ] The adapter passes only the current user prompt and the selected global,
+- [x] The adapter passes only the current user prompt and the selected global,
       project, or local scope to the shared context protocol.
-- [ ] Matching context is available before the first model call and retrieval
+- [x] Matching context is available before the first model call and retrieval
       runs once per user message.
-- [ ] Injected context is bounded, marked as untrusted evidence, and preserves
+- [x] Injected context is bounded, marked as untrusted evidence, and preserves
       its receipt and record IDs.
-- [ ] Empty results, malformed events, and an unavailable Stormbuffer do not
+- [x] Empty results, malformed events, and an unavailable Stormbuffer do not
       block the host or add invalid context.
-- [ ] The `Stop` hook emits one capture-evaluation continuation, uses
+- [x] The `Stop` hook emits one capture-evaluation continuation, uses
       `stop_hook_active` plus an integration marker to prevent recursion, and
       does not cause a second recall for its internal prompt.
-- [ ] A qualifying capture event lets the model submit a candidate through the
+- [x] A qualifying capture event lets the model submit a candidate through the
       versioned CLI or explicitly write-enabled MCP `remember` or `update`
       flow; routine completion submits nothing.
-- [ ] Lifecycle code does not parse transcripts, use `SessionEnd`, edit records,
+- [x] Lifecycle code does not parse transcripts, use `SessionEnd`, edit records,
       approve candidates, or activate memory.
-- [ ] Warm subprocess retrieval latency is measured before the hook is enabled
+- [x] Warm subprocess retrieval latency is measured before the hook is enabled
       by default.
 
 **Verification:** Run focused CLI process tests with fixture hook events for
@@ -173,21 +173,21 @@ follow-up with `triggerTurn: true` that asks the model to evaluate capture.
 
 **Acceptance criteria:**
 
-- [ ] The extension reuses the prompt, scope, output, and failure behavior
+- [x] The extension reuses the prompt, scope, output, and failure behavior
       established by the Codex adapter.
-- [ ] Retrieval runs once per user message and does not run again for repeated
+- [x] Retrieval runs once per user message and does not run again for repeated
       model calls in the same turn.
-- [ ] The existing Pi MCP adapter remains the interface for explicit memory
+- [x] The existing Pi MCP adapter remains the interface for explicit memory
       operations, with no duplicated tool schemas or policy in the extension.
-- [ ] The extension uses `agent_settled`, not `agent_end`, so capture evaluation
+- [x] The extension uses `agent_settled`, not `agent_end`, so capture evaluation
       starts only after automatic retries, compaction retries, and queued
       follow-ups are exhausted.
-- [ ] The tagged capture turn cannot schedule itself or trigger duplicate
+- [x] The tagged capture turn cannot schedule itself or trigger duplicate
       recall. The extension never writes or approves records directly.
-- [ ] A qualifying event can produce a candidate through the existing skill or
+- [x] A qualifying event can produce a candidate through the existing skill or
       write-enabled MCP interface, while routine completion produces none.
-- [ ] The extension does not retrieve through the `context` event.
-- [ ] Unit fixtures cover empty, malformed, unavailable, and oversized results
+- [x] The extension does not retrieve through the `context` event.
+- [x] Unit fixtures cover empty, malformed, unavailable, and oversized results
       for every supported scope.
 
 **Verification:** Run the extension unit tests, install the package in Pi, and

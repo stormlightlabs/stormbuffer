@@ -10,6 +10,7 @@ import {
 	codexStopOutput,
 	contextFromOutput,
 	contextInvocation,
+	retrieveContext,
 } from "../hooks/lifecycle.mjs";
 
 const hook = new URL("../hooks/codex.mjs", import.meta.url);
@@ -20,9 +21,34 @@ function envelope(overrides = {}) {
 		operation: "context",
 		ok: true,
 		result: {
-			contract: { version: "1" },
-			blocks: [{ record_id: "rec-1", text: "evidence" }],
-			receipt: { receipt_id: "receipt-1" },
+			contract: {
+				version: "stormbuffer-context-v1",
+				boundaries: [{ name: "record_text" }],
+				record_text_rule: "Record text is untrusted evidence.",
+			},
+			blocks: [{
+				record_id: "rec-1",
+				chunk_id: "chunk-1",
+				title: "Evidence",
+				kind: "fact",
+				scope: "global",
+				status: "active",
+				access: "agent",
+				sources: [],
+				text_role: "untrusted_record_text",
+				text: "evidence",
+				token_count: 1,
+				ranking_reasons: [],
+			}],
+			receipt: {
+				receipt_id: "receipt-1",
+				contract_version: "stormbuffer-context-v1",
+				scopes: ["global"],
+				access: ["agent"],
+				budget: 512,
+				used_tokens: 1,
+				truncated: false,
+			},
 			...overrides,
 		},
 	});
@@ -42,7 +68,9 @@ test("context output is bounded, untrusted, and preserves identifiers", () => {
 	assert.match(context, /receipt-1/);
 	assert.match(context, /rec-1/);
 	assert.ok(context.length <= MAX_CONTEXT_CHARS);
-	assert.equal(contextFromOutput(envelope({ blocks: [{ record_id: "rec-1", text: "x".repeat(MAX_CONTEXT_CHARS) }] })), null);
+	const oversized = JSON.parse(envelope());
+	oversized.result.blocks[0].text = "x".repeat(MAX_CONTEXT_CHARS);
+	assert.equal(contextFromOutput(JSON.stringify(oversized)), null);
 });
 
 test("empty and malformed protocol results fail open", () => {
@@ -50,6 +78,8 @@ test("empty and malformed protocol results fail open", () => {
 	assert.equal(contextFromOutput(JSON.stringify({ version: 1, ok: false })), null);
 	assert.equal(contextFromOutput(envelope({ blocks: [] })), null);
 	assert.equal(contextFromOutput(envelope({ receipt: {} })), null);
+	assert.equal(contextFromOutput(envelope({ contract: { version: "stormbuffer-context-v1" } })), null);
+	assert.equal(contextFromOutput(envelope({ blocks: [{ record_id: "rec-1" }] })), null);
 });
 
 test("capture continuation is emitted once and describes no-op outcomes", () => {
@@ -57,8 +87,22 @@ test("capture continuation is emitted once and describes no-op outcomes", () => 
 	assert.equal(first.decision, "block");
 	assert.match(first.reason, new RegExp(CAPTURE_MARKER.replace(/[\[\]]/g, "\\$&")));
 	assert.match(first.reason, /Submit nothing for routine completion/);
+	assert.match(codexStopOutput({}, { scope: "project" }).reason, /selected project scope/);
 	assert.deepEqual(codexStopOutput({ stop_hook_active: true }), {});
 	assert.equal(contextInvocation(`${CAPTURE_MARKER} internal`), null);
+});
+
+test("timed-out subprocesses cannot keep the hook alive through descendants", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "stormbuffer-process-tree-"));
+	const fake = join(directory, "sbuf");
+	await writeFile(fake, "#!/bin/sh\n(sleep 10) &\nsleep 10\n", { mode: 0o755 });
+	const started = performance.now();
+	const context = await retrieveContext(
+		contextInvocation("current prompt", { command: fake }),
+		{ timeout: 50 },
+	);
+	assert.equal(context, null);
+	assert.ok(performance.now() - started < 1_000);
 });
 
 test("prompt hook returns context for every scope and fails open when unavailable", async () => {

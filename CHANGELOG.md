@@ -31,13 +31,18 @@
   matches.
 - Added offline-installable global and project agent skills with a tested
   decision tree for recall, capture, correction, and necessary handoffs.
+- Added Codex and Pi lifecycle plugins for bounded prompt-time recall and
+  guarded end-of-turn capture consideration. Both plugins share the versioned
+  context protocol, preserve scope and receipts, and fail softly when recall is
+  unavailable.
 - Added lossless import and export, import previews, export verification,
   disposable garbage collection, and guarded whole-store destruction with an
   optional recovery export.
 - Added retrieval, grounded-answer, capture-policy, usefulness, and reviewed
   relation evaluations. Advisory local relation analysis runs in shadow mode
   and stores its results only in disposable projections.
-- Added a static documentation site, generated man pages and shell completions,
+- Added a pnpm workspace containing a static documentation site and the agent
+  plugin packages, plus generated man pages and shell completions,
   cross-platform release archives, checksums, license checks, and installation
   smoke tests.
 

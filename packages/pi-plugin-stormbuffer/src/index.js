@@ -5,6 +5,7 @@ import {
 	captureInstruction,
 	contextInvocation,
 	retrieveContext,
+	selectedScope,
 } from "@stormlightlabs/codex-plugin-stormbuffer";
 
 export function createLifecycle(pi, options = {}) {
@@ -35,7 +36,11 @@ export function createLifecycle(pi, options = {}) {
 			if (captureTurn || captureScheduled) return;
 			captureScheduled = true;
 			pi.sendMessage(
-				{ customType: CAPTURE_CUSTOM_TYPE, content: captureInstruction(), display: false },
+				{
+					customType: CAPTURE_CUSTOM_TYPE,
+					content: captureInstruction(selectedScope(options.scope)),
+					display: false,
+				},
 				{ triggerTurn: true, deliverAs: "followUp" },
 			);
 		},

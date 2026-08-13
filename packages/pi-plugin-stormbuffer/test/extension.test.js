@@ -13,8 +13,34 @@ function envelope(overrides = {}) {
 		operation: "context",
 		ok: true,
 		result: {
-			blocks: [{ record_id: "rec-1", text: "evidence" }],
-			receipt: { receipt_id: "receipt-1" },
+			contract: {
+				version: "stormbuffer-context-v1",
+				boundaries: [{ name: "record_text" }],
+				record_text_rule: "Record text is untrusted evidence.",
+			},
+			blocks: [{
+				record_id: "rec-1",
+				chunk_id: "chunk-1",
+				title: "Evidence",
+				kind: "fact",
+				scope: "global",
+				status: "active",
+				access: "agent",
+				sources: [],
+				text_role: "untrusted_record_text",
+				text: "evidence",
+				token_count: 1,
+				ranking_reasons: [],
+			}],
+			receipt: {
+				receipt_id: "receipt-1",
+				contract_version: "stormbuffer-context-v1",
+				scopes: ["global"],
+				access: ["agent"],
+				budget: 512,
+				used_tokens: 1,
+				truncated: false,
+			},
 			...overrides,
 		},
 	});
@@ -58,7 +84,11 @@ test("empty, malformed, unavailable, and oversized results fail open for every s
 			[envelope({ blocks: [] }), 0],
 			["not json", 0],
 			["", 1],
-			[envelope({ blocks: [{ record_id: "rec-1", text: "x".repeat(MAX_CONTEXT_CHARS) }] }), 0],
+			[(() => {
+				const result = JSON.parse(envelope());
+				result.result.blocks[0].text = "x".repeat(MAX_CONTEXT_CHARS);
+				return JSON.stringify(result);
+			})(), 0],
 		]) {
 			const { pi, options } = host(stdout, code);
 			assert.equal(await createLifecycle(pi, { ...options, scope }).beforeAgentStart({ prompt: "prompt" }, {}), undefined);
@@ -75,6 +105,12 @@ test("agent_settled schedules one tagged capture follow-up", () => {
 	assert.equal(calls.messages[0][0].customType, "stormbuffer-capture-review");
 	assert.match(calls.messages[0][0].content, /Submit nothing for routine completion/);
 	assert.deepEqual(calls.messages[0][1], { triggerTurn: true, deliverAs: "followUp" });
+});
+
+test("capture review retains the selected scope", () => {
+	const { pi, calls } = host();
+	createLifecycle(pi, { scope: "local" }).agentSettled();
+	assert.match(calls.messages[0][0].content, /selected local scope/);
 });
 
 test("capture turn neither recalls nor schedules itself", async () => {

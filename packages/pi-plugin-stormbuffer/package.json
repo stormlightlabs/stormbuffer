@@ -20,6 +20,7 @@
 	},
 	"scripts": {
 		"check": "node --check src/index.js",
+		"prepack": "node ../../scripts/sync-plugin-skill.mjs",
 		"test": "node --test"
 	},
 	"engines": {

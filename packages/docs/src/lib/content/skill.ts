@@ -1,3 +1,3 @@
-import skillSource from '../../../../.agents/skills/stormbuffer-memory/SKILL.md?raw';
+import skillSource from '../../../../../.agents/skills/stormbuffer-memory/SKILL.md?raw';
 
 export { skillSource };
