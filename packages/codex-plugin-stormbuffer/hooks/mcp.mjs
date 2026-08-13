@@ -3,7 +3,9 @@ import { spawn } from 'node:child_process';
 import { scopeArgs, selectedScope } from './lifecycle.mjs';
 
 const command = process.env.STORMBUFFER_BIN || 'sbuf';
-const child = spawn(command, [...scopeArgs(selectedScope()), 'mcp', '--stdio'], { stdio: 'inherit' });
+const child = spawn(command, [...scopeArgs(selectedScope()), 'mcp', '--stdio', '--allow-candidate-writes'], {
+	stdio: 'inherit'
+});
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
 	process.on(signal, () => child.kill(signal));

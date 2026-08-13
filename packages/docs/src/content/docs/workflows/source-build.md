@@ -1,5 +1,5 @@
 ---
-title: Build from source
+title: Git
 description: Build and install Stormbuffer from source.
 section: Get started
 group: Get started

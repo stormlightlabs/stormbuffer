@@ -56,6 +56,9 @@ and fail soft when Stormbuffer is unavailable or has no useful evidence.
 
 - Follow clig.dev conventions. Keep results on stdout, diagnostics on stderr,
   prompts TTY-only, errors actionable, and exit codes stable.
+- Agent-facing MCP integrations may enable candidate creation through
+  `remember` and `update`, but must not grant approval, activation, archival, or
+  destructive lifecycle writes.
 - Style human-readable CLI labels and states through the `echo` mod. Keep raw and
   machine-readable output unstyled, and let `NO_COLOR` override `--color`.
 
@@ -63,6 +66,8 @@ and fail soft when Stormbuffer is unavailable or has no useful evidence.
 
 - `packages/docs/` is a static SvelteKit/mdsvex site. Prefer server/static rendering and
   ordinary links; reading and navigation must work without client JavaScript.
+- Installation guides for generated or snapshotted integrations must include
+  the matching update or reinstall procedure.
 - Keep components small and accessible with their styles scoped.
 - Use semantic HTML before ARIA and add client state only for real interaction.
 

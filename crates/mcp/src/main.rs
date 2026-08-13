@@ -1,7 +1,7 @@
 use std::process::ExitCode;
 
 use stormbuffer_core::StoreScope;
-use stormbuffer_mcp::{McpConfig, run_stdio_with_config};
+use stormbuffer_mcp::{McpConfig, McpWritePolicy, run_stdio_with_config};
 
 fn main() -> ExitCode {
     let mut stdio = false;
@@ -11,11 +11,13 @@ fn main() -> ExitCode {
         match argument.to_str() {
             Some("--help" | "-h") => {
                 println!(
-                    "Usage: stormbuffer-mcp --stdio [--global | --project | --local] [--allow-writes]"
+                    "Usage: stormbuffer-mcp --stdio [--global | --project | --local] [--allow-candidate-writes | --allow-writes]"
                 );
                 println!();
                 println!("Run the Stormbuffer MCP JSON-RPC adapter over stdio.");
-                println!("Writes are disabled unless --allow-writes is explicitly supplied.");
+                println!("Writes are disabled by default.");
+                println!("--allow-candidate-writes enables remember and update only.");
+                println!("--allow-writes additionally enables archival.");
                 return ExitCode::SUCCESS;
             }
             Some("--version" | "-V") => {
@@ -38,7 +40,22 @@ fn main() -> ExitCode {
                 return ExitCode::from(2);
             }
             Some("--local") => scope = Some(StoreScope::Local),
-            Some("--allow-writes") => config.allow_writes = true,
+            Some("--allow-candidate-writes") if config.write_policy != McpWritePolicy::ReadOnly => {
+                eprintln!(
+                    "stormbuffer-mcp: select only one of --allow-candidate-writes or --allow-writes"
+                );
+                return ExitCode::from(2);
+            }
+            Some("--allow-candidate-writes") => {
+                config.write_policy = McpWritePolicy::CandidateOnly;
+            }
+            Some("--allow-writes") if config.write_policy != McpWritePolicy::ReadOnly => {
+                eprintln!(
+                    "stormbuffer-mcp: select only one of --allow-candidate-writes or --allow-writes"
+                );
+                return ExitCode::from(2);
+            }
+            Some("--allow-writes") => config.write_policy = McpWritePolicy::All,
             _ => {
                 eprintln!("stormbuffer-mcp: unknown argument");
                 return ExitCode::from(2);

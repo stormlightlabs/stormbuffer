@@ -18,25 +18,28 @@ type EmbedderCache = Arc<Mutex<Option<Arc<dyn core::Embedder>>>>;
 #[derive(Clone)]
 pub struct McpServer {
     paths: core::StorePaths,
-    allow_writes: bool,
+    write_policy: config::McpWritePolicy,
     embedder: Option<Arc<dyn core::Embedder>>,
     default_embedder: Option<EmbedderCache>,
 }
 
 impl McpServer {
-    pub fn new(paths: core::StorePaths, allow_writes: bool) -> Self {
+    pub fn new(paths: core::StorePaths, write_policy: config::McpWritePolicy) -> Self {
         Self {
             paths,
-            allow_writes,
+            write_policy,
             embedder: None,
             default_embedder: None,
         }
     }
 
-    pub fn with_default_embedder(paths: core::StorePaths, allow_writes: bool) -> Self {
+    pub fn with_default_embedder(
+        paths: core::StorePaths,
+        write_policy: config::McpWritePolicy,
+    ) -> Self {
         Self {
             paths,
-            allow_writes,
+            write_policy,
             embedder: None,
             default_embedder: Some(Arc::new(Mutex::new(None))),
         }
@@ -44,12 +47,12 @@ impl McpServer {
 
     pub fn with_embedder(
         paths: core::StorePaths,
-        allow_writes: bool,
+        write_policy: config::McpWritePolicy,
         embedder: Arc<dyn core::Embedder>,
     ) -> Self {
         Self {
             paths,
-            allow_writes,
+            write_policy,
             embedder: Some(embedder),
             default_embedder: None,
         }
@@ -59,8 +62,8 @@ impl McpServer {
         &self.paths
     }
 
-    pub fn allow_writes(&self) -> bool {
-        self.allow_writes
+    pub fn write_policy(&self) -> config::McpWritePolicy {
+        self.write_policy
     }
 
     /// Calls the same synchronous adapter boundary used by MCP tool handlers.
@@ -89,7 +92,7 @@ impl McpServer {
         };
         tools::call(
             &self.paths,
-            self.allow_writes,
+            self.write_policy,
             operation,
             arguments,
             cancelled,

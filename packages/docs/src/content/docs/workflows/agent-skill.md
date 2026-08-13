@@ -47,6 +47,32 @@ same version is safe. If the destination contains different content, Stormbuffer
 preserves it and exits with an error. Use `--force` only when you intend to
 replace that file; replacement is atomic.
 
+## Update or reinstall the skill
+
+The installed skill is a copy bundled with the `sbuf` executable. Update `sbuf`
+first, then repeat the original installation command with the same scope and
+directory. Add `--force` to replace the older copy:
+
+```sh
+cargo install --path crates/cli --locked
+sbuf skill install --directory .agents/skills --force
+```
+
+For a project-scoped skill, keep `--project`:
+
+```sh
+sbuf --project skill install --directory .agents/skills --force
+```
+
+Change `.agents/skills` to the directory used for the original installation.
+The command replaces only the generated `SKILL.md`; it does not change memory
+stores or records. Save any edits you made to the installed file before using
+`--force`.
+
+Codex detects local skill changes automatically. Restart Codex if the updated
+skill does not appear. Reload or restart other agents according to their skill
+discovery behavior.
+
 ## Copy the project skill from this site
 
 The copy below comes from the canonical project skill shipped in this

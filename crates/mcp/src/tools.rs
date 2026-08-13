@@ -5,11 +5,11 @@ use rmcp::{
 use serde_json::{Value, json};
 use stormbuffer_core as core;
 
-use crate::config::MAX_TOOL_ENVELOPE_BYTES;
+use crate::config::{MAX_TOOL_ENVELOPE_BYTES, McpWritePolicy};
 
 pub fn call(
     paths: &core::StorePaths,
-    allow_writes: bool,
+    write_policy: McpWritePolicy,
     operation: &str,
     mut arguments: JsonObject,
     cancelled: bool,
@@ -20,13 +20,19 @@ pub fn call(
         return Err(RmcpError::invalid_params("request was cancelled", None));
     }
     let write = matches!(operation, "remember" | "update" | "archive");
-    let envelope = if write && !allow_writes {
+    let envelope = if write && !write_policy.allows(operation) {
+        let message = match write_policy {
+            McpWritePolicy::ReadOnly => {
+                "MCP write tools are disabled; restart with an explicit host write grant"
+            }
+            McpWritePolicy::CandidateOnly => {
+                "MCP candidate-write mode permits only remember and update"
+            }
+            McpWritePolicy::All => unreachable!("all supported MCP writes are permitted"),
+        };
         core::invoke_envelope(
             operation,
-            Err(core::InvokeFailure::new(
-                "permission_denied",
-                "MCP write tools are disabled; restart with an explicit host write grant",
-            )),
+            Err(core::InvokeFailure::new("permission_denied", message)),
         )
     } else {
         arguments.insert("version".to_owned(), json!(core::INVOKE_VERSION));

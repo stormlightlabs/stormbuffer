@@ -56,6 +56,11 @@ sbuf --project skill install --directory .agents/skills
 The project variant uses the same policy and selects the nearest project store
 in every command.
 
+To update an installed skill, update `sbuf` and repeat the original command with
+the same scope and directory plus `--force`. This atomically replaces the
+generated `SKILL.md` without changing memory stores or records. Save any manual
+edits to that file before replacing it.
+
 ## Initialize a store
 
 Initialize the global store with:

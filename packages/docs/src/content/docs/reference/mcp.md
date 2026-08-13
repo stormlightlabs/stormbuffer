@@ -26,12 +26,16 @@ retrieval after a recall has detected that the model is unavailable.
 
 ## Choose a store view and write access
 
-The examples below provide read-only access. To let a host propose changes or
-archive records, start the adapter with `--allow-writes`. This flag enables
-`memory_remember`, `memory_update`, and `memory_forget`. Remember and update
-create candidates for a person to approve. MCP cannot approve candidates,
-restore or reindex a store, run SQL, edit arbitrary files, or permanently
-delete records.
+The adapter is read-only by default. Use `--allow-candidate-writes` when an
+agent should propose memories. This mode enables `memory_remember` and
+`memory_update`; both create candidates for a person to approve. It continues
+to reject `memory_forget`, approval, activation, and every destructive
+lifecycle operation.
+
+`--allow-writes` additionally enables `memory_forget`, which archives an active
+record. Reserve that broader grant for a trusted operator workflow that needs
+archival. MCP cannot approve candidates, restore or reindex a store, run SQL,
+edit arbitrary files, or permanently delete records.
 
 Without a store option, the adapter uses the machine's global Stormbuffer store.
 Use `--project` to combine the nearest project store with applicable global
@@ -58,8 +62,9 @@ Replace `--project` with `--local` when the connection must be isolated from
 global memory.
 
 Keep one registration under the `stormbuffer` name. When using `--project`,
-start Codex from the initialized project. Add `--allow-writes` after `--stdio`
-only when Codex should create candidates or archive records.
+start Codex from the initialized project. Add `--allow-candidate-writes` after
+`--stdio` when Codex should propose memories. Use `--allow-writes` only when it
+should also archive active records.
 
 Codex stores MCP configuration in `~/.codex/config.toml`. Trusted projects can
 also use `.codex/config.toml`. See the
@@ -82,8 +87,9 @@ For project memory, create `.mcp.json` in the initialized project:
 ```
 
 Run Pi from that project. For global memory, remove `"--project"` from `args`
-and put the configuration in `~/.config/mcp/mcp.json`. Add `"--allow-writes"`
-to `args` only when Pi should create candidates or archive records.
+and put the configuration in `~/.config/mcp/mcp.json`. Add
+`"--allow-candidate-writes"` to `args` when Pi should propose memories. Use
+`"--allow-writes"` only when it should also archive active records.
 
 `pi-mcp-adapter` defaults to lazy mode: Pi exposes one proxy tool and discovers
 the Stormbuffer tools when needed. Leave `directTools` unset to avoid loading
@@ -100,8 +106,8 @@ read-only adapter with the composed project view:
 ```
 
 Start the host from the project directory so `--project` selects the intended
-store. Add `--allow-writes` only when the host should create candidates or
-archive records.
+store. Add `--allow-candidate-writes` when the host should propose memories.
+Use `--allow-writes` only when it should also archive active records.
 
 ## JSON-RPC lifecycle
 
@@ -136,13 +142,13 @@ paths and refuse records outside the selected scope or access class.
 
 `tools/list` returns exactly these tools:
 
-| Tool              | Operation  | Default              |
-| ----------------- | ---------- | -------------------- |
-| `memory_recall`   | `context`  | enabled              |
-| `memory_get`      | `get`      | enabled              |
-| `memory_remember` | `remember` | write grant required |
-| `memory_update`   | `update`   | write grant required |
-| `memory_forget`   | `archive`  | write grant required |
+| Tool              | Operation  | Required mode                      |
+| ----------------- | ---------- | ---------------------------------- |
+| `memory_recall`   | `context`  | read-only (default)                |
+| `memory_get`      | `get`      | read-only (default)                |
+| `memory_remember` | `remember` | candidate writes or all writes     |
+| `memory_update`   | `update`   | candidate writes or all writes     |
+| `memory_forget`   | `archive`  | all writes (`--allow-writes`) only |
 
 `memory_recall` accepts a query, result limit, token budget, and optional scope
 filters. It combines lexical and semantic matches when the local model is

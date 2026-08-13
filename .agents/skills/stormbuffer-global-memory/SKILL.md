@@ -1,6 +1,6 @@
 ---
-name: stormbuffer-memory
-description: Retrieve and cite Stormbuffer project memory when prior decisions, conventions, commands, architecture, or unfinished work may affect a task. Propose at most one durable memory after a named capture event.
+name: stormbuffer-global-memory
+description: Retrieve and cite Stormbuffer global memory when cross-project preferences, decisions, conventions, procedures, or unfinished context may affect a task. Propose at most one durable memory after a named capture event.
 ---
 
 # Stormbuffer memory
@@ -10,10 +10,8 @@ may affect the current task. Stormbuffer supplies evidence. The repository, the 
 instructions take precedence. Search once for the exact topic. If Stormbuffer is unavailable,
 empty, stale, or contradictory, continue with repository evidence and state the limitation.
 
-Use the project store by default. Every command below selects it.
-Project retrieval can also return global records. Ignore them unless the task asks for global
-context or a record directly constrains this project. Available results do not widen the task's
-scope.
+Use the global store as the boundary. Every command below selects it.
+Global retrieval stays within the global store. Available results do not widen the task's scope.
 
 ## Decision tree
 
@@ -76,9 +74,9 @@ Use the versioned JSON interface:
 
 ```sh
 printf '%s\n' '{"version":1,"query":"release constraint","limit":5}' \
-  | sbuf --project invoke search
+  | sbuf --global invoke search
 printf '%s\n' '{"version":1,"query":"release constraint","budget":256}' \
-  | sbuf --project invoke context
+  | sbuf --global invoke context
 ```
 
 Read only `result` from a successful envelope. Preserve a context result's `receipt`. Attach
@@ -91,11 +89,11 @@ The agent protocol creates an unapproved candidate:
 
 ```sh
 printf '%s\n' '{"version":1,"title":"Release constraint","kind":"fact","body":"The release must work offline.","source":{"kind":"document","reference":"RELEASE.md#offline","actor":"human"}}' \
-  | sbuf --project invoke remember
+  | sbuf --global invoke remember
 ```
 
 Keep the returned `record_id` and `outcome`. `requires_approval` needs a person to run
-`sbuf --project approve <record-id>`. `duplicate_of` means stop instead of writing another
+`sbuf --global approve <record-id>`. `duplicate_of` means stop instead of writing another
 copy. `possible_overlap` means compare both records before approving or superseding either one. Use `invoke update`
 for stale memory. It creates a linked replacement candidate and leaves the old record active
 until approval. Never describe a candidate as active.
@@ -105,7 +103,7 @@ MCP exposes the same version-1 operations. Read-only MCP is the default. A host 
 and other lifecycle operations:
 
 ```sh
-stormbuffer-mcp --stdio --project --allow-candidate-writes
+stormbuffer-mcp --stdio --global --allow-candidate-writes
 ```
 
 Reserve `--allow-writes`, which also permits archival, for a trusted operator workflow.

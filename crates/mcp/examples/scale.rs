@@ -6,7 +6,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 use stormbuffer_core as core;
-use stormbuffer_mcp::McpServer;
+use stormbuffer_mcp::{McpServer, McpWritePolicy};
 
 const DEFAULT_SIZES: &[usize] = &[100, 1_000, 10_000];
 const DEFAULT_SAMPLES: usize = 20;
@@ -302,7 +302,7 @@ fn run_store(
     })?;
     core::rebuild_vector_index(&paths, embedder.as_ref()).map_err(|error| error.to_string())?;
 
-    let server = McpServer::with_embedder(paths.clone(), false, embedder);
+    let server = McpServer::with_embedder(paths.clone(), McpWritePolicy::ReadOnly, embedder);
     let warm_mcp_recall = measure_queries(samples, |query| {
         let arguments = serde_json::from_value(json!({"query": query, "budget": 512}))
             .map_err(|error| error.to_string())?;

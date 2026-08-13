@@ -22,13 +22,13 @@ pub fn run_stdio_with_config(config: McpConfig) -> Result<(), Box<dyn Error + Se
             if cfg!(debug_assertions) && std::env::var_os("STORMBUFFER_TEST_EMBEDDER").is_some() {
                 McpServer::with_embedder(
                     paths,
-                    config.allow_writes,
+                    config.write_policy,
                     Arc::new(core::DeterministicEmbedder::new("mcp-stdio-test-v1", 24)?),
                 )
             } else if use_default_embedder {
-                McpServer::with_default_embedder(paths, config.allow_writes)
+                McpServer::with_default_embedder(paths, config.write_policy)
             } else {
-                McpServer::new(paths, config.allow_writes)
+                McpServer::new(paths, config.write_policy)
             };
         let running = server.serve(rmcp::transport::stdio()).await?;
         running.waiting().await?;

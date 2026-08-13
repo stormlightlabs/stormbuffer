@@ -357,7 +357,11 @@ pub struct McpArgs {
     #[arg(long)]
     pub stdio: bool,
 
-    /// Explicitly enable MCP write tools.
-    #[arg(long)]
+    /// Enable candidate creation through remember and update.
+    #[arg(long, conflicts_with = "allow_writes")]
+    pub allow_candidate_writes: bool,
+
+    /// Enable all MCP write tools, including archival.
+    #[arg(long, conflicts_with = "allow_candidate_writes")]
     pub allow_writes: bool,
 }

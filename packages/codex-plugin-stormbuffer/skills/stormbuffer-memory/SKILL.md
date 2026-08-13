@@ -100,12 +100,15 @@ copy. `possible_overlap` means compare both records before approving or supersed
 for stale memory. It creates a linked replacement candidate and leaves the old record active
 until approval. Never describe a candidate as active.
 
-MCP exposes the same version-1 operations. Read-only MCP is the default. A host must start it
-with `--allow-writes` before remember or update can write canonical Markdown:
+MCP exposes the same version-1 operations. Read-only MCP is the default. A host can use
+`--allow-candidate-writes` to permit remember and update while continuing to prohibit archival
+and other lifecycle operations:
 
 ```sh
-stormbuffer-mcp --stdio --project
+stormbuffer-mcp --stdio --project --allow-candidate-writes
 ```
+
+Reserve `--allow-writes`, which also permits archival, for a trusted operator workflow.
 
 ## Reject these candidates
 

@@ -1,6 +1,6 @@
 ---
-title: Codex plugin
-description: Install the Stormbuffer Codex plugin from a source checkout.
+title: Codex
+description: Install the Stormbuffer Codex plugin from source.
 section: Integrations
 group: Agent plugins
 order: 4
@@ -8,7 +8,7 @@ order: 4
 
 The Codex plugin recalls relevant Stormbuffer records before the first model
 call and asks Codex to consider durable capture after the turn. It includes the
-Stormbuffer skill and a read-only MCP server configuration.
+Stormbuffer skill and an MCP server configured for candidate writes.
 
 Stormbuffer is not published yet. Codex must install this plugin from a local
 source checkout.
@@ -67,11 +67,14 @@ Start Codex inside the project whose store you want when using `project` or
 
 ## Candidate writes
 
-The bundled MCP server is read-only by default. Recall never approves or
-activates a record. When the capture check finds a durable correction,
-decision, constraint, preference, procedure, or checkpoint, the skill can use
-the versioned `sbuf invoke remember` or `update` flow to create a candidate for
-your review.
+The bundled MCP server can recall memories and use `memory_remember` or
+`memory_update` to propose a candidate for your review. A candidate is not
+active until you approve it. The plugin cannot approve, activate, archive, or
+perform destructive lifecycle operations through MCP.
+
+That boundary fits the normal agent workflow: the agent proposes durable
+corrections, decisions, constraints, preferences, procedures, and checkpoints;
+you decide whether they become active memory.
 
 ## Update or remove the plugin
 

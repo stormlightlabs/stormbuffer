@@ -27,7 +27,9 @@ pub(super) fn run_mcp(scope: StoreScope, arguments: McpArgs, output: &Echo) -> i
             command.arg("--local");
         }
     }
-    if arguments.allow_writes {
+    if arguments.allow_candidate_writes {
+        command.arg("--allow-candidate-writes");
+    } else if arguments.allow_writes {
         command.arg("--allow-writes");
     }
     match command

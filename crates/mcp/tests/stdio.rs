@@ -134,6 +134,13 @@ fn command_line_lists_store_views_and_rejects_mixed_scopes() {
         .expect("run conflicting scopes");
     assert_eq!(conflict.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&conflict.stderr).contains("select only one"));
+
+    let conflict = Command::new(env!("CARGO_BIN_EXE_stormbuffer-mcp"))
+        .args(["--stdio", "--allow-candidate-writes", "--allow-writes"])
+        .output()
+        .expect("run conflicting write modes");
+    assert_eq!(conflict.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&conflict.stderr).contains("select only one"));
     fs::remove_dir_all(root).expect("remove test directory");
 }
 
@@ -304,7 +311,7 @@ fn stdio_recall_uses_hybrid_retrieval_when_an_embedder_is_available() {
 }
 
 #[test]
-fn stdio_exercises_each_documented_memory_tool() {
+fn stdio_candidate_write_mode_allows_proposals_but_not_archival() {
     let project = temporary_project();
     let paths = stormbuffer_core::resolve_store_with_dirs(
         StoreScope::Project,
@@ -326,13 +333,13 @@ fn stdio_exercises_each_documented_memory_tool() {
     let mut child = isolated_mcp_command(&project)
         .arg("--stdio")
         .arg("--project")
-        .arg("--allow-writes")
+        .arg("--allow-candidate-writes")
         .env("STORMBUFFER_TEST_MODE", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("spawn writable stormbuffer-mcp");
+        .expect("spawn candidate-writable stormbuffer-mcp");
     let source = json!({
         "kind": "document",
         "reference": "docs/reference/mcp",
@@ -409,14 +416,18 @@ fn stdio_exercises_each_documented_memory_tool() {
         "stormbuffer-mcp"
     );
     assert_eq!(responses.len(), 5);
-    for (response, operation) in responses
+    for (response, operation) in responses[..4]
         .iter()
-        .zip(["context", "get", "remember", "update", "archive"])
+        .zip(["context", "get", "remember", "update"])
     {
         let content = &response["result"]["structuredContent"];
         assert_eq!(content["operation"], operation);
         assert_eq!(content["ok"], true, "{content}");
     }
+    let archive = &responses[4]["result"]["structuredContent"];
+    assert_eq!(archive["operation"], "archive");
+    assert_eq!(archive["ok"], false, "{archive}");
+    assert_eq!(archive["error"]["code"], "permission_denied");
     let receipt = &responses[0]["result"]["structuredContent"]["result"]["receipt"];
     assert_eq!(receipt["retrieval_mode"], "lexical");
     assert_eq!(receipt["embedding_model"], Value::Null);

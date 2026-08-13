@@ -5,7 +5,7 @@ mod server;
 mod tools;
 mod transport;
 
-pub use config::McpConfig;
+pub use config::{McpConfig, McpWritePolicy};
 pub use server::McpServer;
 pub use transport::{run_stdio, run_stdio_with_config};
 
@@ -71,9 +71,15 @@ mod tests {
 
     #[test]
     fn writes_are_denied_and_cancellation_is_observed() {
+        assert!(!McpWritePolicy::ReadOnly.allows("remember"));
+        assert!(McpWritePolicy::CandidateOnly.allows("remember"));
+        assert!(McpWritePolicy::CandidateOnly.allows("update"));
+        assert!(!McpWritePolicy::CandidateOnly.allows("archive"));
+        assert!(McpWritePolicy::All.allows("archive"));
+
         let result = tools::call(
             &paths(),
-            false,
+            McpWritePolicy::ReadOnly,
             "archive",
             JsonObject::new(),
             false,
@@ -89,7 +95,7 @@ mod tests {
 
         let error = tools::call(
             &paths(),
-            true,
+            McpWritePolicy::All,
             "context",
             JsonObject::new(),
             true,
@@ -129,7 +135,7 @@ mod tests {
         }))
         .expect("tool arguments");
 
-        let result = McpServer::new(paths.clone(), true)
+        let result = McpServer::new(paths.clone(), McpWritePolicy::CandidateOnly)
             .call_sync("remember", arguments, false)
             .expect("structured rejection");
         let structured = result.structured_content.expect("structured result");
@@ -180,7 +186,8 @@ mod tests {
             serde_json::from_value(serde_json::json!({"query":"pulsar MCP","budget":128}))
                 .expect("tool arguments");
 
-        let server = McpServer::with_embedder(paths.clone(), false, Arc::new(embedder));
+        let server =
+            McpServer::with_embedder(paths.clone(), McpWritePolicy::ReadOnly, Arc::new(embedder));
         let result = server
             .call_sync("context", arguments, false)
             .expect("recall result");
