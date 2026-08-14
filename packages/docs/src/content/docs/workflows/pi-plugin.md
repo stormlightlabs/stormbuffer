@@ -72,10 +72,27 @@ Start Pi inside the project whose store you want when using `project` or
 
 ## Candidate writes
 
-The extension does not write or approve records. When its capture check finds a
-durable correction, decision, constraint, preference, procedure, or checkpoint,
-the installed skill can use the versioned `sbuf invoke remember` or `update`
-flow to create a candidate for your review.
+The extension does not start or configure an MCP server, and installing the
+package does not grant write access. The installed skill can create candidates
+through the versioned `sbuf invoke remember` and `update` commands when Pi has
+shell access.
+
+When Pi connects through `pi-mcp-adapter`, configure the Stormbuffer server for
+candidate writes and restart Pi. The [MCP reference](/docs/reference/mcp/)
+provides the global and project configuration, access limits, and verification
+steps.
+
+## Avoid duplicate skills
+
+The package includes the `stormbuffer-memory` skill. If Pi already loads a skill
+with that name from `~/.agents/skills`, `.agents/skills`, or another package, it
+warns about the collision and keeps the first copy it discovered. Keep one copy,
+or use `pi config` to disable the package's skill while leaving its extension
+enabled.
+
+`stormbuffer-global-memory` has a different name and can coexist with the
+package skill. Installing that global skill in both a user and project skill
+directory still creates a collision; keep it in only one discovered location.
 
 ## Update or remove the package
 

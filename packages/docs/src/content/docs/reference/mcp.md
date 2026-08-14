@@ -80,16 +80,27 @@ Install [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter), then res
 pi install npm:pi-mcp-adapter
 ```
 
-For project memory, create `.mcp.json` in the initialized project:
+For global memory with candidate creation, put this configuration in
+`~/.config/mcp/mcp.json`:
 
 ```json
-{ "mcpServers": { "stormbuffer": { "command": "stormbuffer-mcp", "args": ["--stdio", "--project"] } } }
+{ "mcpServers": { "stormbuffer": { "command": "stormbuffer-mcp", "args": ["--stdio", "--allow-candidate-writes"] } } }
 ```
 
-Run Pi from that project. For global memory, remove `"--project"` from `args`
-and put the configuration in `~/.config/mcp/mcp.json`. Add
-`"--allow-candidate-writes"` to `args` when Pi should propose memories. Use
-`"--allow-writes"` only when it should also archive active records.
+For project memory, put the configuration in the initialized project's
+`.mcp.json` and select the composed project view:
+
+```json
+{
+	"mcpServers": {
+		"stormbuffer": { "command": "stormbuffer-mcp", "args": ["--stdio", "--project", "--allow-candidate-writes"] }
+	}
+}
+```
+
+Remove `"--allow-candidate-writes"` for a read-only connection. Use
+`"--allow-writes"` only when Pi should also archive active records. Restart Pi
+after changing MCP configuration so it starts a new adapter process.
 
 `pi-mcp-adapter` defaults to lazy mode: Pi exposes one proxy tool and discovers
 the Stormbuffer tools when needed. Leave `directTools` unset to avoid loading
