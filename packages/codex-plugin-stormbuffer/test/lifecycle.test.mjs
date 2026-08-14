@@ -1,21 +1,18 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import test from 'node:test';
-import {
-	candidateWriteSucceeded,
-	consumeCandidateWrite,
-	markCandidateWrite
-} from '../hooks/capture-state.mjs';
+import { candidateWriteSucceeded, consumeCandidateWrite, markCandidateWrite } from '../hooks/capture-state.mjs';
 import {
 	CAPTURE_MARKER,
 	MAX_CONTEXT_CHARS,
 	codexStopOutput,
 	contextFromOutput,
 	contextInvocation,
-	retrieveContext
+	retrieveContext,
+	selectedScope
 } from '../hooks/lifecycle.mjs';
 
 const hook = new URL('../hooks/codex.mjs', import.meta.url);
@@ -61,6 +58,31 @@ function envelope(overrides = {}) {
 	});
 }
 
+test('scope defaults to the nearest initialized project store unless explicitly selected', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'stormbuffer-scope-'));
+	const project = join(root, 'project');
+	const nested = join(project, 'src');
+	await mkdir(join(project, '.sbuf'), { recursive: true });
+	await mkdir(nested);
+	await writeFile(join(project, '.sbuf', 'store.toml'), 'version = 1\n');
+
+	assert.equal(selectedScope(undefined, nested), 'project');
+	assert.equal(selectedScope('global', nested), 'global');
+	assert.equal(selectedScope(undefined, root), 'global');
+	assert.deepEqual(contextInvocation('prompt', { cwd: nested }).args, ['--project', 'invoke', 'context']);
+	assert.match(codexStopOutput({}, { cwd: nested }).reason, /selected project scope/);
+});
+
+test('an uninitialized nearer store does not select a parent project store', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'stormbuffer-scope-'));
+	const nested = join(root, 'project', 'nested');
+	await mkdir(join(root, '.sbuf'), { recursive: true });
+	await writeFile(join(root, '.sbuf', 'store.toml'), 'version = 1\n');
+	await mkdir(join(nested, '.sbuf'), { recursive: true });
+
+	assert.equal(selectedScope(undefined, nested), 'global');
+});
+
 test('context invocation selects each scope and sends only the current prompt', () => {
 	for (const scope of ['global', 'project', 'local']) {
 		const invocation = contextInvocation('current prompt', { scope, budget: 64 });
@@ -94,6 +116,7 @@ test('capture continuation is emitted once and describes no-op outcomes', () => 
 	assert.equal(first.decision, 'block');
 	assert.match(first.reason, new RegExp(CAPTURE_MARKER.replace(/[\[\]]/g, '\\$&')));
 	assert.match(first.reason, /Submit nothing for routine completion/);
+	assert.match(first.reason, /only when that server uses the selected scope/);
 	assert.match(codexStopOutput({}, { scope: 'project' }).reason, /selected project scope/);
 	assert.deepEqual(codexStopOutput({}, { candidateWritten: true }), {});
 	assert.deepEqual(codexStopOutput({ stop_hook_active: true }), {});
@@ -154,10 +177,7 @@ test('stop hook consumes a candidate-write signal from the current Codex thread'
 	markCandidateWrite(event);
 	const runStop = () =>
 		JSON.parse(
-			execFileSync(process.execPath, [hook.pathname, 'stop'], {
-				input: JSON.stringify(event),
-				encoding: 'utf8'
-			})
+			execFileSync(process.execPath, [hook.pathname, 'stop'], { input: JSON.stringify(event), encoding: 'utf8' })
 		);
 	assert.deepEqual(runStop(), {});
 	assert.equal(runStop().decision, 'block');

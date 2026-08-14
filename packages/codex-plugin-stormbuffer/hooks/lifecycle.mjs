@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
 export const CAPTURE_MARKER = '[stormbuffer:capture-review]';
 export const CONTEXT_CUSTOM_TYPE = 'stormbuffer-context';
@@ -11,8 +13,34 @@ export const MAX_CONTEXT_CHARS = 32_768;
 const SCOPES = new Set(['global', 'project', 'local']);
 const CONTEXT_CONTRACT_VERSION = 'stormbuffer-context-v1';
 
-export function selectedScope(value = process.env.STORMBUFFER_SCOPE) {
-	return SCOPES.has(value) ? value : 'global';
+function isFile(path) {
+	try {
+		return statSync(path).isFile();
+	} catch {
+		return false;
+	}
+}
+
+function isDirectory(path) {
+	try {
+		return statSync(path).isDirectory();
+	} catch {
+		return false;
+	}
+}
+
+export function selectedScope(value = process.env.STORMBUFFER_SCOPE, cwd = process.cwd()) {
+	if (SCOPES.has(value)) return value;
+	if (typeof cwd !== 'string' || cwd.length === 0) return 'global';
+
+	let current = resolve(cwd);
+	while (true) {
+		const store = join(current, '.sbuf');
+		if (isDirectory(store)) return isFile(join(store, 'store.toml')) ? 'project' : 'global';
+		const parent = dirname(current);
+		if (parent === current) return 'global';
+		current = parent;
+	}
 }
 
 export function scopeArgs(scope = selectedScope()) {
@@ -29,7 +57,7 @@ export function contextInvocation(prompt, options = {}) {
 		return null;
 	}
 
-	const scope = selectedScope(options.scope);
+	const scope = selectedScope(options.scope, options.cwd);
 	const budget =
 		Number.isSafeInteger(options.budget) && options.budget > 0 ? Math.min(options.budget, 4_096) : DEFAULT_BUDGET;
 	const args = [...scopeArgs(scope), 'invoke', 'context'];
@@ -158,7 +186,7 @@ export function captureInstruction(scope = selectedScope()) {
 		scope === 'global'
 			? 'Use the global Stormbuffer scope.'
 			: `Use the selected ${scope} scope (the CLI flag is --${scope}).`;
-	return `${CAPTURE_MARKER}\nEvaluate the completed turn once using the installed Stormbuffer memory skill. ${scopeGuidance} If it contains one durable correction, accepted decision, confirmed root cause, or necessary handoff that passes every admission gate, submit one reviewable candidate through explicitly write-enabled Stormbuffer MCP when available; otherwise use the versioned sbuf invoke remember/update flow. Submit nothing for routine completion, repository-authoritative knowledge, tentative discussion, duplicates, or secrets. Do not retrieve memory again.`;
+	return `${CAPTURE_MARKER}\nEvaluate the completed turn once using the installed Stormbuffer memory skill. ${scopeGuidance} If it contains one durable correction, accepted decision, confirmed root cause, or necessary handoff that passes every admission gate, submit one reviewable candidate through write-enabled Stormbuffer MCP only when that server uses the selected scope; otherwise use the versioned sbuf invoke remember/update flow with the selected scope flag. Submit nothing for routine completion, repository-authoritative knowledge, tentative discussion, duplicates, or secrets. Do not retrieve memory again.`;
 }
 
 export function codexPromptOutput(context) {
@@ -166,13 +194,8 @@ export function codexPromptOutput(context) {
 }
 
 export function codexStopOutput(event, options = {}) {
-	if (
-		!event ||
-		typeof event !== 'object' ||
-		event.stop_hook_active === true ||
-		options.candidateWritten === true
-	) {
+	if (!event || typeof event !== 'object' || event.stop_hook_active === true || options.candidateWritten === true) {
 		return {};
 	}
-	return { decision: 'block', reason: captureInstruction(selectedScope(options.scope)) };
+	return { decision: 'block', reason: captureInstruction(selectedScope(options.scope, options.cwd)) };
 }

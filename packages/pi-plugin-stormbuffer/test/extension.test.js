@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { CAPTURE_MARKER, MAX_CONTEXT_CHARS, contextFromOutput } from '@stormlightlabs/codex-plugin-stormbuffer';
 import { createLifecycle } from '../src/index.js';
@@ -118,6 +121,22 @@ test('capture review retains the selected scope', () => {
 	const { pi, calls } = host();
 	createLifecycle(pi, { scope: 'local' }).agentSettled();
 	assert.match(calls.messages[0][0].content, /selected local scope/);
+});
+
+test('capture review derives project scope from the active working directory', async () => {
+	const root = await mkdtemp(join(tmpdir(), 'stormbuffer-pi-scope-'));
+	const nested = join(root, 'src');
+	await mkdir(join(root, '.sbuf'), { recursive: true });
+	await mkdir(nested);
+	await writeFile(join(root, '.sbuf', 'store.toml'), 'version = 1\n');
+	const { pi, calls, options } = host();
+	const lifecycle = createLifecycle(pi, options);
+
+	await lifecycle.beforeAgentStart({ prompt: 'current prompt' }, { cwd: nested });
+	lifecycle.agentSettled();
+
+	assert.deepEqual(calls.recall[0].args, ['--project', 'invoke', 'context']);
+	assert.match(calls.messages[0][0].content, /selected project scope/);
 });
 
 test('capture turn neither recalls nor schedules itself', async () => {

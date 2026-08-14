@@ -1,10 +1,5 @@
 #!/usr/bin/env node
-import {
-	codexPromptOutput,
-	codexStopOutput,
-	contextInvocation,
-	retrieveContext
-} from './lifecycle.mjs';
+import { codexPromptOutput, codexStopOutput, contextInvocation, retrieveContext } from './lifecycle.mjs';
 import { candidateWriteSucceeded, consumeCandidateWrite, markCandidateWrite } from './capture-state.mjs';
 
 const MAX_EVENT_BYTES = 64 * 1024;
@@ -24,7 +19,7 @@ async function readEvent() {
 }
 
 async function recall(event) {
-	const invocation = contextInvocation(event?.prompt);
+	const invocation = contextInvocation(event?.prompt, { cwd: typeof event?.cwd === 'string' ? event.cwd : undefined });
 	if (!invocation) return null;
 	return retrieveContext(invocation, { cwd: typeof event.cwd === 'string' ? event.cwd : undefined, timeout: 5_000 });
 }
@@ -38,7 +33,7 @@ try {
 		markCandidateWrite(event);
 	} else if (process.argv[2] === 'stop') {
 		const candidateWritten = event?.stop_hook_active === true ? false : consumeCandidateWrite(event);
-		output = codexStopOutput(event, { candidateWritten });
+		output = codexStopOutput(event, { candidateWritten, cwd: typeof event?.cwd === 'string' ? event.cwd : undefined });
 	}
 } catch {
 	// Hook failures must not block the host.

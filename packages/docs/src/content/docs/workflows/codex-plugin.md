@@ -49,8 +49,9 @@ before installing it and keep the checkout in a location you control.
 
 ## Select a memory scope
 
-The plugin uses the global store unless `STORMBUFFER_SCOPE` selects another
-scope. Set the variable in the shell that starts Codex:
+The plugin uses the nearest initialized project store when Codex starts inside
+one. Otherwise, it uses the global store. Set `STORMBUFFER_SCOPE` to override
+that selection in the shell that starts Codex:
 
 ```sh
 STORMBUFFER_SCOPE=project codex

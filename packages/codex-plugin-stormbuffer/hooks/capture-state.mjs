@@ -41,7 +41,7 @@ export function consumeCandidateWrite(options = {}) {
 }
 
 function operationForEvent(event) {
-	return typeof event?.tool_name === 'string' ? MCP_CANDIDATE_TOOL.exec(event.tool_name)?.[1] ?? null : null;
+	return typeof event?.tool_name === 'string' ? (MCP_CANDIDATE_TOOL.exec(event.tool_name)?.[1] ?? null) : null;
 }
 
 function successfulEnvelope(value, operation) {

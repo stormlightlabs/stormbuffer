@@ -11,6 +11,7 @@ import {
 export function createLifecycle(pi, options = {}) {
 	let captureTurn = false;
 	let captureScheduled = false;
+	let scope = selectedScope(options.scope, options.cwd);
 
 	return {
 		async beforeAgentStart(event, ctx) {
@@ -19,7 +20,9 @@ export function createLifecycle(pi, options = {}) {
 			captureScheduled = false;
 			if (captureTurn) return undefined;
 
-			const invocation = contextInvocation(prompt, options);
+			const cwd = ctx?.cwd ?? options.cwd;
+			scope = selectedScope(options.scope, cwd);
+			const invocation = contextInvocation(prompt, { ...options, cwd });
 			if (!invocation) return undefined;
 			try {
 				const recall = options.retrieveContext || retrieveContext;
@@ -34,7 +37,7 @@ export function createLifecycle(pi, options = {}) {
 			if (captureTurn || captureScheduled) return;
 			captureScheduled = true;
 			pi.sendMessage(
-				{ customType: CAPTURE_CUSTOM_TYPE, content: captureInstruction(selectedScope(options.scope)), display: false },
+				{ customType: CAPTURE_CUSTOM_TYPE, content: captureInstruction(scope), display: false },
 				{ triggerTurn: true, deliverAs: 'followUp' }
 			);
 		}

@@ -54,8 +54,9 @@ Pi asks you to trust a project before it loads project-local extensions.
 
 ## Select a memory scope
 
-The package uses the global store unless `STORMBUFFER_SCOPE` selects another
-scope. Set the variable in the shell that starts Pi:
+The package uses the nearest initialized project store when Pi starts inside
+one. Otherwise, it uses the global store. Set `STORMBUFFER_SCOPE` to override
+that selection in the shell that starts Pi:
 
 ```sh
 STORMBUFFER_SCOPE=project pi
