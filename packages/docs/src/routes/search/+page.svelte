@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import Seo from '$lib/components/Seo.svelte';
 </script>
 
-<svelte:head>
-	<title>Search · stormbuffer</title>
-	<meta name="description" content="Search the Stormbuffer documentation." />
-</svelte:head>
+<Seo
+	title="Search · Stormbuffer"
+	description="Search the Stormbuffer documentation."
+	pathname="/search/"
+	index={false} />
 
 <main class="fallback-page" data-pagefind-ignore>
 	<a class="skip-link" href="#fallback-content">Skip to content</a>

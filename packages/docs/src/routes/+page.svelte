@@ -1,15 +1,14 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import Seo from '$lib/components/Seo.svelte';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import { getDocs } from '$lib/content';
+	import { site } from '$lib/site';
 
 	const docs = getDocs();
 </script>
 
-<svelte:head>
-	<title>Stormbuffer</title>
-	<meta name="description" content="Documentation for Stormbuffer, a local-first memory store for people and agents." />
-</svelte:head>
+<Seo title={site.title} description={site.description} pathname="/" />
 
 <SiteHeader {docs} />
 

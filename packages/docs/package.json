@@ -49,5 +49,10 @@
 		"vitest": "^4.1.8",
 		"vitest-browser-svelte": "^2.1.1",
 		"wrangler": "^4.121.0"
+	},
+	"dependencies": {
+		"@resvg/resvg-js": "^2.6.2",
+		"satori": "^0.26.0",
+		"satori-html": "^0.3.2"
 	}
 }

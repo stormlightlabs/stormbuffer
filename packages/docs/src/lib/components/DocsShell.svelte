@@ -4,6 +4,7 @@
 	import CopyCode from './CopyCode.svelte';
 	import CopyMarkdown from './CopyMarkdown.svelte';
 	import PageNavigation from './PageNavigation.svelte';
+	import Seo from './Seo.svelte';
 	import Sidebar from './Sidebar.svelte';
 	import SiteHeader from './SiteHeader.svelte';
 	import TableOfContents from './TableOfContents.svelte';
@@ -14,10 +15,7 @@
 	const adjacent = $derived(getAdjacentDocs(doc.slug));
 </script>
 
-<svelte:head>
-	<title>{doc.title} · Stormbuffer docs</title>
-	<meta name="description" content={doc.description} />
-</svelte:head>
+<Seo title={`${doc.title} · Stormbuffer docs`} description={doc.description} pathname={`/docs/${doc.slug}/`} />
 
 <SiteHeader {docs} currentSlug={doc.slug} />
 
