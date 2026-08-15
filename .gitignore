@@ -28,3 +28,5 @@ node_modules/
 # Generated from the canonical project skill during install and packaging
 /packages/codex-plugin-stormbuffer/skills/
 /packages/pi-plugin-stormbuffer/skills/
+
+.thndrs
