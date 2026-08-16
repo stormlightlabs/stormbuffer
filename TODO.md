@@ -245,16 +245,18 @@ and shuts down under a service manager.
 
 **Acceptance criteria:**
 
-- [ ] The server calls core APIs and never edits Markdown/SQLite directly.
-- [ ] Default binding is loopback-only. Remote binding is unavailable until an
+- [x] The server calls core APIs and never edits Markdown/SQLite directly.
+- [x] Default binding is loopback-only. Remote binding is unavailable until an
       authentication and a threat model are implemented.
-- [ ] Edits use revision/ETag-style preconditions and report external changes.
-- [ ] The foreground process logs to stderr, handles signals, and shuts down
+- [x] Edits use revision/ETag-style preconditions and report external changes.
+- [x] The foreground process logs to stderr, handles signals, and shuts down
       without corrupting writes.
-- [ ] API and operator documentation match the implementation.
+- [x] API and operator documentation match the implementation.
 
-**Verification:** Run API integration tests for binding, concurrency conflicts,
-signals, validation, and lifecycle parity.
+**Verification:** Added focused API tests for loopback binding, stale ETag
+conflicts, generated OpenAPI coverage, and graceful service-manager shutdown.
+The implementation validates JSON inputs and routes browse, search, edit, and
+lifecycle requests through `stormbuffer-core`.
 
 ### SB-902 — Build the human web editor
 

@@ -3,7 +3,6 @@ members = [
     "crates/core",
     "crates/cli",
     "crates/mcp",
-    "crates/server",
 ]
 resolver = "2"
 
@@ -32,11 +31,13 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rmcp = { version = "=2.1.0", default-features = false, features = ["macros", "server", "transport-io"] }
 thiserror = "2.0"
-tokio = { version = "=1.53.0", features = ["io-std", "macros", "rt", "sync", "time"] }
+tokio = { version = "=1.53.0", features = ["io-std", "io-util", "macros", "net", "rt", "rt-multi-thread", "signal", "sync", "time"] }
 time = { version = "=0.3.53", features = ["formatting", "parsing"] }
 toml = "=0.8.23"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+axum = "0.8"
+utoipa = { version = "5.4", features = ["axum_extras"] }
 uuid = { version = "1.24", features = ["v7"] }
 fastembed = { version = "=5.13.4", default-features = false, features = ["ort-download-binaries-rustls-tls"] }
 tokenizers = "=0.22.2"

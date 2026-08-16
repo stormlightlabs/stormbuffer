@@ -20,12 +20,16 @@ path = "src/bin/sbuf.rs"
 
 [dependencies]
 anyhow.workspace = true
+axum.workspace = true
 clap.workspace = true
 owo-colors.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 stormbuffer-core = { package = "stormbuffer-core", version = "=0.1.0", path = "../core" }
+tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+utoipa.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }

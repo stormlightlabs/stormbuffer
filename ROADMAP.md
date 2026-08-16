@@ -95,8 +95,11 @@ review, and lifecycle controls for people who prefer not to use the CLI. A graph
 may show relationships stored in record fields, including supersession, scope,
 sources, and shared tags. It will not infer an opaque knowledge graph.
 
-The server will bind to loopback only. Remote access requires authentication
-and a threat model. The CLI and web app will use the same core policy.
+The server now runs through `sbuf serve` and exposes a documented OpenAPI
+contract for browsing, lexical search, conditional record edits, and lifecycle
+controls. It binds only to loopback, refuses remote and wildcard addresses,
+uses canonical-record ETags for edits, logs to stderr, and shuts down on Ctrl-C
+or `SIGTERM`. The CLI and web app will use the same core policy.
 
 ## Later work
 

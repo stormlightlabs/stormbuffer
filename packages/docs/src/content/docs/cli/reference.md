@@ -134,6 +134,23 @@ removes only disposable indexes, caches, locks, logs, and temporary files. Add
 
 See [Backup and recovery](/docs/workflows/backup-recovery/) for examples and collision choices.
 
+## Run the local API
+
+Start the loopback-only HTTP API for the selected store with `serve`:
+
+```sh
+sbuf serve
+sbuf --project serve --port 7343
+sbuf --local serve --bind ::1
+```
+
+It listens on `127.0.0.1:7342` by default. `--bind` accepts only loopback
+addresses; Stormbuffer refuses remote and wildcard bindings until authentication
+and a threat model exist. The foreground service logs to stderr and handles
+Ctrl-C and `SIGTERM` for graceful shutdown. See the [local API reference](/docs/reference/local-api/)
+for its OpenAPI contract, ETag edits, lifecycle endpoints, and service-manager
+behavior.
+
 ## Manage records
 
 After initializing a store, `add` opens a temporary Markdown copy in `$VISUAL`, then `$EDITOR`.

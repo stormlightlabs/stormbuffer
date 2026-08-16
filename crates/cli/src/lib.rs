@@ -11,6 +11,7 @@ mod index;
 mod maintenance;
 mod protocol;
 mod records;
+mod server;
 mod skill;
 mod store;
 
@@ -20,14 +21,6 @@ use echo::Echo;
 const FAILURE: i32 = 1;
 
 pub fn run() {
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"));
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(false)
-        .with_ansi(false)
-        .try_init();
-
     let code = run_with_args(std::env::args_os());
     std::process::exit(code);
 }
@@ -45,6 +38,8 @@ where
             return code;
         }
     };
+
+    init_logging(matches!(&parsed.command, CliCommand::Serve(_)));
 
     let machine = matches!(&parsed.command, CliCommand::Status(arguments) if arguments.json)
         || matches!(&parsed.command, CliCommand::Search(arguments) if arguments.json)
@@ -85,6 +80,7 @@ fn run_command(cli: Cli, output: Echo) -> i32 {
         CliCommand::Forget(arguments) => records::run_forget(scope, arguments, &output),
         CliCommand::Evaluate => index::run_evaluate(&output),
         CliCommand::Mcp(arguments) => protocol::run_mcp(scope, arguments, &output),
+        CliCommand::Serve(arguments) => server::run(scope, arguments, &output),
         CliCommand::Invoke(arguments) => protocol::run_invoke(scope, arguments, &output),
         CliCommand::Search(arguments) => index::run_search(scope, arguments, &output),
         CliCommand::Context(arguments) => index::run_context(scope, arguments, &output),
@@ -106,6 +102,17 @@ fn run_command(cli: Cli, output: Echo) -> i32 {
             SkillCommand::Install(arguments) => skill::run_install(scope, arguments, &output),
         },
     }
+}
+
+fn init_logging(server: bool) {
+    let default_filter = if server { "info" } else { "warn" };
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(default_filter));
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(false)
+        .with_ansi(false)
+        .try_init();
 }
 
 fn resolve(scope: StoreScope) -> AnyhowResult<core::StorePaths> {

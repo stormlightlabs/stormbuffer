@@ -102,8 +102,21 @@ pub enum CliCommand {
     Evaluate,
     /// Run the MCP adapter over stdio.
     Mcp(McpArgs),
+    /// Run the loopback-only local HTTP API.
+    Serve(ServeArgs),
     /// Manage agent skills shipped with Stormbuffer.
     Skill(SkillArgs),
+}
+
+#[derive(Args, Debug)]
+pub struct ServeArgs {
+    /// Loopback IP address to bind. Non-loopback addresses are refused.
+    #[arg(long, default_value = "127.0.0.1")]
+    pub bind: std::net::IpAddr,
+
+    /// TCP port for the local HTTP API.
+    #[arg(long, default_value_t = 7342)]
+    pub port: u16,
 }
 
 #[derive(Args, Debug)]
