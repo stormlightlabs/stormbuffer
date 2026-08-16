@@ -192,7 +192,7 @@ fn init_root_and_status_work_for_project_and_global_stores() {
     assert_eq!(local_status["scope"], "local");
 
     let mut global_command = Command::new(binary());
-    global_command.current_dir(&project).arg("init");
+    global_command.current_dir(&project).args(["-g", "init"]);
     with_store_environment(&mut global_command, &root);
     let global_init = global_command.output().expect("run global init");
     assert_eq!(global_init.status.code(), Some(0));
@@ -334,6 +334,17 @@ fn invalid_input_and_unfinished_commands_are_explicit_and_safe() {
     assert_eq!(add.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&add.stderr).contains("not initialized"));
     assert!(add.stdout.is_empty());
+    assert!(!root.join(".sbuf").exists());
+
+    let invoke = run_json(
+        &root,
+        ["--project", "invoke", "search"],
+        r#"{"version":1,"query":"anything"}"#,
+    );
+    assert_eq!(invoke.status.code(), Some(1));
+    let envelope: serde_json::Value =
+        serde_json::from_slice(&invoke.stdout).expect("parse not initialized envelope");
+    assert_eq!(envelope["error"]["code"], "not_initialized");
     assert!(!root.join(".sbuf").exists());
 
     let forget = run(&root, ["forget", "memory-id"]);

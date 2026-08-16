@@ -33,7 +33,7 @@ pub struct Cli {
     pub local: bool,
 
     /// Select the global store explicitly.
-    #[arg(long, global = true, conflicts_with_all = ["project", "local"])]
+    #[arg(short = 'g', long, global = true, conflicts_with_all = ["project", "local"])]
     pub global: bool,
 
     #[command(subcommand)]

@@ -84,6 +84,7 @@ pub fn replace_advisory_relation_projection(
     paths: &StorePaths,
     relations: &[AdvisoryRelationProjection],
 ) -> crate::Result<()> {
+    crate::record_scope(paths)?;
     let destination = active_index_path(paths)?;
     let _lock = ProjectionLock::acquire(&destination)?;
     let mut index = Index::open_at(&destination)?;

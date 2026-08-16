@@ -10,6 +10,7 @@ use super::projection::{Index, ProjectionLock};
 use super::{SemanticIndexReport, SyncReport, WatchOptions, WatchReport, active_index_path};
 
 pub fn sync_store(paths: &StorePaths) -> crate::Result<SyncReport> {
+    crate::record_scope(paths)?;
     let destination = active_index_path(paths)?;
     let _lock = ProjectionLock::acquire(&destination)?;
     let mut index = Index::open_at(&destination)?;
@@ -24,6 +25,7 @@ pub fn reindex_store_with_embedder(
     paths: &StorePaths,
     embedder: Option<&dyn Embedder>,
 ) -> crate::Result<SyncReport> {
+    crate::record_scope(paths)?;
     let destination = active_index_path(paths)?;
     let _lock = ProjectionLock::acquire(&destination)?;
     let parent = destination.parent().ok_or_else(|| {
@@ -86,6 +88,7 @@ pub fn rebuild_vector_index(
     paths: &StorePaths,
     embedder: &dyn Embedder,
 ) -> crate::Result<VectorMetadata> {
+    crate::record_scope(paths)?;
     let destination = active_index_path(paths)?;
     let _lock = ProjectionLock::acquire(&destination)?;
     let mut index = Index::open_at(&destination)?;

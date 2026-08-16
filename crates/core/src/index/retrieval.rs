@@ -151,6 +151,7 @@ pub fn context_stores(
     normalize_context_options(&mut options, stores);
     let mut hits = Vec::new();
     for paths in stores {
+        crate::record_scope(paths)?;
         let index = Index::open_at(&active_index_path(paths)?)?;
         hits.extend(index.search_hits(paths, query, &options.search)?);
     }
@@ -172,6 +173,7 @@ pub fn context_stores_with_embedder(
     let mut lexical = Vec::new();
     let mut semantic = Vec::new();
     for paths in stores {
+        crate::record_scope(paths)?;
         let index = Index::open_at(&active_index_path(paths)?)?;
         if options.search.mode != RetrievalMode::Semantic {
             let mut lexical_options = options.search.clone();
