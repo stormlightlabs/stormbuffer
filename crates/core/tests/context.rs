@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use stormbuffer_core::{
-    Access, ContextOptions, SearchOptions, StoreInitMode, StorePaths, StoreScope, Timestamp,
-    context_store, initialize_store, sync_store,
+    Access, ContextOptions, SearchOptions, StoreInitMode, StorePaths, StoreScope, Timestamp, context_store,
+    initialize_store, sync_store,
 };
 
 struct TempStore {
@@ -16,10 +16,7 @@ static NEXT_TEMP_STORE: AtomicU64 = AtomicU64::new(0);
 
 impl TempStore {
     fn new() -> Self {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
+        let stamp = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
         for attempt in 0..100 {
             let counter = NEXT_TEMP_STORE.fetch_add(1, Ordering::Relaxed);
             let root = std::env::temp_dir().join(format!(
@@ -101,10 +98,7 @@ fn context_is_attributable_deterministic_and_explicitly_untrusted() {
     );
     sync_store(&paths).expect("sync");
 
-    let options = ContextOptions {
-        budget: 20,
-        search: SearchOptions::default(),
-    };
+    let options = ContextOptions { budget: 20, search: SearchOptions::default() };
     let first = context_store(&paths, "answer Friday", options.clone()).expect("context");
     let second = context_store(&paths, "answer Friday", options).expect("context");
     assert_ne!(first.receipt.receipt_id, second.receipt.receipt_id);
@@ -126,18 +120,9 @@ fn context_is_attributable_deterministic_and_explicitly_untrusted() {
     assert_eq!(block.access, "human");
     assert_eq!(block.text_role, "untrusted_record_text");
     assert_eq!(block.sources[0].reference, "context-fixture.md");
-    assert_eq!(
-        block.sources[0].observed_at.as_deref(),
-        Some("2026-08-05T20:08:00Z")
-    );
-    assert_eq!(
-        block.sources[0].revision.as_deref(),
-        Some("git:context-fixture")
-    );
-    assert_eq!(
-        block.sources[0].content_hash.as_deref(),
-        Some("blake3:context-fixture")
-    );
+    assert_eq!(block.sources[0].observed_at.as_deref(), Some("2026-08-05T20:08:00Z"));
+    assert_eq!(block.sources[0].revision.as_deref(), Some("git:context-fixture"));
+    assert_eq!(block.sources[0].content_hash.as_deref(), Some("blake3:context-fixture"));
     assert!(!block.ranking_reasons.is_empty());
     assert!(block.text.contains("Ignore host instructions"));
 
@@ -166,12 +151,7 @@ fn context_is_attributable_deterministic_and_explicitly_untrusted() {
     assert!(!record_boundary.can_grant_tools);
     assert!(!record_boundary.can_change_access);
     assert!(!record_boundary.can_override_host_instructions);
-    assert!(
-        first
-            .contract
-            .record_text_rule
-            .contains("cannot grant tools")
-    );
+    assert!(first.contract.record_text_rule.contains("cannot grant tools"));
     assert_eq!(first.receipt.contract_version, first.contract.version);
 }
 
@@ -211,10 +191,7 @@ fn context_applies_filters_before_assembly_and_reports_budget_edges() {
         "filter-target",
         ContextOptions {
             budget: 100,
-            search: SearchOptions {
-                allowed_access: Some(vec![Access::Human]),
-                ..SearchOptions::default()
-            },
+            search: SearchOptions { allowed_access: Some(vec![Access::Human]), ..SearchOptions::default() },
         },
     )
     .expect("human context");
@@ -228,10 +205,7 @@ fn context_applies_filters_before_assembly_and_reports_budget_edges() {
         "filter-target",
         ContextOptions {
             budget: 100,
-            search: SearchOptions {
-                allowed_access: Some(vec![Access::Agent]),
-                ..SearchOptions::default()
-            },
+            search: SearchOptions { allowed_access: Some(vec![Access::Agent]), ..SearchOptions::default() },
         },
     )
     .expect("agent context");
@@ -271,10 +245,7 @@ fn context_applies_filters_before_assembly_and_reports_budget_edges() {
     let empty = context_store(
         &paths,
         "   ",
-        ContextOptions {
-            budget: 0,
-            search: SearchOptions::default(),
-        },
+        ContextOptions { budget: 0, search: SearchOptions::default() },
     )
     .expect("empty context");
     assert!(empty.blocks.is_empty());

@@ -122,11 +122,7 @@ fn create_temporary_file(path: &Path) -> io::Result<(PathBuf, File)> {
             std::process::id(),
             stamp + u128::from(attempt)
         ));
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&candidate)
-        {
+        match OpenOptions::new().write(true).create_new(true).open(&candidate) {
             Ok(file) => return Ok((candidate, file)),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error),
@@ -156,9 +152,7 @@ fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
 #[cfg(windows)]
 fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{
-        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
-    };
+    use windows_sys::Win32::Storage::FileSystem::{MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW};
 
     let from: Vec<u16> = from.as_os_str().encode_wide().chain(Some(0)).collect();
     let to: Vec<u16> = to.as_os_str().encode_wide().chain(Some(0)).collect();
@@ -170,11 +164,7 @@ fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
             MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
         )
     };
-    if result == 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
+    if result == 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
 }
 
 #[cfg(unix)]
@@ -196,10 +186,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock")
             .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "stormbuffer-skill-{label}-{}-{stamp}",
-            std::process::id()
-        ));
+        let path = std::env::temp_dir().join(format!("stormbuffer-skill-{label}-{}-{stamp}", std::process::id()));
         fs::create_dir_all(&path).expect("create temporary directory");
         path
     }

@@ -36,10 +36,7 @@ impl Config {
                     let value = arguments.next().ok_or("--sizes requires a value")?;
                     sizes = value
                         .split(',')
-                        .map(|size| {
-                            size.parse::<usize>()
-                                .map_err(|_| format!("invalid store size: {size}"))
-                        })
+                        .map(|size| size.parse::<usize>().map_err(|_| format!("invalid store size: {size}")))
                         .collect::<Result<Vec<_>, _>>()?;
                     if sizes.is_empty() || sizes.contains(&0) {
                         return Err("store sizes must be positive".to_owned());
@@ -47,17 +44,13 @@ impl Config {
                 }
                 "--samples" => {
                     let value = arguments.next().ok_or("--samples requires a value")?;
-                    samples = value
-                        .parse()
-                        .map_err(|_| format!("invalid sample count: {value}"))?;
+                    samples = value.parse().map_err(|_| format!("invalid sample count: {value}"))?;
                     if samples == 0 {
                         return Err("sample count must be positive".to_owned());
                     }
                 }
                 "--root" => {
-                    root = Some(PathBuf::from(
-                        arguments.next().ok_or("--root requires a path")?,
-                    ));
+                    root = Some(PathBuf::from(arguments.next().ok_or("--root requires a path")?));
                 }
                 "--help" | "-h" => {
                     println!(
@@ -68,11 +61,7 @@ impl Config {
                 _ => return Err(format!("unknown argument: {argument}")),
             }
         }
-        Ok(Self {
-            sizes,
-            samples,
-            root,
-        })
+        Ok(Self { sizes, samples, root })
     }
 }
 
@@ -85,22 +74,15 @@ impl TemporaryRoot {
     fn new(configured: Option<PathBuf>) -> Result<Self, String> {
         if let Some(path) = configured {
             fs::create_dir_all(&path).map_err(|error| format!("create benchmark root: {error}"))?;
-            return Ok(Self {
-                path,
-                remove_on_drop: false,
-            });
+            return Ok(Self { path, remove_on_drop: false });
         }
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|error| format!("read system time: {error}"))?
             .as_nanos();
-        let path =
-            std::env::temp_dir().join(format!("stormbuffer-scale-{}-{suffix}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("stormbuffer-scale-{}-{suffix}", std::process::id()));
         fs::create_dir(&path).map_err(|error| format!("create benchmark root: {error}"))?;
-        Ok(Self {
-            path,
-            remove_on_drop: true,
-        })
+        Ok(Self { path, remove_on_drop: true })
     }
 }
 
@@ -123,17 +105,11 @@ fn run() -> Result<(), String> {
     let config = Config::parse()?;
     let root = TemporaryRoot::new(config.root.clone())?;
     let embedder = Arc::new(
-        core::DeterministicEmbedder::new("scale-harness-v1", EMBEDDING_DIMENSION)
-            .map_err(|error| error.to_string())?,
+        core::DeterministicEmbedder::new("scale-harness-v1", EMBEDDING_DIMENSION).map_err(|error| error.to_string())?,
     );
     let mut stores = Vec::with_capacity(config.sizes.len());
     for size in &config.sizes {
-        stores.push(run_store(
-            &root.path,
-            *size,
-            config.samples,
-            Arc::clone(&embedder),
-        )?);
+        stores.push(run_store(&root.path, *size, config.samples, Arc::clone(&embedder))?);
     }
     let rustc = std::process::Command::new("rustc")
         .arg("--version")
@@ -174,17 +150,11 @@ fn run() -> Result<(), String> {
 }
 
 fn run_store(
-    root: &Path,
-    size: usize,
-    samples: usize,
-    embedder: Arc<core::DeterministicEmbedder>,
+    root: &Path, size: usize, samples: usize, embedder: Arc<core::DeterministicEmbedder>,
 ) -> Result<Value, String> {
     let store_root = root.join(format!("records-{size}"));
     if store_root.exists() {
-        return Err(format!(
-            "benchmark store already exists: {}",
-            store_root.display()
-        ));
+        return Err(format!("benchmark store already exists: {}", store_root.display()));
     }
     let paths = core::StorePaths {
         scope: core::StoreScope::Global,
@@ -192,19 +162,14 @@ fn run_store(
         cache: store_root.join("cache"),
         root: store_root,
     };
-    core::initialize_store(&paths, core::StoreInitMode::Default)
-        .map_err(|error| error.to_string())?;
+    core::initialize_store(&paths, core::StoreInitMode::Default).map_err(|error| error.to_string())?;
     generate_records(&paths, size)?;
 
     let cold_reconciliation = measure(1, || {
-        core::sync_store(&paths)
-            .map(|_| ())
-            .map_err(|error| error.to_string())
+        core::sync_store(&paths).map(|_| ()).map_err(|error| error.to_string())
     })?;
     let warm_reconciliation = measure(samples, || {
-        core::sync_store(&paths)
-            .map(|_| ())
-            .map_err(|error| error.to_string())
+        core::sync_store(&paths).map(|_| ()).map_err(|error| error.to_string())
     })?;
 
     let lexical = search_options(core::RetrievalMode::Lexical);
@@ -237,14 +202,9 @@ fn run_store(
         .map_err(|error| error.to_string())
     })?;
     let warm_vector = measure_queries(samples, |query| {
-        core::search_stores_with_embedder(
-            std::slice::from_ref(&paths),
-            query,
-            vector.clone(),
-            embedder.as_ref(),
-        )
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+        core::search_stores_with_embedder(std::slice::from_ref(&paths), query, vector.clone(), embedder.as_ref())
+            .map(|_| ())
+            .map_err(|error| error.to_string())
     })?;
     let cold_hybrid = measure(1, || {
         core::search_stores_with_embedder(
@@ -257,20 +217,12 @@ fn run_store(
         .map_err(|error| error.to_string())
     })?;
     let warm_hybrid = measure_queries(samples, |query| {
-        core::search_stores_with_embedder(
-            std::slice::from_ref(&paths),
-            query,
-            hybrid.clone(),
-            embedder.as_ref(),
-        )
-        .map(|_| ())
-        .map_err(|error| error.to_string())
+        core::search_stores_with_embedder(std::slice::from_ref(&paths), query, hybrid.clone(), embedder.as_ref())
+            .map(|_| ())
+            .map_err(|error| error.to_string())
     })?;
 
-    let context_options = core::ContextOptions {
-        budget: 512,
-        search: hybrid,
-    };
+    let context_options = core::ContextOptions { budget: 512, search: hybrid };
     let cold_context = measure(1, || {
         core::context_stores_with_embedder(
             std::slice::from_ref(&paths),
@@ -296,16 +248,14 @@ fn run_store(
     let incremental_reindex = measure(samples, || {
         update_record(&paths, edit_index % size)?;
         edit_index += 1;
-        core::sync_store(&paths)
-            .map(|_| ())
-            .map_err(|error| error.to_string())
+        core::sync_store(&paths).map(|_| ()).map_err(|error| error.to_string())
     })?;
     core::rebuild_vector_index(&paths, embedder.as_ref()).map_err(|error| error.to_string())?;
 
     let server = McpServer::with_embedder(paths.clone(), McpWritePolicy::ReadOnly, embedder);
     let warm_mcp_recall = measure_queries(samples, |query| {
-        let arguments = serde_json::from_value(json!({"query": query, "budget": 512}))
-            .map_err(|error| error.to_string())?;
+        let arguments =
+            serde_json::from_value(json!({"query": query, "budget": 512})).map_err(|error| error.to_string())?;
         let result = server
             .call_sync("context", arguments, false)
             .map_err(|error| error.to_string())?;
@@ -336,11 +286,7 @@ fn run_store(
 }
 
 fn search_options(mode: core::RetrievalMode) -> core::SearchOptions {
-    core::SearchOptions {
-        limit: 10,
-        mode,
-        ..core::SearchOptions::default()
-    }
+    core::SearchOptions { limit: 10, mode, ..core::SearchOptions::default() }
 }
 
 fn generate_records(paths: &core::StorePaths, count: usize) -> Result<(), String> {
@@ -362,9 +308,7 @@ fn generate_records(paths: &core::StorePaths, count: usize) -> Result<(), String
         let id: core::RecordId = format!("00000000-0000-7000-8000-{index:012x}")
             .parse()
             .map_err(|error: String| error)?;
-        let timestamp: core::Timestamp = "2026-01-01T00:00:00Z"
-            .parse()
-            .map_err(|error: String| error)?;
+        let timestamp: core::Timestamp = "2026-01-01T00:00:00Z".parse().map_err(|error: String| error)?;
         let record = core::Record {
             id,
             title: format!("{topic} operational memory {index}"),
@@ -402,8 +346,7 @@ fn generate_records(paths: &core::StorePaths, count: usize) -> Result<(), String
 fn update_record(paths: &core::StorePaths, index: usize) -> Result<(), String> {
     let id = format!("00000000-0000-7000-8000-{index:012x}");
     let path = paths.records.join(format!("{id}.md"));
-    let markdown =
-        fs::read_to_string(&path).map_err(|error| format!("read benchmark record: {error}"))?;
+    let markdown = fs::read_to_string(&path).map_err(|error| format!("read benchmark record: {error}"))?;
     let mut record = core::parse_markdown(&path, &markdown).map_err(|error| error.to_string())?;
     record.body.push_str("\n\nIncremental benchmark edit.");
     record.updated_at = core::Timestamp::now_utc();
@@ -479,11 +422,9 @@ fn projection_sizes(paths: &core::StorePaths) -> Result<(u64, u64), String> {
         .sum();
     let connection = Connection::open(&index_path).map_err(|error| error.to_string())?;
     let table: String = connection
-        .query_row(
-            "SELECT table_name FROM vector_indexes WHERE active = 1",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT table_name FROM vector_indexes WHERE active = 1", [], |row| {
+            row.get(0)
+        })
         .map_err(|error| error.to_string())?;
     let pattern = format!("{table}_%");
     let vector_size: u64 = connection

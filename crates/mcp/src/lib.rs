@@ -180,45 +180,32 @@ mod tests {
         core::RecordRepository::new(paths.clone())
             .approve(id)
             .expect("approve fixture");
-        let embedder = core::DeterministicEmbedder::new("mcp-semantic-v1", 24)
-            .expect("deterministic embedder");
+        let embedder = core::DeterministicEmbedder::new("mcp-semantic-v1", 24).expect("deterministic embedder");
         let arguments =
-            serde_json::from_value(serde_json::json!({"query":"pulsar MCP","budget":128}))
-                .expect("tool arguments");
+            serde_json::from_value(serde_json::json!({"query":"pulsar MCP","budget":128})).expect("tool arguments");
 
-        let server =
-            McpServer::with_embedder(paths.clone(), McpWritePolicy::ReadOnly, Arc::new(embedder));
-        let result = server
-            .call_sync("context", arguments, false)
-            .expect("recall result");
-        let receipt = &result
-            .structured_content
-            .as_ref()
-            .expect("structured result")["result"]["receipt"];
+        let server = McpServer::with_embedder(paths.clone(), McpWritePolicy::ReadOnly, Arc::new(embedder));
+        let result = server.call_sync("context", arguments, false).expect("recall result");
+        let receipt = &result.structured_content.as_ref().expect("structured result")["result"]["receipt"];
         assert_eq!(receipt["retrieval_mode"], "hybrid");
         assert_eq!(receipt["embedding_model"], "stormbuffer/deterministic");
         assert_eq!(receipt["embedding_version"], "mcp-semantic-v1");
         assert!(receipt["semantic_fallback"].is_null());
-        let blocks = result
-            .structured_content
-            .as_ref()
-            .expect("structured result")["result"]["blocks"]
+        let blocks = result.structured_content.as_ref().expect("structured result")["result"]["blocks"]
             .as_array()
             .expect("context blocks");
         assert_eq!(blocks[0]["record_id"], id.to_string());
-        let reasons = blocks[0]["ranking_reasons"]
-            .as_array()
-            .expect("ranking evidence");
-        assert!(reasons.iter().any(|reason| {
-            reason
-                .as_str()
-                .is_some_and(|reason| reason.starts_with("lexical:"))
-        }));
-        assert!(reasons.iter().any(|reason| {
-            reason
-                .as_str()
-                .is_some_and(|reason| reason.starts_with("vector:"))
-        }));
+        let reasons = blocks[0]["ranking_reasons"].as_array().expect("ranking evidence");
+        assert!(
+            reasons
+                .iter()
+                .any(|reason| { reason.as_str().is_some_and(|reason| reason.starts_with("lexical:")) })
+        );
+        assert!(
+            reasons
+                .iter()
+                .any(|reason| { reason.as_str().is_some_and(|reason| reason.starts_with("vector:")) })
+        );
 
         fs::remove_dir_all(root).expect("remove temporary store");
     }

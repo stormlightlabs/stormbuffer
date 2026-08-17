@@ -3,11 +3,10 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use stormbuffer_core::{
-    ExistingRecordPolicy, GcOptions, IdCollisionPolicy, ImportOptions, MAX_EXPORT_ARCHIVE_BYTES,
-    RecordRepository, ScopeCollisionPolicy, StoreInitMode, StorePaths, StoreScope, decode_export,
-    encode_export, export_store, gc_store, import_store, initialize_store, parse_markdown,
-    preview_import, preview_store_destruction, render_markdown, verify_export,
-    write_export_archive,
+    ExistingRecordPolicy, GcOptions, IdCollisionPolicy, ImportOptions, MAX_EXPORT_ARCHIVE_BYTES, RecordRepository,
+    ScopeCollisionPolicy, StoreInitMode, StorePaths, StoreScope, decode_export, encode_export, export_store, gc_store,
+    import_store, initialize_store, parse_markdown, preview_import, preview_store_destruction, render_markdown,
+    verify_export, write_export_archive,
 };
 
 fn temporary_root(name: &str) -> PathBuf {
@@ -21,12 +20,7 @@ fn temporary_root(name: &str) -> PathBuf {
 }
 
 fn paths(root: &Path, scope: StoreScope) -> StorePaths {
-    StorePaths {
-        scope,
-        root: root.join(".sbuf"),
-        records: root.join(".sbuf/records"),
-        cache: root.join("cache"),
-    }
+    StorePaths { scope, root: root.join(".sbuf"), records: root.join(".sbuf/records"), cache: root.join("cache") }
 }
 
 fn fixture() -> stormbuffer_core::Record {
@@ -49,8 +43,7 @@ fn export_import_preserves_canonical_markdown_and_provenance() {
     let bundle = export_store(&source_paths).expect("export store");
     let encoded = encode_export(&bundle).expect("encode export");
     let decoded = decode_export(&encoded).expect("decode export");
-    let report =
-        import_store(&target_paths, &decoded, &ImportOptions::default()).expect("import store");
+    let report = import_store(&target_paths, &decoded, &ImportOptions::default()).expect("import store");
     assert_eq!(report.imported, 1);
 
     let imported = RecordRepository::new(target_paths.clone())
@@ -66,10 +59,7 @@ fn export_import_preserves_canonical_markdown_and_provenance() {
     let skipped = import_store(
         &target_paths,
         &decoded,
-        &ImportOptions {
-            existing_record: Some(ExistingRecordPolicy::Skip),
-            ..ImportOptions::default()
-        },
+        &ImportOptions { existing_record: Some(ExistingRecordPolicy::Skip), ..ImportOptions::default() },
     )
     .expect("skip existing record");
     assert_eq!(skipped.skipped, 1);
@@ -119,10 +109,7 @@ fn overwrite_equivalent_record_preserves_the_destination_identity() {
     let report = import_store(
         &target_paths,
         &export_store(&source_paths).expect("export source"),
-        &ImportOptions {
-            existing_record: Some(ExistingRecordPolicy::Overwrite),
-            ..ImportOptions::default()
-        },
+        &ImportOptions { existing_record: Some(ExistingRecordPolicy::Overwrite), ..ImportOptions::default() },
     )
     .expect("overwrite equivalent record");
 
@@ -133,12 +120,7 @@ fn overwrite_equivalent_record_preserves_the_destination_identity() {
         .expect("list target records");
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].record().id, destination.record().id);
-    assert!(
-        !target_paths
-            .records
-            .join(format!("{}.md", source.record().id))
-            .exists()
-    );
+    assert!(!target_paths.records.join(format!("{}.md", source.record().id)).exists());
 
     fs::remove_dir_all(root).expect("remove temporary root");
 }
@@ -166,10 +148,7 @@ fn import_requires_scope_and_id_policies_and_gc_never_touches_records() {
     let skipped = import_store(
         &source_paths,
         &bundle,
-        &ImportOptions {
-            id_collision: Some(IdCollisionPolicy::Skip),
-            ..ImportOptions::default()
-        },
+        &ImportOptions { id_collision: Some(IdCollisionPolicy::Skip), ..ImportOptions::default() },
     )
     .expect("skip id collision");
     assert_eq!(skipped.skipped, 1);
@@ -185,10 +164,7 @@ fn import_requires_scope_and_id_policies_and_gc_never_touches_records() {
     let remapped = import_store(
         &project_paths,
         &export_store(&source_paths).expect("export"),
-        &ImportOptions {
-            scope_collision: Some(ScopeCollisionPolicy::Remap),
-            ..ImportOptions::default()
-        },
+        &ImportOptions { scope_collision: Some(ScopeCollisionPolicy::Remap), ..ImportOptions::default() },
     )
     .expect("remap project scope");
     assert_eq!(remapped.imported, 1);
@@ -234,20 +210,12 @@ fn verification_and_import_preview_are_read_only() {
     let mut nested = bundle.clone();
     nested.records[0].path = format!("records/archive/{}.md", fixture().id);
     verify_export(&nested).expect("safe nested canonical path remains valid");
-    let before = fs::read_dir(&target_paths.records)
-        .expect("read empty records")
-        .count();
-    let preview =
-        preview_import(&target_paths, &bundle, &ImportOptions::default()).expect("preview import");
+    let before = fs::read_dir(&target_paths.records).expect("read empty records").count();
+    let preview = preview_import(&target_paths, &bundle, &ImportOptions::default()).expect("preview import");
     assert_eq!(preview.report.imported, 1);
+    assert_eq!(preview.records[0].destination, format!("records/{}.md", fixture().id));
     assert_eq!(
-        preview.records[0].destination,
-        format!("records/{}.md", fixture().id)
-    );
-    assert_eq!(
-        fs::read_dir(&target_paths.records)
-            .expect("read records")
-            .count(),
+        fs::read_dir(&target_paths.records).expect("read records").count(),
         before
     );
 
@@ -257,10 +225,7 @@ fn verification_and_import_preview_are_read_only() {
     let collision_preview = preview_import(
         &target_paths,
         &bundle,
-        &ImportOptions {
-            existing_record: Some(ExistingRecordPolicy::Skip),
-            ..ImportOptions::default()
-        },
+        &ImportOptions { existing_record: Some(ExistingRecordPolicy::Skip), ..ImportOptions::default() },
     )
     .expect("preview collision");
     assert_eq!(collision_preview.report.skipped, 1);
@@ -288,8 +253,7 @@ fn whole_store_destruction_requires_the_exact_stable_identity() {
     RecordRepository::new(store_paths.clone())
         .add(fixture_for_scope(&store_paths))
         .expect("add fixture");
-    fs::write(store_paths.root.join("unrecognized.data"), "also removed")
-        .expect("write unrecognized store data");
+    fs::write(store_paths.root.join("unrecognized.data"), "also removed").expect("write unrecognized store data");
     let preview = preview_store_destruction(&store_paths).expect("preview destruction");
     assert!(preview.store_root_bytes > preview.canonical_bytes);
     let safety_export = root.join("before-destroy.json");
@@ -311,14 +275,9 @@ fn whole_store_destruction_requires_the_exact_stable_identity() {
     )
     .expect("destroy selected store");
     assert!(!store_paths.root.exists());
-    let archive = decode_export(&fs::read_to_string(&safety_export).expect("read safety export"))
-        .expect("decode safety export");
-    assert_eq!(
-        verify_export(&archive)
-            .expect("verify safety export")
-            .records,
-        1
-    );
+    let archive =
+        decode_export(&fs::read_to_string(&safety_export).expect("read safety export")).expect("decode safety export");
+    assert_eq!(verify_export(&archive).expect("verify safety export").records, 1);
     fs::remove_dir_all(root).expect("remove temporary root");
 }
 
@@ -331,11 +290,9 @@ fn global_store_destruction_removes_its_projection_but_preserves_shared_cache_da
         .add(fixture_for_scope(&store_paths))
         .expect("add fixture");
     fs::create_dir_all(&store_paths.cache).expect("create disposable cache");
-    fs::write(store_paths.cache.join("global.sqlite3"), "disposable")
-        .expect("write projection fixture");
+    fs::write(store_paths.cache.join("global.sqlite3"), "disposable").expect("write projection fixture");
     fs::create_dir_all(store_paths.cache.join("models")).expect("create model cache");
-    fs::write(store_paths.cache.join("models/shared"), "shared")
-        .expect("write shared cache fixture");
+    fs::write(store_paths.cache.join("models/shared"), "shared").expect("write shared cache fixture");
 
     stormbuffer_core::destroy_store(
         &store_paths,

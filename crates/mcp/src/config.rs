@@ -30,9 +30,6 @@ impl McpWritePolicy {
 
 impl Default for McpConfig {
     fn default() -> Self {
-        Self {
-            scope: core::StoreScope::Global,
-            write_policy: McpWritePolicy::ReadOnly,
-        }
+        Self { scope: core::StoreScope::Global, write_policy: McpWritePolicy::ReadOnly }
     }
 }

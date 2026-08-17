@@ -18,10 +18,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let Some(workspace_root) = find_workspace_root(manifest_directory)? else {
         return Ok(());
     };
-    println!(
-        "cargo:rerun-if-changed={}",
-        workspace_root.join("Cargo.toml").display()
-    );
+    println!("cargo:rerun-if-changed={}", workspace_root.join("Cargo.toml").display());
 
     let assets_directory = workspace_root.join("assets");
     let man_directory = assets_directory.join("man");
@@ -36,13 +33,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn find_workspace_root(
-    manifest_directory: &Path,
-) -> Result<Option<std::path::PathBuf>, Box<dyn Error>> {
+fn find_workspace_root(manifest_directory: &Path) -> Result<Option<std::path::PathBuf>, Box<dyn Error>> {
     for ancestor in manifest_directory.ancestors() {
         let cargo_manifest = ancestor.join("Cargo.toml");
-        if cargo_manifest.is_file() && fs::read_to_string(&cargo_manifest)?.contains("[workspace]")
-        {
+        if cargo_manifest.is_file() && fs::read_to_string(&cargo_manifest)?.contains("[workspace]") {
             return Ok(Some(ancestor.to_path_buf()));
         }
     }
@@ -50,14 +44,11 @@ fn find_workspace_root(
 }
 
 fn write_directory(
-    directory: &Path,
-    files: &std::collections::BTreeMap<String, Vec<u8>>,
+    directory: &Path, files: &std::collections::BTreeMap<String, Vec<u8>>,
 ) -> Result<(), Box<dyn Error>> {
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
-        if entry.file_type()?.is_file()
-            && !files.contains_key(&entry.file_name().to_string_lossy().into_owned())
-        {
+        if entry.file_type()?.is_file() && !files.contains_key(&entry.file_name().to_string_lossy().into_owned()) {
             fs::remove_file(entry.path())?;
         }
     }

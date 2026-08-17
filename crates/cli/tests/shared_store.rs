@@ -47,13 +47,9 @@ fn committed_shared_store_rebuilds_from_tracked_files() {
     let committed_store = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.sbuf");
     fs::create_dir_all(project.join(".sbuf/records")).expect("create store records");
     for name in ["store.toml", ".gitignore"] {
-        fs::copy(committed_store.join(name), project.join(".sbuf").join(name))
-            .expect("copy committed store metadata");
+        fs::copy(committed_store.join(name), project.join(".sbuf").join(name)).expect("copy committed store metadata");
     }
-    copy_directory(
-        &committed_store.join("records"),
-        &project.join(".sbuf/records"),
-    );
+    copy_directory(&committed_store.join("records"), &project.join(".sbuf/records"));
 
     let ignore = fs::read_to_string(project.join(".sbuf/.gitignore")).expect("read ignore rules");
     assert_eq!(
@@ -90,37 +86,24 @@ fn committed_shared_store_rebuilds_from_tracked_files() {
             .expect("run shared-store command")
     };
     let sync = command(&["--project", "sync"]);
-    assert!(
-        sync.status.success(),
-        "{}",
-        String::from_utf8_lossy(&sync.stderr)
-    );
+    assert!(sync.status.success(), "{}", String::from_utf8_lossy(&sync.stderr));
     let query = "canonical records survive projection failures";
     let search = command(&["--project", "search", query, "--json"]);
-    assert!(
-        search.status.success(),
-        "{}",
-        String::from_utf8_lossy(&search.stderr)
-    );
+    assert!(search.status.success(), "{}", String::from_utf8_lossy(&search.stderr));
     let results: serde_json::Value = serde_json::from_slice(&search.stdout).expect("parse search");
-    assert!(results.as_array().is_some_and(|results| {
-        results
-            .iter()
-            .any(|result| result["record_id"] == CANONICAL_RECORD_ID)
-    }));
-    let context = command(&["--project", "context", query, "--budget", "80"]);
     assert!(
-        context.status.success(),
-        "{}",
-        String::from_utf8_lossy(&context.stderr)
+        results
+            .as_array()
+            .is_some_and(|results| { results.iter().any(|result| result["record_id"] == CANONICAL_RECORD_ID) })
     );
-    let context: serde_json::Value =
-        serde_json::from_slice(&context.stdout).expect("parse context");
-    assert!(context["blocks"].as_array().is_some_and(|blocks| {
-        blocks
-            .iter()
-            .any(|block| block["record_id"] == CANONICAL_RECORD_ID)
-    }));
+    let context = command(&["--project", "context", query, "--budget", "80"]);
+    assert!(context.status.success(), "{}", String::from_utf8_lossy(&context.stderr));
+    let context: serde_json::Value = serde_json::from_slice(&context.stdout).expect("parse context");
+    assert!(
+        context["blocks"]
+            .as_array()
+            .is_some_and(|blocks| { blocks.iter().any(|block| block["record_id"] == CANONICAL_RECORD_ID) })
+    );
     assert!(project.join(".sbuf/index.sqlite3").is_file());
 
     fs::remove_dir_all(root).expect("remove temporary root");

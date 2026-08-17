@@ -8,18 +8,14 @@ use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 
 use crate::vector::{
-    SqliteVectorIndex, VectorDocument, VectorFilter, VectorIndex, VectorMetadata,
-    register_sqlite_vec,
+    SqliteVectorIndex, VectorDocument, VectorFilter, VectorIndex, VectorMetadata, register_sqlite_vec,
 };
 use crate::{Embedder, Error, Record, StorePaths};
 
-use super::canonical::{
-    canonical_fingerprint, collect_markdown_paths, fingerprint_value, read_canonical,
-};
+use super::canonical::{canonical_fingerprint, collect_markdown_paths, fingerprint_value, read_canonical};
 use super::chunking::{chunk_record, retrieval_text, split_embedding_text};
 use super::retrieval::{
-    SearchHit, current_scope, fts_query, query_terms, scope_rank, sort_hits, text_has_prefix,
-    vector_hit_matches_filter,
+    SearchHit, current_scope, fts_query, query_terms, scope_rank, sort_hits, text_has_prefix, vector_hit_matches_filter,
 };
 use super::schema::{delete_projection_tx, migrate};
 use super::{SearchOptions, SourceReceipt, SyncInvalidFile, SyncReport, content_hash, db_error};
@@ -36,8 +32,7 @@ impl ProjectionLock {
                 io::Error::other("index path has no parent"),
             )
         })?;
-        fs::create_dir_all(parent)
-            .map_err(|source| Error::io("create the index directory", source))?;
+        fs::create_dir_all(parent).map_err(|source| Error::io("create the index directory", source))?;
         let file = OpenOptions::new()
             .create(true)
             .truncate(false)
@@ -72,9 +67,7 @@ pub(super) struct Index {
 
 impl Index {
     pub(super) fn open_at(path: &Path) -> crate::Result<Self> {
-        Self::try_open_at(path).map_err(|source| Error::IndexUnavailable {
-            source: Box::new(source),
-        })
+        Self::try_open_at(path).map_err(|source| Error::IndexUnavailable { source: Box::new(source) })
     }
 
     pub(super) fn try_open_at(path: &Path) -> crate::Result<Self> {
@@ -85,10 +78,8 @@ impl Index {
                 io::Error::other("index path has no parent"),
             )
         })?;
-        fs::create_dir_all(parent)
-            .map_err(|source| Error::io("create the index directory", source))?;
-        let connection =
-            Connection::open(path).map_err(|source| db_error("open the index", source))?;
+        fs::create_dir_all(parent).map_err(|source| Error::io("create the index directory", source))?;
+        let connection = Connection::open(path).map_err(|source| db_error("open the index", source))?;
         connection
             .execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;")
             .map_err(|source| db_error("configure the index", source))?;
@@ -103,9 +94,7 @@ impl Index {
     }
 
     pub(super) fn rebuild_vectors(
-        &mut self,
-        paths: &StorePaths,
-        embedder: &dyn Embedder,
+        &mut self, paths: &StorePaths, embedder: &dyn Embedder,
     ) -> crate::Result<VectorMetadata> {
         let canonical_fingerprint = canonical_fingerprint(paths)?;
         let projection_fingerprint = self.projection_fingerprint()?;
@@ -144,10 +133,7 @@ impl Index {
         let mut documents = Vec::new();
         for document in lexical_documents {
             for text in split_embedding_text(&document.text, embedder)? {
-                documents.push(VectorDocument {
-                    text,
-                    ..document.clone()
-                });
+                documents.push(VectorDocument { text, ..document.clone() });
             }
         }
         let metadata = SqliteVectorIndex::rebuild(
@@ -231,11 +217,7 @@ impl Index {
     }
 
     pub(super) fn vector_hits(
-        &self,
-        paths: &StorePaths,
-        query: &str,
-        options: &SearchOptions,
-        embedder: &dyn Embedder,
+        &self, paths: &StorePaths, query: &str, options: &SearchOptions, embedder: &dyn Embedder,
     ) -> crate::Result<Vec<SearchHit>> {
         let Some(vector) = SqliteVectorIndex::active(&self.connection)? else {
             return Ok(Vec::new());
@@ -253,11 +235,10 @@ impl Index {
                 "active semantic index is stale for the canonical or lexical projection; run `sbuf sync` followed by `sbuf reindex`",
             ));
         }
-        let scopes = options.allowed_scopes.clone().unwrap_or_else(|| {
-            SearchOptions::for_store(paths)
-                .allowed_scopes
-                .unwrap_or_default()
-        });
+        let scopes = options
+            .allowed_scopes
+            .clone()
+            .unwrap_or_else(|| SearchOptions::for_store(paths).allowed_scopes.unwrap_or_default());
         let filter = VectorFilter {
             scopes: Some(scopes),
             kinds: options.allowed_kinds.clone(),
@@ -326,17 +307,13 @@ impl Index {
                 vector_distance: Some(vector_hit.distance),
             });
         }
-        let current = options
-            .current_scope
-            .clone()
-            .or_else(|| current_scope(paths));
+        let current = options.current_scope.clone().or_else(|| current_scope(paths));
         hits.sort_by(|left, right| {
             left.score
                 .total_cmp(&right.score)
                 .reverse()
                 .then_with(|| {
-                    scope_rank(&right.scope, current.as_deref())
-                        .cmp(&scope_rank(&left.scope, current.as_deref()))
+                    scope_rank(&right.scope, current.as_deref()).cmp(&scope_rank(&left.scope, current.as_deref()))
                 })
                 .then_with(|| left.record_id.cmp(&right.record_id))
                 .then_with(|| left.chunk_id.cmp(&right.chunk_id))
@@ -362,10 +339,9 @@ impl Index {
             let (record, markdown) = match read_canonical(&path) {
                 Ok(value) => value,
                 Err(error) => {
-                    report.invalid_files.push(SyncInvalidFile {
-                        path: path_string.clone(),
-                        error: error.to_string(),
-                    });
+                    report
+                        .invalid_files
+                        .push(SyncInvalidFile { path: path_string.clone(), error: error.to_string() });
                     if self.delete_projection_by_path(&path_string)? {
                         report.removed += 1;
                     }
@@ -393,9 +369,10 @@ impl Index {
                 continue;
             }
             let hash = content_hash(&markdown);
-            if by_path.get(&path_string).is_some_and(|entry| {
-                entry.content_hash == hash && entry.record_id == record.id.to_string()
-            }) {
+            if by_path
+                .get(&path_string)
+                .is_some_and(|entry| entry.content_hash == hash && entry.record_id == record.id.to_string())
+            {
                 report.skipped += 1;
                 continue;
             }
@@ -417,12 +394,7 @@ impl Index {
         Ok(report)
     }
 
-    pub(super) fn project_record(
-        &mut self,
-        record: &Record,
-        path: &str,
-        hash: &str,
-    ) -> crate::Result<()> {
+    pub(super) fn project_record(&mut self, record: &Record, path: &str, hash: &str) -> crate::Result<()> {
         let chunks = chunk_record(record);
         let transaction = self
             .connection
@@ -442,13 +414,10 @@ impl Index {
                 |row| row.get(0),
             )
             .map_err(|source| db_error("read the record scope", source))?;
-        let aliases =
-            serde_json::to_string(&record.aliases).map_err(|source| Error::InvalidInput {
-                message: source.to_string(),
-            })?;
-        let tags = serde_json::to_string(&record.tags).map_err(|source| Error::InvalidInput {
-            message: source.to_string(),
-        })?;
+        let aliases = serde_json::to_string(&record.aliases)
+            .map_err(|source| Error::InvalidInput { message: source.to_string() })?;
+        let tags = serde_json::to_string(&record.tags)
+            .map_err(|source| Error::InvalidInput { message: source.to_string() })?;
         transaction
             .execute(
                 "INSERT INTO records(record_id, scope_id, path, title, kind, status, access, created_at, updated_at, aliases_json, tags_json, content_hash) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
@@ -523,11 +492,9 @@ impl Index {
     pub(super) fn delete_projection_by_path(&mut self, path: &str) -> crate::Result<bool> {
         let record_id: Option<String> = self
             .connection
-            .query_row(
-                "SELECT record_id FROM records WHERE path = ?1",
-                params![path],
-                |row| row.get(0),
-            )
+            .query_row("SELECT record_id FROM records WHERE path = ?1", params![path], |row| {
+                row.get(0)
+            })
             .optional()
             .map_err(|source| db_error("find a stale projection", source))?;
         let Some(record_id) = record_id else {
@@ -551,11 +518,7 @@ impl Index {
             .map_err(|source| db_error("read projection metadata", source))?;
         let records = statement
             .query_map([], |row| {
-                Ok(ProjectedRecord {
-                    record_id: row.get(0)?,
-                    path: row.get(1)?,
-                    content_hash: row.get(2)?,
-                })
+                Ok(ProjectedRecord { record_id: row.get(0)?, path: row.get(1)?, content_hash: row.get(2)? })
             })
             .map_err(|source| db_error("read projection metadata", source))?
             .collect::<rusqlite::Result<Vec<_>>>()
@@ -564,20 +527,16 @@ impl Index {
     }
 
     pub(super) fn search_hits(
-        &self,
-        paths: &StorePaths,
-        query: &str,
-        options: &SearchOptions,
+        &self, paths: &StorePaths, query: &str, options: &SearchOptions,
     ) -> crate::Result<Vec<SearchHit>> {
         let terms = query_terms(query);
         if terms.is_empty() {
             return Ok(Vec::new());
         }
-        let scopes = options.allowed_scopes.clone().unwrap_or_else(|| {
-            SearchOptions::for_store(paths)
-                .allowed_scopes
-                .unwrap_or_default()
-        });
+        let scopes = options
+            .allowed_scopes
+            .clone()
+            .unwrap_or_else(|| SearchOptions::for_store(paths).allowed_scopes.unwrap_or_default());
         if scopes.is_empty() {
             return Ok(Vec::new());
         }
@@ -623,13 +582,14 @@ impl Index {
             .map(|offset| format!("?{}", next_parameter + offset))
             .collect::<Vec<_>>()
             .join(", ");
-        sql.push_str(&format!(" AND s.name IN ({placeholders}) ORDER BY bm25(chunks_fts), c.record_id, c.ordinal LIMIT ?{}", next_parameter + scopes.len()));
+        sql.push_str(&format!(
+            " AND s.name IN ({placeholders}) ORDER BY bm25(chunks_fts), c.record_id, c.ordinal LIMIT ?{}",
+            next_parameter + scopes.len()
+        ));
         for scope in scopes {
             values.push(Value::Text(scope));
         }
-        values.push(Value::Integer(
-            (options.bounded_limit() * 10).min(1000) as i64
-        ));
+        values.push(Value::Integer((options.bounded_limit() * 10).min(1000) as i64));
 
         let mut statement = self
             .connection
@@ -638,8 +598,7 @@ impl Index {
         let rows = statement
             .query_map(params_from_iter(values.iter()), |row| {
                 let aliases_json: String = row.get(9)?;
-                let aliases =
-                    serde_json::from_str::<Vec<String>>(&aliases_json).unwrap_or_default();
+                let aliases = serde_json::from_str::<Vec<String>>(&aliases_json).unwrap_or_default();
                 let rank: f64 = row.get(10)?;
                 Ok((
                     row.get::<_, String>(0)?,
@@ -660,19 +619,8 @@ impl Index {
         let query_lower = query.trim().to_lowercase();
         let mut hits = Vec::new();
         for row in rows {
-            let (
-                chunk_id,
-                text,
-                record_id,
-                title,
-                kind,
-                scope,
-                status,
-                access,
-                path,
-                aliases,
-                rank,
-            ) = row.map_err(|source| db_error("read lexical search result", source))?;
+            let (chunk_id, text, record_id, title, kind, scope, status, access, path, aliases, rank) =
+                row.map_err(|source| db_error("read lexical search result", source))?;
             let sources = self.sources_for(&record_id)?;
             let filename = Path::new(&path)
                 .file_name()
@@ -682,16 +630,11 @@ impl Index {
                 "exact_title"
             } else if filename.to_lowercase() == query_lower {
                 "exact_filename"
-            } else if aliases
-                .iter()
-                .any(|alias| alias.to_lowercase() == query_lower)
-            {
+            } else if aliases.iter().any(|alias| alias.to_lowercase() == query_lower) {
                 "exact_alias"
             } else if query_lower.contains(' ')
                 && (text.to_lowercase().contains(&query_lower)
-                    || aliases
-                        .iter()
-                        .any(|alias| alias.to_lowercase().contains(&query_lower)))
+                    || aliases.iter().any(|alias| alias.to_lowercase().contains(&query_lower)))
             {
                 "phrase"
             } else if terms.iter().any(|term| text_has_prefix(&text, term)) {
@@ -724,10 +667,7 @@ impl Index {
                 vector_distance: None,
             });
         }
-        let current = options
-            .current_scope
-            .clone()
-            .or_else(|| current_scope(paths));
+        let current = options.current_scope.clone().or_else(|| current_scope(paths));
         sort_hits(&mut hits, current.as_deref());
         hits.truncate(options.bounded_limit());
         Ok(hits)

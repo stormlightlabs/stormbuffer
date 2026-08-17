@@ -10,9 +10,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use fs2::FileExt;
 use serde::Serialize;
 use stormbuffer_core::{
-    DestructionAcknowledgement, Error, ProposalActor, ProposalOutcome, RecordId, RecordRepository,
-    RecordStatus, StoreInitMode, StorePaths, StoreScope, Timestamp, initialize_store,
-    parse_markdown, render_markdown,
+    DestructionAcknowledgement, Error, ProposalActor, ProposalOutcome, RecordId, RecordRepository, RecordStatus,
+    StoreInitMode, StorePaths, StoreScope, Timestamp, initialize_store, parse_markdown, render_markdown,
 };
 
 struct TempStore {
@@ -112,23 +111,16 @@ fn repository_rejects_records_outside_the_selected_store_scope() {
     foreign.scope = "project:01989af2-4305-7b19-88b1-e8ae4ea9a099"
         .parse()
         .expect("foreign scope");
-    fs::write(
-        stored.path(),
-        render_markdown(&foreign).expect("render foreign record"),
-    )
-    .expect("move record outside the store scope");
+    fs::write(stored.path(), render_markdown(&foreign).expect("render foreign record"))
+        .expect("move record outside the store scope");
 
     assert!(matches!(
         repository.find(foreign.id),
-        Err(Error::Repository {
-            source: stormbuffer_core::RepositoryError::ScopeDenied { .. }
-        })
+        Err(Error::Repository { source: stormbuffer_core::RepositoryError::ScopeDenied { .. } })
     ));
     assert!(matches!(
         repository.archive(foreign.id),
-        Err(Error::Repository {
-            source: stormbuffer_core::RepositoryError::ScopeDenied { .. }
-        })
+        Err(Error::Repository { source: stormbuffer_core::RepositoryError::ScopeDenied { .. } })
     ));
 }
 
@@ -144,9 +136,7 @@ fn replacement_cannot_move_a_record_outside_the_selected_store_scope() {
 
     assert!(matches!(
         repository.replace_if_unchanged(&stored, replacement),
-        Err(Error::Repository {
-            source: stormbuffer_core::RepositoryError::ScopeDenied { .. }
-        })
+        Err(Error::Repository { source: stormbuffer_core::RepositoryError::ScopeDenied { .. } })
     ));
 }
 
@@ -165,20 +155,12 @@ fn competing_mutation_reports_busy_without_leaking_the_store_path() {
         .expect("open mutation lock");
     lock_file.try_lock_exclusive().expect("hold mutation lock");
 
-    let error = repository
-        .add(fixture_record())
-        .expect_err("lock must contend");
+    let error = repository.add(fixture_record()).expect_err("lock must contend");
     assert!(matches!(
         error,
-        Error::Repository {
-            source: stormbuffer_core::RepositoryError::MutationBusy { .. }
-        }
+        Error::Repository { source: stormbuffer_core::RepositoryError::MutationBusy { .. } }
     ));
-    assert!(
-        !error
-            .to_string()
-            .contains(store.root.to_string_lossy().as_ref())
-    );
+    assert!(!error.to_string().contains(store.root.to_string_lossy().as_ref()));
     FileExt::unlock(&lock_file).expect("release mutation lock");
 }
 
@@ -219,20 +201,21 @@ fn pending_supersession_journal_recovers_after_interruption() {
         new_after,
     };
     let journal_path = store.root.join("locks/supersede.toml");
-    fs::write(
-        &journal_path,
-        toml::to_string(&journal).expect("render test journal"),
-    )
-    .expect("write interrupted journal");
+    fs::write(&journal_path, toml::to_string(&journal).expect("render test journal"))
+        .expect("write interrupted journal");
 
     let records = repository.list(true).expect("recover supersession");
     assert!(!journal_path.exists());
-    assert!(records.iter().any(|record| {
-        record.record().id == old.record().id && record.record().status == RecordStatus::Superseded
-    }));
-    assert!(records.iter().any(|record| {
-        record.record().id == replacement.id && record.record().status == RecordStatus::Active
-    }));
+    assert!(
+        records.iter().any(|record| {
+            record.record().id == old.record().id && record.record().status == RecordStatus::Superseded
+        })
+    );
+    assert!(
+        records
+            .iter()
+            .any(|record| { record.record().id == replacement.id && record.record().status == RecordStatus::Active })
+    );
 }
 
 #[test]
@@ -255,9 +238,7 @@ fn concurrent_replacement_is_rejected_without_overwriting_new_bytes() {
         .expect_err("stale editor must not overwrite newer bytes");
     assert!(matches!(
         error,
-        Error::Repository {
-            source: stormbuffer_core::RepositoryError::ConcurrentModification { .. }
-        }
+        Error::Repository { source: stormbuffer_core::RepositoryError::ConcurrentModification { .. } }
     ));
     assert!(
         repository
@@ -283,18 +264,14 @@ fn superseded_records_cannot_be_edited() {
         .supersede(old.record().id, replacement)
         .expect("supersede fixture");
 
-    let superseded = repository
-        .find(old.record().id)
-        .expect("find superseded record");
+    let superseded = repository.find(old.record().id).expect("find superseded record");
     let edited = superseded.record().clone();
     let error = repository
         .replace_if_unchanged(&superseded, edited)
         .expect_err("superseded history must be immutable");
     assert!(matches!(
         error,
-        Error::Repository {
-            source: stormbuffer_core::RepositoryError::MustBeActive { .. }
-        }
+        Error::Repository { source: stormbuffer_core::RepositoryError::MustBeActive { .. } }
     ));
 }
 
@@ -362,24 +339,18 @@ fn update_proposals_preserve_the_active_record_until_approval() {
     replacement.updated_at = replacement.created_at;
     replacement.body = "A sourced replacement body".to_owned();
 
-    let proposed = repository
-        .propose_update(old_id, replacement)
-        .expect("propose update");
+    let proposed = repository.propose_update(old_id, replacement).expect("propose update");
     assert_eq!(proposed.outcome, ProposalOutcome::RequiresApproval);
     let replacement_id = proposed.record_id.parse().expect("replacement id");
     assert_eq!(
         repository.find(old_id).expect("find old").record().status,
         RecordStatus::Active
     );
-    let candidate = repository
-        .find(replacement_id)
-        .expect("find replacement candidate");
+    let candidate = repository.find(replacement_id).expect("find replacement candidate");
     assert_eq!(candidate.record().status, RecordStatus::Candidate);
     assert_eq!(candidate.record().supersedes, vec![old_id]);
 
-    let approved = repository
-        .approve(replacement_id)
-        .expect("approve replacement");
+    let approved = repository.approve(replacement_id).expect("approve replacement");
     assert_eq!(approved.outcome, ProposalOutcome::Accepted);
     assert_eq!(
         repository.find(old_id).expect("find old").record().status,
@@ -434,16 +405,10 @@ fn approval_revalidates_user_edited_candidate_provenance() {
     )
     .expect("edit candidate markdown");
 
-    let error = repository
-        .approve(id)
-        .expect_err("reject invalid provenance");
+    let error = repository.approve(id).expect_err("reject invalid provenance");
     assert!(error.to_string().contains("inference"));
     assert_eq!(
-        repository
-            .find(id)
-            .expect("candidate remains")
-            .record()
-            .status,
+        repository.find(id).expect("candidate remains").record().status,
         RecordStatus::Candidate
     );
 }
@@ -476,10 +441,7 @@ fn missing_provenance_is_invalid_and_same_title_human_proposals_require_review()
         RecordStatus::Candidate
     );
     assert_eq!(
-        repository
-            .approve(id)
-            .expect("approve after review")
-            .outcome,
+        repository.approve(id).expect("approve after review").outcome,
         ProposalOutcome::Accepted
     );
 }

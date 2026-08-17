@@ -30,11 +30,9 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
         } else {
             report.warnings += 1;
         }
-        report.issues.push(DoctorIssue {
-            severity: severity.to_owned(),
-            message,
-            repair: repair.to_owned(),
-        });
+        report
+            .issues
+            .push(DoctorIssue { severity: severity.to_owned(), message, repair: repair.to_owned() });
     };
 
     if !paths.root.join("store.toml").is_file() {
@@ -138,8 +136,7 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
                 for record in projected {
                     projected_paths.insert(record.path.clone());
                     match valid.get(&record.path) {
-                        Some((id, hash))
-                            if id == &record.record_id && hash == &record.content_hash => {}
+                        Some((id, hash)) if id == &record.record_id && hash == &record.content_hash => {}
                         Some(_) => issue(
                             &mut report,
                             "warning",
@@ -196,19 +193,13 @@ pub fn doctor_store(paths: &StorePaths) -> crate::Result<DoctorReport> {
 pub fn repair_store(paths: &StorePaths) -> crate::Result<DoctorRepairReport> {
     let diagnosis = doctor_store(paths)?;
     if has_canonical_failure(&diagnosis) {
-        return Ok(DoctorRepairReport {
-            diagnosis,
-            repaired: Vec::new(),
-        });
+        return Ok(DoctorRepairReport { diagnosis, repaired: Vec::new() });
     }
 
     let _mutation_lock = acquire_store_mutation_lock(paths)?;
     let diagnosis = doctor_store(paths)?;
     if has_canonical_failure(&diagnosis) {
-        return Ok(DoctorRepairReport {
-            diagnosis,
-            repaired: Vec::new(),
-        });
+        return Ok(DoctorRepairReport { diagnosis, repaired: Vec::new() });
     }
 
     let mut repaired = Vec::new();
@@ -220,26 +211,17 @@ pub fn repair_store(paths: &StorePaths) -> crate::Result<DoctorRepairReport> {
     });
     if projection_needs_rebuild {
         let embedder = LocalEmbedder::from_default_cache(paths).ok();
-        reindex_store_with_embedder(
-            paths,
-            embedder.as_ref().map(|embedder| embedder as &dyn Embedder),
-        )?;
+        reindex_store_with_embedder(paths, embedder.as_ref().map(|embedder| embedder as &dyn Embedder))?;
         repaired.push("rebuilt the disposable search projection".to_owned());
     }
     for path in repairable_metadata(paths)? {
         match fs::remove_file(&path) {
-            Ok(()) => repaired.push(format!(
-                "removed stale disposable metadata {}",
-                path.display()
-            )),
+            Ok(()) => repaired.push(format!("removed stale disposable metadata {}", path.display())),
             Err(source) if source.kind() == io::ErrorKind::NotFound => {}
             Err(source) => return Err(Error::io("remove stale disposable metadata", source)),
         }
     }
-    Ok(DoctorRepairReport {
-        diagnosis: doctor_store(paths)?,
-        repaired,
-    })
+    Ok(DoctorRepairReport { diagnosis: doctor_store(paths)?, repaired })
 }
 
 fn has_canonical_failure(report: &DoctorReport) -> bool {
@@ -271,8 +253,7 @@ fn repairable_metadata(paths: &StorePaths) -> crate::Result<Vec<PathBuf>> {
         };
         if let Some(entries) = entries {
             for entry in entries {
-                let entry =
-                    entry.map_err(|source| Error::io("inspect disposable metadata", source))?;
+                let entry = entry.map_err(|source| Error::io("inspect disposable metadata", source))?;
                 let name = entry.file_name();
                 let name = name.to_string_lossy();
                 if entry.path().is_file() && name.starts_with(&prefix) && name.ends_with(".tmp") {
@@ -317,10 +298,7 @@ fn collect_stale_lock_files(directory: &Path, files: &mut Vec<PathBuf>) -> crate
             .file_type()
             .map_err(|source| Error::io("inspect disposable metadata", source))?;
         if file_type.is_file()
-            && entry
-                .path()
-                .extension()
-                .is_some_and(|extension| extension == "lock")
+            && entry.path().extension().is_some_and(|extension| extension == "lock")
             && entry.file_name() != "mutation.lock"
         {
             files.push(entry.path());

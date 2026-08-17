@@ -95,9 +95,7 @@ impl LocalRelationAnalyzer for ConservativeRelationAnalyzer {
                 vec!["normalized title and body are identical".to_owned()],
                 ConfidenceBand::High,
             )
-        } else if same_boundary
-            && explicit_negation_conflict(&normalize(&left.body), &normalize(&right.body))
-        {
+        } else if same_boundary && explicit_negation_conflict(&normalize(&left.body), &normalize(&right.body)) {
             (
                 AdvisoryRelation::Contradiction,
                 vec!["the pair makes opposing explicit permission claims".to_owned()],
@@ -137,12 +135,7 @@ impl LocalRelationAnalyzer for ConservativeRelationAnalyzer {
                 )
             }
         };
-        RelationInference {
-            relation,
-            evidence,
-            confidence,
-            analyzer_fingerprint: self.fingerprint().to_owned(),
-        }
+        RelationInference { relation, evidence, confidence, analyzer_fingerprint: self.fingerprint().to_owned() }
     }
 }
 
@@ -169,8 +162,7 @@ pub(crate) fn relation_pairs() -> crate::Result<(String, Vec<RelationPair>)> {
 }
 
 pub fn run_relation_analysis_evaluation(
-    retrieved_pair_ids: &std::collections::HashSet<String>,
-    analyzer: &dyn LocalRelationAnalyzer,
+    retrieved_pair_ids: &std::collections::HashSet<String>, analyzer: &dyn LocalRelationAnalyzer,
 ) -> crate::Result<RelationAnalysisReport> {
     let (revision, pairs) = relation_pairs()?;
     let expected_candidates = pairs
@@ -179,9 +171,7 @@ pub fn run_relation_analysis_evaluation(
         .count();
     let retrieved_candidates = pairs
         .iter()
-        .filter(|pair| {
-            pair.relation != ReviewedRelation::Unrelated && retrieved_pair_ids.contains(&pair.id)
-        })
+        .filter(|pair| pair.relation != ReviewedRelation::Unrelated && retrieved_pair_ids.contains(&pair.id))
         .count();
     let mut deterministic_correct = 0;
     let mut pairwise_correct = 0;
@@ -200,8 +190,7 @@ pub fn run_relation_analysis_evaluation(
         let expected = reviewed_advisory_relation(pair.relation);
         pairwise_correct += usize::from(inference.relation == expected);
         false_contradictions += usize::from(
-            inference.relation == AdvisoryRelation::Contradiction
-                && pair.relation != ReviewedRelation::Contradiction,
+            inference.relation == AdvisoryRelation::Contradiction && pair.relation != ReviewedRelation::Contradiction,
         );
         abstentions += usize::from(inference.relation == AdvisoryRelation::Unknown);
     }
@@ -239,10 +228,7 @@ fn tokens(value: &str) -> std::collections::HashSet<String> {
         .collect()
 }
 
-fn token_overlap(
-    left: &std::collections::HashSet<String>,
-    right: &std::collections::HashSet<String>,
-) -> f64 {
+fn token_overlap(left: &std::collections::HashSet<String>, right: &std::collections::HashSet<String>) -> f64 {
     let union = left.union(right).count();
     if union == 0 {
         return 0.0;

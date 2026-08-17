@@ -31,8 +31,7 @@ fn installed_skill_and_capture_evaluation_share_the_policy_contract() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let installed = fs::read_to_string(skills.join("stormbuffer-memory/SKILL.md"))
-        .expect("read installed skill");
+    let installed = fs::read_to_string(skills.join("stormbuffer-memory/SKILL.md")).expect("read installed skill");
     for term in [
         "stormbuffer-capture-v1",
         "durable_correction",
@@ -66,10 +65,7 @@ fn installed_skill_and_capture_evaluation_share_the_policy_contract() {
 }
 
 fn temporary_root() -> PathBuf {
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
     let counter = NEXT_ROOT.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(
         "stormbuffer-skill-policy-{}-{stamp}-{counter}",

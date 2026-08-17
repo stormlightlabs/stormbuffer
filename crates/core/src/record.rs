@@ -219,10 +219,7 @@ impl Record {
         self.scope.validate()?;
 
         if self.updated_at < self.created_at {
-            return Err(Error::invalid_record(
-                "updated_at",
-                "must not precede created_at",
-            ));
+            return Err(Error::invalid_record("updated_at", "must not precede created_at"));
         }
 
         validate_collection("tags", &self.tags)?;
@@ -231,40 +228,25 @@ impl Record {
         let mut superseded_ids = std::collections::HashSet::with_capacity(self.supersedes.len());
         for id in &self.supersedes {
             if id == &self.id {
-                return Err(Error::invalid_record(
-                    "supersedes",
-                    "must not contain the record id",
-                ));
+                return Err(Error::invalid_record("supersedes", "must not contain the record id"));
             }
             if !superseded_ids.insert(id) {
-                return Err(Error::invalid_record(
-                    "supersedes",
-                    "must not contain duplicates",
-                ));
+                return Err(Error::invalid_record("supersedes", "must not contain duplicates"));
             }
         }
 
         if self.sources.is_empty() {
-            return Err(Error::invalid_record(
-                "sources",
-                "must contain at least one source",
-            ));
+            return Err(Error::invalid_record("sources", "must contain at least one source"));
         }
         for source in &self.sources {
             source.validate()?;
         }
 
         if self.body.trim().is_empty() {
-            return Err(Error::invalid_record(
-                "body",
-                "must contain non-whitespace text",
-            ));
+            return Err(Error::invalid_record("body", "must contain non-whitespace text"));
         }
         if self.body.contains('\0') {
-            return Err(Error::invalid_record(
-                "body",
-                "must not contain NUL characters",
-            ));
+            return Err(Error::invalid_record("body", "must not contain NUL characters"));
         }
 
         Ok(())
@@ -314,8 +296,7 @@ impl RecordId {
         if value.trim() != value || value.is_empty() {
             return Err("must be a non-empty UUID without surrounding whitespace".to_owned());
         }
-        let id =
-            Uuid::parse_str(value).map_err(|error| format!("must be a valid UUID: {error}"))?;
+        let id = Uuid::parse_str(value).map_err(|error| format!("must be a valid UUID: {error}"))?;
         if id.is_nil() {
             return Err("must not be the nil UUID".to_owned());
         }
@@ -356,14 +337,11 @@ impl Scope {
             return Err("must be `global` or use the `project:<uuid>` form".to_owned());
         };
         if project.is_empty()
-            || project.chars().any(|character| {
-                character.is_whitespace() || character.is_control() || character == ':'
-            })
+            || project
+                .chars()
+                .any(|character| character.is_whitespace() || character.is_control() || character == ':')
         {
-            return Err(
-                "project scope names must be non-empty and contain no whitespace or colons"
-                    .to_owned(),
-            );
+            return Err("project scope names must be non-empty and contain no whitespace or colons".to_owned());
         }
         Ok(Self(value.to_owned()))
     }
@@ -465,10 +443,7 @@ fn validate_text(field: &str, value: &str) -> Result<()> {
         ));
     }
     if value.chars().any(char::is_control) {
-        return Err(Error::invalid_record(
-            field,
-            "must not contain control characters",
-        ));
+        return Err(Error::invalid_record(field, "must not contain control characters"));
     }
     Ok(())
 }

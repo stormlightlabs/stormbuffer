@@ -20,17 +20,10 @@ pub fn read(paths: &core::StorePaths, uri: &str) -> Result<Value, core::InvokeFa
     {
         return core::invoke_scope_records(paths, scope);
     }
-    Err(core::InvokeFailure::new(
-        "not_found",
-        "resource URI was not found",
-    ))
+    Err(core::InvokeFailure::new("not_found", "resource URI was not found"))
 }
 
-fn record(
-    paths: &core::StorePaths,
-    id: &str,
-    candidate: bool,
-) -> Result<Value, core::InvokeFailure> {
+fn record(paths: &core::StorePaths, id: &str, candidate: bool) -> Result<Value, core::InvokeFailure> {
     if id.is_empty() || id.contains('/') {
         return Err(core::InvokeFailure::new(
             "invalid_request",
@@ -44,10 +37,7 @@ fn record(
     ]);
     let value = core::invoke_operation(paths, "get", &request)?;
     if candidate && value.get("status").and_then(Value::as_str) != Some("candidate") {
-        return Err(core::InvokeFailure::new(
-            "not_found",
-            "candidate was not found",
-        ));
+        return Err(core::InvokeFailure::new("not_found", "candidate was not found"));
     }
     Ok(value)
 }

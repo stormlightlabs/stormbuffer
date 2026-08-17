@@ -15,16 +15,14 @@ fn temporary_root() -> PathBuf {
 }
 
 fn binary() -> PathBuf {
-    env::var_os("CARGO_BIN_EXE_sbuf")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            env::current_exe()
-                .expect("locate test executable")
-                .parent()
-                .and_then(Path::parent)
-                .expect("locate debug directory")
-                .join("sbuf")
-        })
+    env::var_os("CARGO_BIN_EXE_sbuf").map(PathBuf::from).unwrap_or_else(|| {
+        env::current_exe()
+            .expect("locate test executable")
+            .parent()
+            .and_then(Path::parent)
+            .expect("locate debug directory")
+            .join("sbuf")
+    })
 }
 
 fn run(root: &Path, args: &[&str]) -> Output {
@@ -68,11 +66,7 @@ fn export_import_and_gc_are_explicit_and_safe() {
             "The canonical body survives export.",
         ],
     );
-    assert!(
-        added.status.success(),
-        "{}",
-        String::from_utf8_lossy(&added.stderr)
-    );
+    assert!(added.status.success(), "{}", String::from_utf8_lossy(&added.stderr));
 
     let archive = root.join("backup.json");
     let archive_text = archive.to_string_lossy().into_owned();
@@ -83,8 +77,7 @@ fn export_import_and_gc_are_explicit_and_safe() {
         String::from_utf8_lossy(&exported.stderr)
     );
     let bundle: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&archive).expect("read archive"))
-            .expect("parse archive");
+        serde_json::from_str(&fs::read_to_string(&archive).expect("read archive")).expect("parse archive");
     assert_eq!(bundle["format_version"], 1);
     assert!(
         bundle["records"][0]["markdown"]
@@ -114,34 +107,16 @@ fn export_import_and_gc_are_explicit_and_safe() {
 
     let preview = run(
         &target,
-        &[
-            "--project",
-            "import",
-            &archive_text,
-            "--on-scope",
-            "remap",
-            "--dry-run",
-        ],
+        &["--project", "import", &archive_text, "--on-scope", "remap", "--dry-run"],
     );
-    assert!(
-        preview.status.success(),
-        "{}",
-        String::from_utf8_lossy(&preview.stderr)
-    );
+    assert!(preview.status.success(), "{}", String::from_utf8_lossy(&preview.stderr));
     assert!(String::from_utf8_lossy(&preview.stdout).contains("Dry run: yes"));
     assert_eq!(
-        target
-            .join(".sbuf/records")
-            .read_dir()
-            .expect("read records")
-            .count(),
+        target.join(".sbuf/records").read_dir().expect("read records").count(),
         0
     );
 
-    let remapped = run(
-        &target,
-        &["--project", "import", &archive_text, "--on-scope", "remap"],
-    );
+    let remapped = run(&target, &["--project", "import", &archive_text, "--on-scope", "remap"]);
     assert!(
         remapped.status.success(),
         "{}",
@@ -165,46 +140,21 @@ fn export_import_and_gc_are_explicit_and_safe() {
     );
     let skipped = run(
         &target,
-        &[
-            "--project",
-            "import",
-            &target_archive_text,
-            "--on-existing",
-            "skip",
-        ],
+        &["--project", "import", &target_archive_text, "--on-existing", "skip"],
     );
-    assert!(
-        skipped.status.success(),
-        "{}",
-        String::from_utf8_lossy(&skipped.stderr)
-    );
+    assert!(skipped.status.success(), "{}", String::from_utf8_lossy(&skipped.stderr));
     assert!(String::from_utf8_lossy(&skipped.stdout).contains("Skipped: 1"));
 
     assert!(run(&target, &["--project", "sync"]).status.success());
     let index = target.join(".sbuf/index.sqlite3");
     assert!(index.is_file());
     let dry_run = run(&target, &["--project", "gc", "--dry-run"]);
-    assert!(
-        dry_run.status.success(),
-        "{}",
-        String::from_utf8_lossy(&dry_run.stderr)
-    );
+    assert!(dry_run.status.success(), "{}", String::from_utf8_lossy(&dry_run.stderr));
     assert!(index.is_file());
     let actual = run(&target, &["--project", "gc"]);
-    assert!(
-        actual.status.success(),
-        "{}",
-        String::from_utf8_lossy(&actual.stderr)
-    );
+    assert!(actual.status.success(), "{}", String::from_utf8_lossy(&actual.stderr));
     assert!(!index.exists());
-    assert!(
-        target
-            .join(".sbuf/records")
-            .read_dir()
-            .unwrap()
-            .next()
-            .is_some()
-    );
+    assert!(target.join(".sbuf/records").read_dir().unwrap().next().is_some());
 
     let target_bundle: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&target_archive).expect("read target archive"))
@@ -214,16 +164,10 @@ fn export_import_and_gc_are_explicit_and_safe() {
         .expect("source scope")
         .strip_prefix("project:")
         .expect("project scope");
-    let wrong = run(
-        &target,
-        &["--project", "destroy-store", "--store-id", "wrong", "--yes"],
-    );
+    let wrong = run(&target, &["--project", "destroy-store", "--store-id", "wrong", "--yes"]);
     assert!(!wrong.status.success());
     assert!(target.join(".sbuf").is_dir());
-    let cancelled = run(
-        &target,
-        &["--project", "destroy-store", "--store-id", store_id],
-    );
+    let cancelled = run(&target, &["--project", "destroy-store", "--store-id", store_id]);
     assert!(!cancelled.status.success());
     assert!(target.join(".sbuf").is_dir());
     let safety_export = root.join("before-destroy.json");

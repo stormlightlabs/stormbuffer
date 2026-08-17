@@ -31,11 +31,7 @@ fn binary() -> PathBuf {
     if cfg!(windows) {
         path.set_extension("exe");
     }
-    assert!(
-        path.is_file(),
-        "locate the sbuf test binary at {}",
-        path.display()
-    );
+    assert!(path.is_file(), "locate the sbuf test binary at {}", path.display());
     path
 }
 
@@ -70,12 +66,7 @@ where
     run_json_with_store_environment(directory, directory, arguments, input)
 }
 
-fn run_json_with_store_environment<I, S>(
-    directory: &Path,
-    root: &Path,
-    arguments: I,
-    input: &str,
-) -> Output
+fn run_json_with_store_environment<I, S>(directory: &Path, root: &Path, arguments: I, input: &str) -> Output
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -95,9 +86,7 @@ where
         .expect("open JSON stdin")
         .write_all(input.as_bytes())
         .expect("write JSON request");
-    child
-        .wait_with_output()
-        .expect("collect JSON protocol output")
+    child.wait_with_output().expect("collect JSON protocol output")
 }
 
 fn run_with_editor<I, S>(directory: &Path, arguments: I) -> Output
@@ -143,10 +132,7 @@ where
     S: AsRef<OsStr>,
 {
     let mut command = Command::new(binary());
-    command
-        .current_dir(directory)
-        .args(arguments)
-        .env("EDITOR", "true");
+    command.current_dir(directory).args(arguments).env("EDITOR", "true");
     with_store_environment(&mut command, root);
     command.output().expect("run CLI with isolated store")
 }
@@ -165,10 +151,7 @@ fn init_root_and_status_work_for_project_and_global_stores() {
 
     let project_root = run(&project, ["--project", "root"]);
     assert_eq!(project_root.status.code(), Some(0));
-    let expected_project_root = project
-        .join(".sbuf")
-        .canonicalize()
-        .expect("canonicalize project root");
+    let expected_project_root = project.join(".sbuf").canonicalize().expect("canonicalize project root");
     assert_eq!(
         String::from_utf8_lossy(&project_root.stdout).trim(),
         expected_project_root.to_string_lossy()
@@ -176,18 +159,14 @@ fn init_root_and_status_work_for_project_and_global_stores() {
     let project_status = run(&project, ["--project", "status", "--json"]);
     let project_status: serde_json::Value =
         serde_json::from_slice(&project_status.stdout).expect("parse project status");
-    assert_eq!(
-        project_status["view"],
-        "project with applicable global memory"
-    );
+    assert_eq!(project_status["view"], "project with applicable global memory");
     assert_eq!(project_status["scope"], "project");
     assert!(project_status["lifecycle"].is_object());
     assert!(project_status["disk_usage"].is_object());
     assert!(project_status["index_version"].is_number());
 
     let local_status = run(&project, ["--local", "status", "--json"]);
-    let local_status: serde_json::Value =
-        serde_json::from_slice(&local_status.stdout).expect("parse local status");
+    let local_status: serde_json::Value = serde_json::from_slice(&local_status.stdout).expect("parse local status");
     assert_eq!(local_status["view"], "strict local");
     assert_eq!(local_status["scope"], "local");
 
@@ -201,14 +180,11 @@ fn init_root_and_status_work_for_project_and_global_stores() {
     assert!(root.join("cache/stormbuffer/global.sqlite3").is_file());
 
     let mut global_status_command = Command::new(binary());
-    global_status_command
-        .current_dir(&project)
-        .args(["status", "--json"]);
+    global_status_command.current_dir(&project).args(["status", "--json"]);
     with_store_environment(&mut global_status_command, &root);
     let global_status = global_status_command.output().expect("run global status");
     assert_eq!(global_status.status.code(), Some(0));
-    let global_status: serde_json::Value =
-        serde_json::from_slice(&global_status.stdout).expect("parse global status");
+    let global_status: serde_json::Value = serde_json::from_slice(&global_status.stdout).expect("parse global status");
     assert_eq!(global_status["view"], "global");
     assert_eq!(global_status["scope"], "global");
     assert_eq!(global_status["initialized"], true);
@@ -226,9 +202,8 @@ fn doctor_reports_readiness_and_an_actionable_semantic_setup() {
     assert_eq!(doctor.status.code(), Some(0));
     let stdout = String::from_utf8_lossy(&doctor.stdout);
     assert!(
-        stdout.contains(
-            "\u{1b}[1m\u{1b}[36mSemantic retrieval\u{1b}[39m\u{1b}[0m: \u{1b}[1m\u{1b}[33mlexical fallback"
-        ),
+        stdout
+            .contains("\u{1b}[1m\u{1b}[36mSemantic retrieval\u{1b}[39m\u{1b}[0m: \u{1b}[1m\u{1b}[33mlexical fallback"),
         "{stdout}"
     );
     assert!(stdout.contains("0 failure(s), 1 warning(s)"), "{stdout}");
@@ -240,10 +215,7 @@ fn doctor_reports_readiness_and_an_actionable_semantic_setup() {
         stdout.contains("run `sbuf init` while online to download and verify the local model"),
         "{stdout}"
     );
-    assert!(
-        doctor.stdout.contains(&0x1b),
-        "warning should use Echo color"
-    );
+    assert!(doctor.stdout.contains(&0x1b), "warning should use Echo color");
     assert!(!stdout.contains("(repair:"), "{stdout}");
 
     fs::remove_dir_all(root).expect("remove test directory");
@@ -297,8 +269,7 @@ fn shared_project_init_is_explicit_and_global_shared_is_rejected() {
     assert_eq!(shared_init.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&shared_init.stdout).contains("shared"));
     assert!(project.join(".sbuf/store.toml").is_file());
-    let ignore =
-        fs::read_to_string(project.join(".sbuf/.gitignore")).expect("read shared ignore rules");
+    let ignore = fs::read_to_string(project.join(".sbuf/.gitignore")).expect("read shared ignore rules");
     for pattern in [
         "*",
         "!.gitignore",
@@ -342,8 +313,7 @@ fn invalid_input_and_unfinished_commands_are_explicit_and_safe() {
         r#"{"version":1,"query":"anything"}"#,
     );
     assert_eq!(invoke.status.code(), Some(1));
-    let envelope: serde_json::Value =
-        serde_json::from_slice(&invoke.stdout).expect("parse not initialized envelope");
+    let envelope: serde_json::Value = serde_json::from_slice(&invoke.stdout).expect("parse not initialized envelope");
     assert_eq!(envelope["error"]["code"], "not_initialized");
     assert!(!root.join(".sbuf").exists());
 
@@ -374,12 +344,7 @@ fn lifecycle_commands_preserve_records_and_use_tab_delimited_output() {
             "The body stays readable.",
         ],
     );
-    assert_eq!(
-        add.status.code(),
-        Some(0),
-        "{}",
-        String::from_utf8_lossy(&add.stderr)
-    );
+    assert_eq!(add.status.code(), Some(0), "{}", String::from_utf8_lossy(&add.stderr));
     let id = String::from_utf8_lossy(&add.stdout).trim().to_owned();
     assert!(!id.is_empty());
 
@@ -415,10 +380,7 @@ fn lifecycle_commands_preserve_records_and_use_tab_delimited_output() {
 
     let restore = run(&root, ["--project", "restore", &id]);
     assert_eq!(restore.status.code(), Some(0));
-    assert_eq!(
-        String::from_utf8_lossy(&restore.stdout).trim(),
-        format!("{id}\tactive")
-    );
+    assert_eq!(String::from_utf8_lossy(&restore.stdout).trim(), format!("{id}\tactive"));
 
     let supersede = run_with_editor(&root, ["--project", "supersede", &id]);
     assert_eq!(
@@ -437,10 +399,7 @@ fn lifecycle_commands_preserve_records_and_use_tab_delimited_output() {
     let blocked_forget = run(&root, ["--project", "forget", &replacement, "--destroy"]);
     assert_eq!(blocked_forget.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&blocked_forget.stderr).contains("--yes"));
-    let forgotten = run(
-        &root,
-        ["--project", "forget", &replacement, "--destroy", "--yes"],
-    );
+    let forgotten = run(&root, ["--project", "forget", &replacement, "--destroy", "--yes"]);
     assert_eq!(forgotten.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&forgotten.stdout).contains("Forgot"));
 
@@ -492,33 +451,23 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
     );
     assert_eq!(project_add.status.code(), Some(0));
     let status = run_with_store_environment(&project, &root, ["--project", "status", "--json"]);
-    let status: serde_json::Value =
-        serde_json::from_slice(&status.stdout).expect("parse project status");
-    let project_scope = format!(
-        "project:{}",
-        status["project_id"].as_str().expect("project id")
-    );
+    let status: serde_json::Value = serde_json::from_slice(&status.stdout).expect("parse project status");
+    let project_scope = format!("project:{}", status["project_id"].as_str().expect("project id"));
 
-    let search = run_with_store_environment(
-        &project,
-        &root,
-        ["--project", "search", "scope collision", "--json"],
-    );
+    let search = run_with_store_environment(&project, &root, ["--project", "search", "scope collision", "--json"]);
     assert_eq!(
         search.status.code(),
         Some(0),
         "{}",
         String::from_utf8_lossy(&search.stderr)
     );
-    let results: serde_json::Value =
-        serde_json::from_slice(&search.stdout).expect("parse search results");
+    let results: serde_json::Value = serde_json::from_slice(&search.stdout).expect("parse search results");
     let results = results.as_array().expect("search result array");
     assert_eq!(results.len(), 2);
     assert_eq!(results[0]["scope"], project_scope);
     assert_eq!(results[1]["scope"], "global");
 
-    let human_search =
-        run_with_store_environment(&project, &root, ["--project", "search", "scope collision"]);
+    let human_search = run_with_store_environment(&project, &root, ["--project", "search", "scope collision"]);
     assert_eq!(human_search.status.code(), Some(0));
     let human_search = String::from_utf8_lossy(&human_search.stdout);
     assert!(human_search.contains("Project collision card\n  ID: "));
@@ -540,8 +489,7 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
     let local_candidate = local_proposal["result"]["record_id"]
         .as_str()
         .expect("local candidate id");
-    let local_approval =
-        run_with_store_environment(&project, &root, ["--local", "approve", local_candidate]);
+    let local_approval = run_with_store_environment(&project, &root, ["--local", "approve", local_candidate]);
     assert_eq!(local_approval.status.code(), Some(0));
 
     fs::write(
@@ -549,21 +497,12 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
         "invalid global record",
     )
     .expect("write invalid global record");
-    let local = run_with_store_environment(
-        &project,
-        &root,
-        ["--local", "search", "from project memory", "--json"],
-    );
+    let local = run_with_store_environment(&project, &root, ["--local", "search", "from project memory", "--json"]);
     assert_eq!(local.status.code(), Some(0));
-    let local_results: serde_json::Value =
-        serde_json::from_slice(&local.stdout).expect("parse local results");
+    let local_results: serde_json::Value = serde_json::from_slice(&local.stdout).expect("parse local results");
     let local_results = local_results.as_array().expect("local result array");
     assert!(!local_results.is_empty());
-    assert!(
-        local_results
-            .iter()
-            .all(|result| result["scope"] == project_scope)
-    );
+    assert!(local_results.iter().all(|result| result["scope"] == project_scope));
 
     let local_invoke = run_json_with_store_environment(
         &project,
@@ -582,11 +521,8 @@ fn project_search_reconciles_and_prioritizes_initialized_global_memory() {
         1
     );
 
-    let project_with_invalid_global = run_with_store_environment(
-        &project,
-        &root,
-        ["--project", "search", "scope collision", "--json"],
-    );
+    let project_with_invalid_global =
+        run_with_store_environment(&project, &root, ["--project", "search", "scope collision", "--json"]);
     assert_eq!(project_with_invalid_global.status.code(), Some(1));
 
     fs::remove_dir_all(root).expect("remove test directory");
@@ -643,8 +579,7 @@ fn retrieval_commands_fail_when_canonical_records_are_invalid() {
     );
     assert_eq!(invoked.status.code(), Some(1));
     assert!(invoked.stderr.is_empty());
-    let envelope: serde_json::Value =
-        serde_json::from_slice(&invoked.stdout).expect("invalid record envelope");
+    let envelope: serde_json::Value = serde_json::from_slice(&invoked.stdout).expect("invalid record envelope");
     assert_eq!(envelope["error"]["code"], "invalid_record");
 
     fs::remove_dir_all(root).expect("remove test directory");
@@ -668,14 +603,11 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
         String::from_utf8_lossy(&proposal.stderr)
     );
     assert!(proposal.stderr.is_empty());
-    let envelope: serde_json::Value =
-        serde_json::from_slice(&proposal.stdout).expect("proposal envelope");
+    let envelope: serde_json::Value = serde_json::from_slice(&proposal.stdout).expect("proposal envelope");
     assert_eq!(envelope["version"], 1);
     assert_eq!(envelope["operation"], "propose");
     assert_eq!(envelope["result"]["outcome"], "requires_approval");
-    let id = envelope["result"]["record_id"]
-        .as_str()
-        .expect("candidate id");
+    let id = envelope["result"]["record_id"].as_str().expect("candidate id");
 
     let approve = run(&root, ["--project", "approve", id]);
     assert_eq!(
@@ -690,15 +622,10 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
         r#"{"version":1,"actor":"human","approved":true,"title":"Impersonated memory","kind":"fact","access":"agent","body":"Must remain a candidate.","sources":[{"kind":"document","reference":"ROADMAP.md","actor":"human"}]}"#,
         r#"{"version":1,"title":"Hidden agent memory","kind":"fact","access":"human","body":"Agents must not create human-only records.","sources":[{"kind":"document","reference":"ROADMAP.md","actor":"human"}]}"#,
     ] {
-        let operation = if request.contains("query") {
-            "search"
-        } else {
-            "propose"
-        };
+        let operation = if request.contains("query") { "search" } else { "propose" };
         let denied = run_json(&root, ["--project", "invoke", operation], request);
         assert_eq!(denied.status.code(), Some(1));
-        let envelope: serde_json::Value =
-            serde_json::from_slice(&denied.stdout).expect("permission denial envelope");
+        let envelope: serde_json::Value = serde_json::from_slice(&denied.stdout).expect("permission denial envelope");
         assert_eq!(envelope["error"]["code"], "permission_denied");
     }
 
@@ -719,23 +646,14 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
         ["--project", "invoke", "get"],
         &format!(r#"{{"version":1,"id":"{id}"}}"#),
     );
-    assert_eq!(
-        get.status.code(),
-        Some(0),
-        "{}",
-        String::from_utf8_lossy(&get.stderr)
-    );
-    let get_envelope: serde_json::Value =
-        serde_json::from_slice(&get.stdout).expect("get envelope");
+    assert_eq!(get.status.code(), Some(0), "{}", String::from_utf8_lossy(&get.stderr));
+    let get_envelope: serde_json::Value = serde_json::from_slice(&get.stdout).expect("get envelope");
     assert_eq!(get_envelope["result"]["id"], id);
     assert!(get_envelope["result"].get("path").is_none());
 
     for (operation, request) in [
         ("search", r#"{"version":1,"query":"protocol memory"}"#),
-        (
-            "context",
-            r#"{"version":1,"query":"protocol memory","budget":128}"#,
-        ),
+        ("context", r#"{"version":1,"query":"protocol memory","budget":128}"#),
     ] {
         let output = run_json(&root, ["--project", "invoke", operation], request);
         assert_eq!(
@@ -744,18 +662,15 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        let response: serde_json::Value =
-            serde_json::from_slice(&output.stdout).expect("operation envelope");
+        let response: serde_json::Value = serde_json::from_slice(&output.stdout).expect("operation envelope");
         assert_eq!(response["operation"], operation);
         assert_eq!(response["ok"], true);
         if operation == "context" {
             let receipt = &response["result"]["receipt"];
             stormbuffer_core::ReceiptId::parse(receipt["receipt_id"].as_str().expect("receipt id"))
                 .expect("valid receipt id");
-            stormbuffer_core::Timestamp::parse(
-                receipt["retrieved_at"].as_str().expect("retrieval time"),
-            )
-            .expect("valid retrieval time");
+            stormbuffer_core::Timestamp::parse(receipt["retrieved_at"].as_str().expect("retrieval time"))
+                .expect("valid retrieval time");
         }
     }
 
@@ -772,11 +687,8 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
         "{}",
         String::from_utf8_lossy(&supersede.stderr)
     );
-    let supersede_envelope: serde_json::Value =
-        serde_json::from_slice(&supersede.stdout).expect("supersede envelope");
-    let replacement_id = supersede_envelope["result"]["id"]
-        .as_str()
-        .expect("replacement id");
+    let supersede_envelope: serde_json::Value = serde_json::from_slice(&supersede.stdout).expect("supersede envelope");
+    let replacement_id = supersede_envelope["result"]["id"].as_str().expect("replacement id");
 
     let archive = run_json(
         &root,
@@ -784,14 +696,12 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
         &format!(r#"{{"version":1,"id":"{replacement_id}"}}"#),
     );
     assert_eq!(archive.status.code(), Some(0));
-    let archive_envelope: serde_json::Value =
-        serde_json::from_slice(&archive.stdout).expect("archive envelope");
+    let archive_envelope: serde_json::Value = serde_json::from_slice(&archive.stdout).expect("archive envelope");
     assert_eq!(archive_envelope["result"]["status"], "archived");
 
     let malformed = run_json(&root, ["--project", "invoke", "search"], "{not-json");
     assert_eq!(malformed.status.code(), Some(1));
-    let malformed_envelope: serde_json::Value =
-        serde_json::from_slice(&malformed.stdout).expect("malformed envelope");
+    let malformed_envelope: serde_json::Value = serde_json::from_slice(&malformed.stdout).expect("malformed envelope");
     assert_eq!(malformed_envelope["error"]["code"], "invalid_json");
 
     let denied = run_json(
@@ -801,8 +711,7 @@ fn invoke_protocol_covers_operations_and_safe_error_envelopes() {
     );
     assert_eq!(denied.status.code(), Some(1));
     assert!(denied.stderr.is_empty());
-    let denied_envelope: serde_json::Value =
-        serde_json::from_slice(&denied.stdout).expect("denial envelope");
+    let denied_envelope: serde_json::Value = serde_json::from_slice(&denied.stdout).expect("denial envelope");
     assert_eq!(denied_envelope["ok"], false);
     assert_eq!(denied_envelope["error"]["code"], "path_denied");
     assert!(!String::from_utf8_lossy(&denied.stdout).contains("private/record"));
@@ -848,8 +757,7 @@ fn invoke_remember_and_update_enforce_candidate_review() {
         r#"{"version":1,"actor":"human","title":"Impersonated","kind":"fact","body":"Must not activate.","source":{"kind":"document","reference":"ROADMAP.md","actor":"human"}}"#,
     );
     assert_eq!(denied.status.code(), Some(1));
-    let denied: serde_json::Value =
-        serde_json::from_slice(&denied.stdout).expect("permission envelope");
+    let denied: serde_json::Value = serde_json::from_slice(&denied.stdout).expect("permission envelope");
     assert_eq!(denied["error"]["code"], "permission_denied");
 
     let remembered = run_json(
@@ -858,26 +766,18 @@ fn invoke_remember_and_update_enforce_candidate_review() {
         r#"{"version":1,"title":"Intent memory","kind":"fact","body":"Original sourced memory.","source":{"kind":"document","reference":"ROADMAP.md#agent-capture","actor":"human"}}"#,
     );
     assert_eq!(remembered.status.code(), Some(0));
-    let remembered: serde_json::Value =
-        serde_json::from_slice(&remembered.stdout).expect("remember envelope");
+    let remembered: serde_json::Value = serde_json::from_slice(&remembered.stdout).expect("remember envelope");
     assert_eq!(remembered["operation"], "remember");
     assert_eq!(remembered["result"]["outcome"], "requires_approval");
-    let old_id = remembered["result"]["record_id"]
-        .as_str()
-        .expect("remembered id");
-    assert!(
-        run(&root, ["--project", "approve", old_id])
-            .status
-            .success()
-    );
+    let old_id = remembered["result"]["record_id"].as_str().expect("remembered id");
+    assert!(run(&root, ["--project", "approve", old_id]).status.success());
 
     let duplicate = run_json(
         &root,
         ["--project", "invoke", "remember"],
         r#"{"version":1,"title":"Intent memory","kind":"fact","body":"Original sourced memory.","source":{"kind":"document","reference":"ROADMAP.md#agent-capture","actor":"human"}}"#,
     );
-    let duplicate: serde_json::Value =
-        serde_json::from_slice(&duplicate.stdout).expect("duplicate envelope");
+    let duplicate: serde_json::Value = serde_json::from_slice(&duplicate.stdout).expect("duplicate envelope");
     assert_eq!(duplicate["result"]["outcome"], "duplicate_of");
 
     let overlap = run_json(
@@ -885,15 +785,10 @@ fn invoke_remember_and_update_enforce_candidate_review() {
         ["--project", "invoke", "remember"],
         r#"{"version":1,"title":"Intent memory","kind":"fact","body":"A different memory.","source":{"kind":"document","reference":"TODO.md#SB-501","actor":"human"}}"#,
     );
-    let overlap: serde_json::Value =
-        serde_json::from_slice(&overlap.stdout).expect("overlap envelope");
+    let overlap: serde_json::Value = serde_json::from_slice(&overlap.stdout).expect("overlap envelope");
     assert_eq!(overlap["result"]["outcome"], "possible_overlap");
     let overlap_id = overlap["result"]["record_id"].as_str().expect("overlap id");
-    assert!(
-        run(&root, ["--project", "reject", overlap_id])
-            .status
-            .success()
-    );
+    assert!(run(&root, ["--project", "reject", overlap_id]).status.success());
 
     let updated = run_json(
         &root,
@@ -903,36 +798,27 @@ fn invoke_remember_and_update_enforce_candidate_review() {
         ),
     );
     assert_eq!(updated.status.code(), Some(0));
-    let updated: serde_json::Value =
-        serde_json::from_slice(&updated.stdout).expect("update envelope");
+    let updated: serde_json::Value = serde_json::from_slice(&updated.stdout).expect("update envelope");
     assert_eq!(updated["operation"], "update");
     assert_eq!(updated["result"]["outcome"], "requires_approval");
-    let replacement_id = updated["result"]["record_id"]
-        .as_str()
-        .expect("replacement id");
+    let replacement_id = updated["result"]["record_id"].as_str().expect("replacement id");
 
-    for (id, expected_status, expected_supersedes) in [
-        (old_id, "active", None),
-        (replacement_id, "candidate", Some(old_id)),
-    ] {
+    for (id, expected_status, expected_supersedes) in
+        [(old_id, "active", None), (replacement_id, "candidate", Some(old_id))]
+    {
         let get = run_json(
             &root,
             ["--project", "invoke", "get"],
             &format!(r#"{{"version":1,"id":"{id}"}}"#),
         );
-        let get: serde_json::Value =
-            serde_json::from_slice(&get.stdout).expect("get intent record");
+        let get: serde_json::Value = serde_json::from_slice(&get.stdout).expect("get intent record");
         assert_eq!(get["result"]["status"], expected_status);
         if let Some(superseded_id) = expected_supersedes {
             assert_eq!(get["result"]["supersedes"][0], superseded_id);
         }
     }
 
-    assert!(
-        run(&root, ["--project", "approve", replacement_id])
-            .status
-            .success()
-    );
+    assert!(run(&root, ["--project", "approve", replacement_id]).status.success());
     let old = run_json(
         &root,
         ["--project", "invoke", "get"],
@@ -962,22 +848,15 @@ fn invoke_protocol_bounds_the_complete_serialized_response() {
                 "actor": "human"
             }]
         });
-        let proposal = run_json(
-            &root,
-            ["--project", "invoke", "propose"],
-            &request.to_string(),
-        );
+        let proposal = run_json(&root, ["--project", "invoke", "propose"], &request.to_string());
         assert_eq!(
             proposal.status.code(),
             Some(0),
             "{}",
             String::from_utf8_lossy(&proposal.stderr)
         );
-        let envelope: serde_json::Value =
-            serde_json::from_slice(&proposal.stdout).expect("proposal envelope");
-        let id = envelope["result"]["record_id"]
-            .as_str()
-            .expect("candidate id");
+        let envelope: serde_json::Value = serde_json::from_slice(&proposal.stdout).expect("proposal envelope");
+        let id = envelope["result"]["record_id"].as_str().expect("candidate id");
         let approve = run(&root, ["--project", "approve", id]);
         assert_eq!(approve.status.code(), Some(0));
     }
@@ -989,8 +868,7 @@ fn invoke_protocol_bounds_the_complete_serialized_response() {
     );
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.len() < 1024);
-    let envelope: serde_json::Value =
-        serde_json::from_slice(&output.stdout).expect("bounded error envelope");
+    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).expect("bounded error envelope");
     assert_eq!(envelope["error"]["code"], "output_too_large");
 
     fs::remove_dir_all(root).expect("remove test directory");
@@ -1024,16 +902,7 @@ fn skill_install_is_offline_idempotent_and_requires_force_for_conflicts() {
     let skills_argument = skills.to_string_lossy().into_owned();
     let destination = skills.join("stormbuffer-global-memory").join("SKILL.md");
 
-    let first = run(
-        &root,
-        [
-            "--global",
-            "skill",
-            "install",
-            "--directory",
-            &skills_argument,
-        ],
-    );
+    let first = run(&root, ["--global", "skill", "install", "--directory", &skills_argument]);
     assert_eq!(
         first.status.code(),
         Some(0),
@@ -1051,10 +920,7 @@ fn skill_install_is_offline_idempotent_and_requires_force_for_conflicts() {
 
     let second = run(&root, ["skill", "install", "--directory", &skills_argument]);
     assert_eq!(second.status.code(), Some(0));
-    assert_eq!(
-        fs::read(&destination).expect("read reinstalled skill"),
-        installed
-    );
+    assert_eq!(fs::read(&destination).expect("read reinstalled skill"), installed);
 
     fs::write(&destination, "locally customized\n").expect("write conflicting skill");
     let conflict = run(&root, ["skill", "install", "--directory", &skills_argument]);
@@ -1065,16 +931,7 @@ fn skill_install_is_offline_idempotent_and_requires_force_for_conflicts() {
         "locally customized\n"
     );
 
-    let replacement = run(
-        &root,
-        [
-            "skill",
-            "install",
-            "--directory",
-            &skills_argument,
-            "--force",
-        ],
-    );
+    let replacement = run(&root, ["skill", "install", "--directory", &skills_argument, "--force"]);
     assert_eq!(replacement.status.code(), Some(0));
     assert_eq!(fs::read(&destination).expect("read replacement"), installed);
 
@@ -1082,18 +939,11 @@ fn skill_install_is_offline_idempotent_and_requires_force_for_conflicts() {
     let project_argument = project_skills.to_string_lossy().into_owned();
     let project = run(
         &root,
-        [
-            "--project",
-            "skill",
-            "install",
-            "--directory",
-            &project_argument,
-        ],
+        ["--project", "skill", "install", "--directory", &project_argument],
     );
     assert_eq!(project.status.code(), Some(0));
     let project_skill =
-        fs::read_to_string(project_skills.join("stormbuffer-memory").join("SKILL.md"))
-            .expect("read project skill");
+        fs::read_to_string(project_skills.join("stormbuffer-memory").join("SKILL.md")).expect("read project skill");
     assert!(project_skill.contains("name: stormbuffer-memory"));
     assert!(project_skill.contains("sbuf --project invoke search"));
     assert!(project_skill.contains("Project retrieval can also return global records"));
@@ -1157,9 +1007,7 @@ fn color_modes_no_color_and_json_output_follow_the_contract() {
         .current_dir(&root)
         .args(["--project", "--color", "always", "status"])
         .env("NO_COLOR", "1");
-    let forced_no_color = forced_no_color_command
-        .output()
-        .expect("run forced NO_COLOR status");
+    let forced_no_color = forced_no_color_command.output().expect("run forced NO_COLOR status");
     assert_eq!(forced_no_color.status.code(), Some(0));
     assert!(!forced_no_color.stdout.contains(&0x1b));
 
@@ -1172,16 +1020,11 @@ fn color_modes_no_color_and_json_output_follow_the_contract() {
         .current_dir(&root)
         .args(["--project", "--color", "always", "mcp"])
         .env("NO_COLOR", "1");
-    let no_color_error = no_color_error_command
-        .output()
-        .expect("run forced NO_COLOR error");
+    let no_color_error = no_color_error_command.output().expect("run forced NO_COLOR error");
     assert_eq!(no_color_error.status.code(), Some(1));
     assert!(!no_color_error.stderr.contains(&0x1b));
 
-    let json = run(
-        &root,
-        ["--project", "--color", "always", "status", "--json"],
-    );
+    let json = run(&root, ["--project", "--color", "always", "status", "--json"]);
     assert_eq!(json.status.code(), Some(0));
     assert!(!json.stdout.contains(&0x1b));
     assert!(String::from_utf8_lossy(&json.stdout).starts_with('{'));

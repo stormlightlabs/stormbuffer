@@ -9,9 +9,7 @@ pub(super) fn migrate(connection: &Connection) -> crate::Result<()> {
         .map_err(|source| db_error("read index schema version", source))?;
     if version > INDEX_SCHEMA_VERSION {
         return Err(Error::InvalidInput {
-            message: format!(
-                "index schema version {version} is newer than supported version {INDEX_SCHEMA_VERSION}"
-            ),
+            message: format!("index schema version {version} is newer than supported version {INDEX_SCHEMA_VERSION}"),
         });
     }
     let transaction = connection
@@ -129,10 +127,7 @@ pub(super) fn migrate(connection: &Connection) -> crate::Result<()> {
         .map_err(|source| db_error("commit index migration", source))
 }
 
-pub(super) fn delete_projection_tx(
-    transaction: &Transaction<'_>,
-    record_id: &str,
-) -> crate::Result<()> {
+pub(super) fn delete_projection_tx(transaction: &Transaction<'_>, record_id: &str) -> crate::Result<()> {
     transaction
         .execute(
             "DELETE FROM chunks_fts WHERE rowid IN (SELECT rowid FROM chunks WHERE record_id = ?1)",
@@ -140,10 +135,7 @@ pub(super) fn delete_projection_tx(
         )
         .map_err(|source| db_error("remove FTS chunks", source))?;
     transaction
-        .execute(
-            "DELETE FROM records WHERE record_id = ?1",
-            params![record_id],
-        )
+        .execute("DELETE FROM records WHERE record_id = ?1", params![record_id])
         .map_err(|source| db_error("remove projected record", source))?;
     Ok(())
 }

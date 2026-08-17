@@ -5,9 +5,7 @@ use std::sync::Mutex;
 
 use fs2::FileExt;
 
-use fastembed::{
-    InitOptionsUserDefined, Pooling, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel,
-};
+use fastembed::{InitOptionsUserDefined, Pooling, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel};
 use serde::{Deserialize, Serialize};
 use tokenizers::Tokenizer;
 
@@ -16,7 +14,8 @@ use crate::{Error, Result, StorePaths};
 pub const MODEL_MANIFEST_VERSION: u32 = 1;
 pub const DEFAULT_MODEL_VERSION: &str =
     "fastembed-5.13.4/Qdrant/all-MiniLM-L6-v2-onnx@5f1b8cd78bc4fb444dd171e59b18f3a3af89a079";
-const DEFAULT_MODEL_BASE_URL: &str = "https://huggingface.co/Qdrant/all-MiniLM-L6-v2-onnx/resolve/5f1b8cd78bc4fb444dd171e59b18f3a3af89a079";
+const DEFAULT_MODEL_BASE_URL: &str =
+    "https://huggingface.co/Qdrant/all-MiniLM-L6-v2-onnx/resolve/5f1b8cd78bc4fb444dd171e59b18f3a3af89a079";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -175,11 +174,7 @@ impl ModelManifest {
             "special_tokens_map.json",
             "tokenizer_config.json",
         ] {
-            if !self
-                .artifacts
-                .iter()
-                .any(|artifact| artifact.path == required)
-            {
+            if !self.artifacts.iter().any(|artifact| artifact.path == required) {
                 return Err(Error::embedding(
                     "validate model manifest",
                     format!("manifest is missing required fastembed artifact {required}"),
@@ -194,14 +189,9 @@ impl ModelManifest {
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let contents = fs::read_to_string(path)
-            .map_err(|source| Error::io("read the model manifest", source))?;
-        let manifest: Self = toml::from_str(&contents).map_err(|source| {
-            Error::embedding(
-                "parse model manifest",
-                format!("{}: {source}", path.display()),
-            )
-        })?;
+        let contents = fs::read_to_string(path).map_err(|source| Error::io("read the model manifest", source))?;
+        let manifest: Self = toml::from_str(&contents)
+            .map_err(|source| Error::embedding("parse model manifest", format!("{}: {source}", path.display())))?;
         manifest.validate()?;
         Ok(manifest)
     }
@@ -220,8 +210,7 @@ impl ModelManifest {
         self.validate()
             .map_err(|error| model_setup_error(root, error.to_string()))?;
         with_model_cache_lock(root, true, || {
-            fs::create_dir_all(root)
-                .map_err(|source| Error::io("create the model cache", source))?;
+            fs::create_dir_all(root).map_err(|source| Error::io("create the model cache", source))?;
             for artifact in &self.artifacts {
                 acquire_file(root.join(&artifact.path), &artifact.url, &artifact.blake3)?;
             }
@@ -282,18 +271,12 @@ impl LocalEmbedder {
             special_tokens_map_file: read_model_file(&files.special_tokens_map)?,
             tokenizer_config_file: read_model_file(&files.tokenizer_config)?,
         };
-        let model = UserDefinedEmbeddingModel::new(read_model_file(&files.model)?, tokenizer_files)
-            .with_pooling(Pooling::Mean);
+        let model =
+            UserDefinedEmbeddingModel::new(read_model_file(&files.model)?, tokenizer_files).with_pooling(Pooling::Mean);
         let options = InitOptionsUserDefined::new().with_max_length(manifest.max_tokens);
-        let model = TextEmbedding::try_new_from_user_defined(model, options).map_err(|error| {
-            Error::embedding("load verified fastembed model", error.to_string())
-        })?;
-        Ok(Self {
-            manifest,
-            checksum,
-            tokenizer,
-            model: Mutex::new(model),
-        })
+        let model = TextEmbedding::try_new_from_user_defined(model, options)
+            .map_err(|error| Error::embedding("load verified fastembed model", error.to_string()))?;
+        Ok(Self { manifest, checksum, tokenizer, model: Mutex::new(model) })
     }
 }
 
@@ -334,9 +317,10 @@ impl Embedder for LocalEmbedder {
         let embeddings = model
             .embed([text], Some(1))
             .map_err(|error| Error::embedding("run fastembed model", error.to_string()))?;
-        let values = embeddings.into_iter().next().ok_or_else(|| {
-            Error::embedding("read fastembed output", "model returned no embedding")
-        })?;
+        let values = embeddings
+            .into_iter()
+            .next()
+            .ok_or_else(|| Error::embedding("read fastembed output", "model returned no embedding"))?;
         if values.len() != self.manifest.dimension {
             return Err(Error::embedding(
                 "validate fastembed output",
@@ -368,11 +352,7 @@ impl DeterministicEmbedder {
         }
         let version = version.into();
         let checksum = blake3::hash(version.as_bytes()).to_hex().to_string();
-        Ok(Self {
-            version,
-            checksum,
-            dimension,
-        })
+        Ok(Self { version, checksum, dimension })
     }
 }
 
@@ -497,11 +477,7 @@ fn model_setup_error(cache: &Path, details: impl Into<String>) -> Error {
     )
 }
 
-fn with_model_cache_lock<T>(
-    root: &Path,
-    exclusive: bool,
-    operation: impl FnOnce() -> Result<T>,
-) -> Result<T> {
+fn with_model_cache_lock<T>(root: &Path, exclusive: bool, operation: impl FnOnce() -> Result<T>) -> Result<T> {
     fs::create_dir_all(root).map_err(|source| Error::io("create the model cache", source))?;
     let lock_path = root.join(".lock");
     let lock = OpenOptions::new()
@@ -512,14 +488,12 @@ fn with_model_cache_lock<T>(
         .open(&lock_path)
         .map_err(|source| Error::io("open the model cache lock", source))?;
     if exclusive {
-        FileExt::lock_exclusive(&lock)
-            .map_err(|source| Error::io("lock the model cache", source))?;
+        FileExt::lock_exclusive(&lock).map_err(|source| Error::io("lock the model cache", source))?;
     } else {
         FileExt::lock_shared(&lock).map_err(|source| Error::io("lock the model cache", source))?;
     }
     let result = operation();
-    let unlock_result =
-        FileExt::unlock(&lock).map_err(|source| Error::io("unlock the model cache", source));
+    let unlock_result = FileExt::unlock(&lock).map_err(|source| Error::io("unlock the model cache", source));
     match result {
         Ok(value) => unlock_result.map(|()| value),
         Err(error) => {
@@ -564,10 +538,7 @@ fn verify_checksum(path: &Path, expected: &str) -> Result<()> {
     if actual != expected {
         return Err(Error::embedding(
             "verify model artifact",
-            format!(
-                "{} has checksum {actual}, expected {expected}",
-                path.display()
-            ),
+            format!("{} has checksum {actual}, expected {expected}", path.display()),
         ));
     }
     Ok(())
@@ -593,13 +564,10 @@ fn acquire_file(path: PathBuf, url: &str, expected: &str) -> Result<()> {
         return Ok(());
     }
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|source| Error::io("create the model artifact directory", source))?;
+        fs::create_dir_all(parent).map_err(|source| Error::io("create the model artifact directory", source))?;
     }
     let partial = PathBuf::from(format!("{}.part", path.display()));
-    let existing = fs::metadata(&partial)
-        .map(|metadata| metadata.len())
-        .unwrap_or(0);
+    let existing = fs::metadata(&partial).map(|metadata| metadata.len()).unwrap_or(0);
     let mut request = ureq::get(url);
     if existing > 0 {
         request = request.header("Range", &format!("bytes={existing}-"));
@@ -622,8 +590,7 @@ fn acquire_file(path: PathBuf, url: &str, expected: &str) -> Result<()> {
     }
     .map_err(|source| Error::io("open model download", source))?;
     let (_, body) = response.into_parts();
-    io::copy(&mut body.into_reader(), &mut file)
-        .map_err(|source| Error::io("write model download", source))?;
+    io::copy(&mut body.into_reader(), &mut file).map_err(|source| Error::io("write model download", source))?;
     file.sync_all()
         .map_err(|source| Error::io("sync model download", source))?;
     if let Err(error) = verify_checksum(&partial, expected) {
@@ -631,11 +598,9 @@ fn acquire_file(path: PathBuf, url: &str, expected: &str) -> Result<()> {
         return Err(error);
     }
     if path.exists() {
-        fs::remove_file(&path)
-            .map_err(|source| Error::io("replace corrupt model artifact", source))?;
+        fs::remove_file(&path).map_err(|source| Error::io("replace corrupt model artifact", source))?;
     }
-    fs::rename(&partial, &path)
-        .map_err(|source| Error::io("install verified model artifact", source))?;
+    fs::rename(&partial, &path).map_err(|source| Error::io("install verified model artifact", source))?;
     Ok(())
 }
 
@@ -696,8 +661,7 @@ mod tests {
 
     #[test]
     fn missing_model_errors_name_cache_and_repair_command() {
-        let root =
-            std::env::temp_dir().join(format!("stormbuffer-model-error-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("stormbuffer-model-error-{}", std::process::id()));
         let paths = StorePaths {
             scope: crate::StoreScope::Global,
             root: root.clone(),

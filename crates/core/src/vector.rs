@@ -39,12 +39,7 @@ pub struct VectorMetadata {
 
 pub trait VectorIndex {
     fn metadata(&self) -> &VectorMetadata;
-    fn search(
-        &self,
-        embedding: &Embedding,
-        filter: &VectorFilter,
-        limit: usize,
-    ) -> Result<Vec<VectorHit>>;
+    fn search(&self, embedding: &Embedding, filter: &VectorFilter, limit: usize) -> Result<Vec<VectorHit>>;
 }
 
 pub struct SqliteVectorIndex<'a> {
@@ -77,18 +72,12 @@ impl<'a> SqliteVectorIndex<'a> {
             return Ok(None);
         };
         validate_table_name(&metadata.table_name)?;
-        Ok(Some(Self {
-            connection,
-            metadata,
-        }))
+        Ok(Some(Self { connection, metadata }))
     }
 
     pub(crate) fn rebuild(
-        connection: &mut Connection,
-        embedder: &dyn Embedder,
-        documents: &[VectorDocument],
-        canonical_fingerprint: String,
-        projection_fingerprint: String,
+        connection: &mut Connection, embedder: &dyn Embedder, documents: &[VectorDocument],
+        canonical_fingerprint: String, projection_fingerprint: String,
     ) -> Result<VectorMetadata> {
         register_sqlite_vec();
         let dimension = embedder.dimension();
@@ -114,11 +103,9 @@ impl<'a> SqliteVectorIndex<'a> {
         }
 
         let index_id: i64 = connection
-            .query_row(
-                "SELECT COALESCE(MAX(index_id), 0) + 1 FROM vector_indexes",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT COALESCE(MAX(index_id), 0) + 1 FROM vector_indexes", [], |row| {
+                row.get(0)
+            })
             .map_err(|source| db_error("allocate vector index version", source))?;
         let table_name = format!("vectors_{index_id}");
         let metadata = VectorMetadata {
@@ -169,17 +156,12 @@ impl<'a> SqliteVectorIndex<'a> {
                     .map_err(|source| db_error("backfill vector table", source))?;
             }
             let count: i64 = connection
-                .query_row(&format!("SELECT count(*) FROM {quoted}"), [], |row| {
-                    row.get(0)
-                })
+                .query_row(&format!("SELECT count(*) FROM {quoted}"), [], |row| row.get(0))
                 .map_err(|source| db_error("validate vector backfill", source))?;
             if count != documents.len() as i64 {
                 return Err(Error::embedding(
                     "validate vector backfill",
-                    format!(
-                        "vector table contains {count} rows, expected {}",
-                        documents.len()
-                    ),
+                    format!("vector table contains {count} rows, expected {}", documents.len()),
                 ));
             }
             let transaction = connection
@@ -201,10 +183,7 @@ impl<'a> SqliteVectorIndex<'a> {
         })();
         if result.is_err() {
             let _ = connection.execute(&format!("DROP TABLE IF EXISTS {quoted}"), []);
-            let _ = connection.execute(
-                "DELETE FROM vector_indexes WHERE index_id = ?1",
-                params![index_id],
-            );
+            let _ = connection.execute("DELETE FROM vector_indexes WHERE index_id = ?1", params![index_id]);
         }
         result.map(|()| metadata)
     }
@@ -243,12 +222,7 @@ impl VectorIndex for SqliteVectorIndex<'_> {
         &self.metadata
     }
 
-    fn search(
-        &self,
-        embedding: &Embedding,
-        filter: &VectorFilter,
-        limit: usize,
-    ) -> Result<Vec<VectorHit>> {
+    fn search(&self, embedding: &Embedding, filter: &VectorFilter, limit: usize) -> Result<Vec<VectorHit>> {
         if embedding.dimension() != self.metadata.dimension {
             return Err(Error::embedding(
                 "search vector index",
@@ -311,9 +285,7 @@ impl VectorIndex for SqliteVectorIndex<'_> {
             let mut seen_chunks = HashSet::new();
             for row in rows {
                 let hit = row.map_err(|source| db_error("read vector search result", source))?;
-                if matches_filter(&hit, filter)
-                    && seen_chunks.insert((hit.record_id.clone(), hit.chunk_id.clone()))
-                {
+                if matches_filter(&hit, filter) && seen_chunks.insert((hit.record_id.clone(), hit.chunk_id.clone())) {
                     hits.push(hit);
                     if hits.len() >= requested {
                         break;
@@ -375,22 +347,12 @@ fn matches_filter(hit: &VectorHit, filter: &VectorFilter) -> bool {
 }
 
 fn vector_blob(values: &[f32]) -> Vec<u8> {
-    values
-        .iter()
-        .flat_map(|value| value.to_le_bytes())
-        .collect()
+    values.iter().flat_map(|value| value.to_le_bytes()).collect()
 }
 
 fn validate_table_name(name: &str) -> Result<()> {
-    if name.is_empty()
-        || !name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-    {
-        return Err(Error::embedding(
-            "read vector metadata",
-            "vector table name is invalid",
-        ));
+    if name.is_empty() || !name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_') {
+        return Err(Error::embedding("read vector metadata", "vector table name is invalid"));
     }
     Ok(())
 }

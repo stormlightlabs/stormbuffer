@@ -1,8 +1,7 @@
 use super::chunking::{retrieval_text, split_embedding_text};
 use super::*;
 use crate::{
-    Access, Embedder, Embedding, Record, RecordId, RecordKind, RecordStatus, Scope, Source,
-    SourceKind, Timestamp,
+    Access, Embedder, Embedding, Record, RecordId, RecordKind, RecordStatus, Scope, Source, SourceKind, Timestamp,
 };
 
 struct TokenAwareEmbedder;
@@ -107,8 +106,7 @@ fn embedding_chunks_bound_tokenizer_heavy_structural_markdown() {
     );
     assert!(embedder.token_count(&original_input).expect("count tokens") > embedder.max_tokens());
 
-    let chunks =
-        split_embedding_text(&original_input, &embedder).expect("split tokenizer-heavy record");
+    let chunks = split_embedding_text(&original_input, &embedder).expect("split tokenizer-heavy record");
     assert!(chunks.len() > 1);
     for input in chunks {
         assert!(
@@ -120,10 +118,7 @@ fn embedding_chunks_bound_tokenizer_heavy_structural_markdown() {
 
 #[test]
 fn migration_from_version_one_creates_fts() {
-    let path = std::env::temp_dir().join(format!(
-        "stormbuffer-migration-{}.sqlite3",
-        std::process::id()
-    ));
+    let path = std::env::temp_dir().join(format!("stormbuffer-migration-{}.sqlite3", std::process::id()));
     let _ = fs::remove_file(&path);
     let connection = Connection::open(&path).expect("open database");
     connection.execute_batch(

@@ -41,18 +41,14 @@ fn main() -> ExitCode {
             }
             Some("--local") => scope = Some(StoreScope::Local),
             Some("--allow-candidate-writes") if config.write_policy != McpWritePolicy::ReadOnly => {
-                eprintln!(
-                    "stormbuffer-mcp: select only one of --allow-candidate-writes or --allow-writes"
-                );
+                eprintln!("stormbuffer-mcp: select only one of --allow-candidate-writes or --allow-writes");
                 return ExitCode::from(2);
             }
             Some("--allow-candidate-writes") => {
                 config.write_policy = McpWritePolicy::CandidateOnly;
             }
             Some("--allow-writes") if config.write_policy != McpWritePolicy::ReadOnly => {
-                eprintln!(
-                    "stormbuffer-mcp: select only one of --allow-candidate-writes or --allow-writes"
-                );
+                eprintln!("stormbuffer-mcp: select only one of --allow-candidate-writes or --allow-writes");
                 return ExitCode::from(2);
             }
             Some("--allow-writes") => config.write_policy = McpWritePolicy::All,

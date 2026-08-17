@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Error, RecordError, Result};
 use crate::record::{
-    Access, RECORD_FORMAT_VERSION, Record, RecordId, RecordKind, RecordStatus, Scope, Source,
-    SourceKind, Timestamp,
+    Access, RECORD_FORMAT_VERSION, Record, RecordId, RecordKind, RecordStatus, Scope, Source, SourceKind, Timestamp,
 };
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -51,10 +50,7 @@ pub fn parse_markdown(path: impl AsRef<Path>, markdown: &str) -> Result<Record> 
     if raw.format_version != RECORD_FORMAT_VERSION {
         return Err(Error::invalid_record_at(
             path,
-            RecordError::UnsupportedFormatVersion {
-                found: raw.format_version,
-                expected: RECORD_FORMAT_VERSION,
-            },
+            RecordError::UnsupportedFormatVersion { found: raw.format_version, expected: RECORD_FORMAT_VERSION },
         ));
     }
 
@@ -73,14 +69,7 @@ pub fn parse_markdown(path: impl AsRef<Path>, markdown: &str) -> Result<Record> 
             .supersedes
             .iter()
             .enumerate()
-            .map(|(index, value)| {
-                parse_field(
-                    path,
-                    &format!("supersedes[{index}]"),
-                    value,
-                    RecordId::parse,
-                )
-            })
+            .map(|(index, value)| parse_field(path, &format!("supersedes[{index}]"), value, RecordId::parse))
             .collect::<Result<Vec<_>>>()?,
         sources: raw
             .sources
@@ -100,12 +89,7 @@ pub fn parse_markdown(path: impl AsRef<Path>, markdown: &str) -> Result<Record> 
                         .observed_at
                         .as_deref()
                         .map(|value| {
-                            parse_field(
-                                path,
-                                &format!("sources[{index}].observed_at"),
-                                value,
-                                Timestamp::parse,
-                            )
+                            parse_field(path, &format!("sources[{index}].observed_at"), value, Timestamp::parse)
                         })
                         .transpose()?,
                     revision: source.revision,
@@ -148,27 +132,16 @@ pub fn render_markdown(record: &Record) -> Result<String> {
             })
             .collect(),
     };
-    let serialized = toml::to_string_pretty(&frontmatter).map_err(|source| {
-        Error::invalid_record_at(Path::new("record.md"), RecordError::TomlRender { source })
-    })?;
+    let serialized = toml::to_string_pretty(&frontmatter)
+        .map_err(|source| Error::invalid_record_at(Path::new("record.md"), RecordError::TomlRender { source }))?;
     Ok(format!("+++\n{serialized}+++\n\n{}", record.body))
 }
 
 fn parse_field<T>(
-    path: &Path,
-    field: &str,
-    value: &str,
-    parse: impl FnOnce(&str) -> std::result::Result<T, String>,
+    path: &Path, field: &str, value: &str, parse: impl FnOnce(&str) -> std::result::Result<T, String>,
 ) -> Result<T> {
-    parse(value).map_err(|message| {
-        Error::invalid_record_at(
-            path,
-            RecordError::Validation {
-                field: field.to_owned(),
-                message,
-            },
-        )
-    })
+    parse(value)
+        .map_err(|message| Error::invalid_record_at(path, RecordError::Validation { field: field.to_owned(), message }))
 }
 
 fn with_path(path: &Path, error: Error) -> Error {
@@ -207,11 +180,7 @@ fn split_markdown(markdown: &str) -> std::result::Result<(&str, &str), String> {
             continue;
         };
 
-        let frontmatter_end = if frontmatter_and_body[..newline].ends_with('\r') {
-            newline - 1
-        } else {
-            newline
-        };
+        let frontmatter_end = if frontmatter_and_body[..newline].ends_with('\r') { newline - 1 } else { newline };
         let frontmatter = &frontmatter_and_body[..frontmatter_end];
         let after_closing = &after_marker[marker_line_ending..];
         let blank_line_ending = if after_closing.starts_with("\r\n") {

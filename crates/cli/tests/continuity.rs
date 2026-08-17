@@ -45,11 +45,7 @@ fn run(root: &Path, arguments: &[&str], input: Option<&str>) -> Output {
 }
 
 fn success(output: Output) -> Vec<u8> {
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     output.stdout
 }
 
@@ -84,9 +80,7 @@ fn project_checkpoint_supports_a_later_session() {
     ));
     let proposal: serde_json::Value = serde_json::from_slice(&proposal).expect("parse proposal");
     assert_eq!(proposal["result"]["outcome"], "requires_approval");
-    let record_id = proposal["result"]["record_id"]
-        .as_str()
-        .expect("checkpoint ID");
+    let record_id = proposal["result"]["record_id"].as_str().expect("checkpoint ID");
     success(run(&root, &["--project", "approve", record_id], None));
 
     let recall_request = serde_json::json!({
@@ -99,15 +93,9 @@ fn project_checkpoint_supports_a_later_session() {
         &["--project", "invoke", "context"],
         Some(&recall_request.to_string()),
     ));
-    let recalled: serde_json::Value =
-        serde_json::from_slice(&recalled).expect("parse recalled context");
-    let blocks = recalled["result"]["blocks"]
-        .as_array()
-        .expect("context blocks");
-    let checkpoint_blocks: Vec<_> = blocks
-        .iter()
-        .filter(|block| block["record_id"] == record_id)
-        .collect();
+    let recalled: serde_json::Value = serde_json::from_slice(&recalled).expect("parse recalled context");
+    let blocks = recalled["result"]["blocks"].as_array().expect("context blocks");
+    let checkpoint_blocks: Vec<_> = blocks.iter().filter(|block| block["record_id"] == record_id).collect();
     assert!(!checkpoint_blocks.is_empty());
     assert!(checkpoint_blocks.iter().all(|block| {
         block["kind"] == "checkpoint"
@@ -130,8 +118,7 @@ fn project_checkpoint_supports_a_later_session() {
         &["--project", "invoke", "get"],
         Some(&get_request.to_string()),
     ));
-    let resumed: serde_json::Value =
-        serde_json::from_slice(&resumed).expect("parse resumed checkpoint");
+    let resumed: serde_json::Value = serde_json::from_slice(&resumed).expect("parse resumed checkpoint");
     assert_eq!(resumed["result"]["body"], BODY);
     assert_eq!(resumed["result"]["sources"][0], request["source"]);
 }

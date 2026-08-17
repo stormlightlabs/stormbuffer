@@ -31,13 +31,8 @@ struct AppState {
 
 impl AppState {
     fn new(paths: core::StorePaths) -> AnyhowResult<Self> {
-        let record_scope =
-            core::record_scope(&paths).context("could not read the store identity")?;
-        Ok(Self {
-            repository: Arc::new(RecordRepository::new(paths.clone())),
-            paths,
-            record_scope,
-        })
+        let record_scope = core::record_scope(&paths).context("could not read the store identity")?;
+        Ok(Self { repository: Arc::new(RecordRepository::new(paths.clone())), paths, record_scope })
     }
 }
 
@@ -75,9 +70,7 @@ pub(super) fn run(scope: StoreScope, arguments: ServeArgs, output: &Echo) -> i32
 
 fn serve_address(bind: IpAddr, port: u16) -> AnyhowResult<SocketAddr> {
     if !bind.is_loopback() {
-        bail!(
-            "serve only accepts loopback addresses; remote binding requires authentication and a threat model"
-        );
+        bail!("serve only accepts loopback addresses; remote binding requires authentication and a threat model");
     }
     Ok(SocketAddr::new(bind, port))
 }
@@ -216,10 +209,7 @@ struct SourceInput {
 
 impl RecordInput {
     fn into_record(
-        self,
-        id: core::RecordId,
-        scope: core::Scope,
-        created_at: core::Timestamp,
+        self, id: core::RecordId, scope: core::Scope, created_at: core::Timestamp,
     ) -> Result<core::Record, ApiError> {
         let kind = self
             .kind
@@ -455,8 +445,7 @@ impl ApiError {
         Self {
             status: StatusCode::PRECONDITION_REQUIRED,
             code: "precondition_required",
-            message: "supply the current ETag in an If-Match header before editing a record"
-                .to_owned(),
+            message: "supply the current ETag in an If-Match header before editing a record".to_owned(),
             etag: None,
         }
     }
@@ -465,8 +454,7 @@ impl ApiError {
         Self {
             status: StatusCode::PRECONDITION_FAILED,
             code: "revision_conflict",
-            message: "record changed while it was being edited; reload it before trying again"
-                .to_owned(),
+            message: "record changed while it was being edited; reload it before trying again".to_owned(),
             etag,
         }
     }
@@ -476,18 +464,10 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let mut response = (
             self.status,
-            Json(ErrorResponse {
-                error: ErrorDetail {
-                    code: self.code.to_owned(),
-                    message: self.message,
-                },
-            }),
+            Json(ErrorResponse { error: ErrorDetail { code: self.code.to_owned(), message: self.message } }),
         )
             .into_response();
-        if let Some(etag) = self
-            .etag
-            .and_then(|value| HeaderValue::from_str(&value).ok())
-        {
+        if let Some(etag) = self.etag.and_then(|value| HeaderValue::from_str(&value).ok()) {
             response.headers_mut().insert(header::ETAG, etag);
         }
         response
@@ -496,21 +476,16 @@ impl IntoResponse for ApiError {
 
 fn core_error(error: core::Error) -> ApiError {
     match error {
-        core::Error::Repository {
-            source: RepositoryError::NotFound { .. },
-        } => ApiError {
+        core::Error::Repository { source: RepositoryError::NotFound { .. } } => ApiError {
             status: StatusCode::NOT_FOUND,
             code: "not_found",
             message: "record was not found".to_owned(),
             etag: None,
         },
-        core::Error::Repository {
-            source: RepositoryError::ConcurrentModification { .. },
-        } => ApiError::revision_conflict(None),
-        core::Error::Repository {
-            source: RepositoryError::MutationBusy { .. },
+        core::Error::Repository { source: RepositoryError::ConcurrentModification { .. } } => {
+            ApiError::revision_conflict(None)
         }
-        | core::Error::IndexBusy => ApiError {
+        core::Error::Repository { source: RepositoryError::MutationBusy { .. } } | core::Error::IndexBusy => ApiError {
             status: StatusCode::CONFLICT,
             code: "store_busy",
             message: "the store is busy; retry the operation".to_owned(),
@@ -603,8 +578,7 @@ fn record_response(stored: core::StoredRecord) -> Response {
     tag = "records"
 )]
 async fn list_records(
-    State(state): State<AppState>,
-    Query(query): Query<ListRecordsQuery>,
+    State(state): State<AppState>, Query(query): Query<ListRecordsQuery>,
 ) -> Result<Json<Vec<RecordResponse>>, ApiError> {
     let repository = state.repository.clone();
     let records = blocking(move || repository.list(query.all)).await?;
@@ -628,8 +602,7 @@ async fn list_records(
     tag = "records"
 )]
 async fn create_record(
-    State(state): State<AppState>,
-    Json(input): Json<RecordInput>,
+    State(state): State<AppState>, Json(input): Json<RecordInput>,
 ) -> Result<(StatusCode, Json<ProposalResponse>), ApiError> {
     let record = input.into_record(
         core::RecordId::new_v7(),
@@ -656,10 +629,7 @@ async fn create_record(
     ),
     tag = "records"
 )]
-async fn get_record(
-    State(state): State<AppState>,
-    Path(raw_id): Path<String>,
-) -> Result<Response, ApiError> {
+async fn get_record(State(state): State<AppState>, Path(raw_id): Path<String>) -> Result<Response, ApiError> {
     let id = parse_id(&raw_id)?;
     let repository = state.repository.clone();
     let stored = blocking(move || repository.find(id)).await?;
@@ -679,10 +649,7 @@ async fn get_record(
     tag = "records"
 )]
 async fn replace_record(
-    State(state): State<AppState>,
-    Path(raw_id): Path<String>,
-    headers: HeaderMap,
-    Json(input): Json<RecordInput>,
+    State(state): State<AppState>, Path(raw_id): Path<String>, headers: HeaderMap, Json(input): Json<RecordInput>,
 ) -> Result<Response, ApiError> {
     let id = parse_id(&raw_id)?;
     let expected_etag = if_match(&headers)?;
@@ -692,11 +659,7 @@ async fn replace_record(
     if expected_etag != current_etag {
         return Err(ApiError::revision_conflict(Some(current_etag)));
     }
-    let replacement = input.into_record(
-        id,
-        current.record().scope.clone(),
-        current.record().created_at,
-    )?;
+    let replacement = input.into_record(id, current.record().scope.clone(), current.record().created_at)?;
     let repository = state.repository.clone();
     match blocking(move || repository.replace_if_unchanged(&current, replacement)).await {
         Ok(stored) => Ok(record_response(stored)),
@@ -719,8 +682,7 @@ async fn replace_record(
     tag = "lifecycle"
 )]
 async fn approve_record(
-    State(state): State<AppState>,
-    Path(raw_id): Path<String>,
+    State(state): State<AppState>, Path(raw_id): Path<String>,
 ) -> Result<Json<ProposalResponse>, ApiError> {
     let id = parse_id(&raw_id)?;
     let repository = state.repository.clone();
@@ -736,8 +698,7 @@ async fn approve_record(
     tag = "lifecycle"
 )]
 async fn reject_record(
-    State(state): State<AppState>,
-    Path(raw_id): Path<String>,
+    State(state): State<AppState>, Path(raw_id): Path<String>,
 ) -> Result<Json<ProposalResponse>, ApiError> {
     let id = parse_id(&raw_id)?;
     let repository = state.repository.clone();
@@ -752,10 +713,7 @@ async fn reject_record(
     responses((status = 200, description = "Archived canonical record", body = RecordResponse)),
     tag = "lifecycle"
 )]
-async fn archive_record(
-    State(state): State<AppState>,
-    Path(raw_id): Path<String>,
-) -> Result<Response, ApiError> {
+async fn archive_record(State(state): State<AppState>, Path(raw_id): Path<String>) -> Result<Response, ApiError> {
     let id = parse_id(&raw_id)?;
     let repository = state.repository.clone();
     let stored = blocking(move || repository.archive(id)).await?;
@@ -769,10 +727,7 @@ async fn archive_record(
     responses((status = 200, description = "Restored canonical record", body = RecordResponse)),
     tag = "lifecycle"
 )]
-async fn restore_record(
-    State(state): State<AppState>,
-    Path(raw_id): Path<String>,
-) -> Result<Response, ApiError> {
+async fn restore_record(State(state): State<AppState>, Path(raw_id): Path<String>) -> Result<Response, ApiError> {
     let id = parse_id(&raw_id)?;
     let repository = state.repository.clone();
     let stored = blocking(move || repository.restore(id)).await?;
@@ -787,14 +742,10 @@ async fn restore_record(
     tag = "search"
 )]
 async fn search_records(
-    State(state): State<AppState>,
-    Query(query): Query<SearchQuery>,
+    State(state): State<AppState>, Query(query): Query<SearchQuery>,
 ) -> Result<Json<Vec<SearchResponse>>, ApiError> {
     if query.query.trim().is_empty() {
-        return Err(ApiError::validation(
-            "query",
-            "must not be empty".to_owned(),
-        ));
+        return Err(ApiError::validation("query", "must not be empty".to_owned()));
     }
     let paths = state.paths.clone();
     let options = core::SearchOptions {
@@ -915,15 +866,9 @@ mod tests {
 
     async fn request(address: SocketAddr, request: &str) -> String {
         let mut stream = TcpStream::connect(address).await.expect("connect to API");
-        stream
-            .write_all(request.as_bytes())
-            .await
-            .expect("send API request");
+        stream.write_all(request.as_bytes()).await.expect("send API request");
         let mut response = String::new();
-        stream
-            .read_to_string(&mut response)
-            .await
-            .expect("read API response");
+        stream.read_to_string(&mut response).await.expect("read API response");
         response
     }
 
@@ -945,9 +890,7 @@ mod tests {
     #[tokio::test]
     async fn service_manager_shutdown_stops_the_listener_after_serving_requests() {
         let (state, paths) = fixture_state("graceful-shutdown");
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind test listener");
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind test listener");
         let address = listener.local_addr().expect("test listener address");
         let (shutdown, shutdown_signal) = oneshot::channel();
         let task = tokio::spawn(serve_listener(listener, state, async move {
@@ -1023,13 +966,7 @@ mod tests {
         .await
         .expect("core validation should produce a structured response");
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-        assert!(
-            state
-                .repository
-                .list(true)
-                .expect("list fixture records")
-                .is_empty()
-        );
+        assert!(state.repository.list(true).expect("list fixture records").is_empty());
         fs::remove_dir_all(paths.root).expect("remove fixture store");
     }
 
@@ -1063,11 +1000,7 @@ mod tests {
             core::RecordStatus::Active
         );
 
-        let mut candidate = repository
-            .find(active_id)
-            .expect("read active record")
-            .record()
-            .clone();
+        let mut candidate = repository.find(active_id).expect("read active record").record().clone();
         candidate.id = core::RecordId::new_v7();
         candidate.title = "Candidate server fixture".to_owned();
         candidate.body = "A candidate needs review.".to_owned();
@@ -1137,10 +1070,7 @@ mod tests {
         let response = replace_record(
             State(state),
             Path(id.to_string()),
-            HeaderMap::from_iter([(
-                header::IF_MATCH,
-                HeaderValue::from_str(&stale_etag).unwrap(),
-            )]),
+            HeaderMap::from_iter([(header::IF_MATCH, HeaderValue::from_str(&stale_etag).unwrap())]),
             Json(RecordInput {
                 title: "Server fixture".to_owned(),
                 kind: "fact".to_owned(),
@@ -1166,11 +1096,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
         assert!(response.headers().contains_key(header::ETAG));
         assert_eq!(
-            repository
-                .find(id)
-                .expect("read external update")
-                .record()
-                .body,
+            repository.find(id).expect("read external update").record().body,
             "Changed outside the server."
         );
         fs::remove_dir_all(paths.root).expect("remove fixture store");

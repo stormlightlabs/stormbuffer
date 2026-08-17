@@ -11,13 +11,12 @@ mod relations;
 mod usefulness;
 
 pub use capture_policy::{
-    CaptureDisposition, CaptureEvent, CapturePolicyReport, CaptureReason,
-    run_synthetic_capture_policy_evaluation,
+    CaptureDisposition, CaptureEvent, CapturePolicyReport, CaptureReason, run_synthetic_capture_policy_evaluation,
 };
 pub use relations::{
-    AdvisoryRelation, ConfidenceBand, ConservativeRelationAnalyzer, LocalRelationAnalyzer,
-    RelationAnalysisReport, RelationHeuristicReport, RelationInference, RelationRecord,
-    run_relation_analysis_evaluation, run_relation_heuristic_evaluation,
+    AdvisoryRelation, ConfidenceBand, ConservativeRelationAnalyzer, LocalRelationAnalyzer, RelationAnalysisReport,
+    RelationHeuristicReport, RelationInference, RelationRecord, run_relation_analysis_evaluation,
+    run_relation_heuristic_evaluation,
 };
 pub use usefulness::{
     ProposalOutcomeRates, UsefulnessBreakdown, UsefulnessComparisonReport, UsefulnessReport,
@@ -25,11 +24,10 @@ pub use usefulness::{
 };
 
 use crate::{
-    Access, AdvisoryRelationProjection, ContextOptions, DeterministicEmbedder, Embedder,
-    LocalEmbedder, PlatformDirs, Record, RecordId, RecordKind, RecordStatus, RetrievalMode, Scope,
-    SearchOptions, Source, SourceKind, StoreInitMode, StorePaths, StoreScope, Timestamp,
-    context_stores, context_stores_with_embedder, ensure_default_model, initialize_store,
-    rebuild_vector_index, record_scope, render_markdown, replace_advisory_relation_projection,
+    Access, AdvisoryRelationProjection, ContextOptions, DeterministicEmbedder, Embedder, LocalEmbedder, PlatformDirs,
+    Record, RecordId, RecordKind, RecordStatus, RetrievalMode, Scope, SearchOptions, Source, SourceKind, StoreInitMode,
+    StorePaths, StoreScope, Timestamp, context_stores, context_stores_with_embedder, ensure_default_model,
+    initialize_store, rebuild_vector_index, record_scope, render_markdown, replace_advisory_relation_projection,
     search_stores,
 };
 
@@ -112,18 +110,11 @@ impl EvaluationStores {
                 root: store_root,
             };
             initialize_store(&store_paths, StoreInitMode::Default)?;
-            scopes.insert(
-                fixture_scope.to_owned(),
-                record_scope(&store_paths)?.to_string(),
-            );
+            scopes.insert(fixture_scope.to_owned(), record_scope(&store_paths)?.to_string());
             store_by_scope.insert(fixture_scope.to_owned(), paths.len());
             paths.push(store_paths);
         }
-        Ok(Self {
-            paths,
-            scopes,
-            store_by_scope,
-        })
+        Ok(Self { paths, scopes, store_by_scope })
     }
 
     fn scope(&self, fixture_scope: &str) -> crate::Result<&str> {
@@ -143,8 +134,7 @@ impl EvaluationStores {
         fixture.scope = self.scope(&fixture.scope)?.to_owned();
         let record = fixture_record(&fixture)?;
         let path = store.records.join(format!("{}.md", record.id));
-        fs::write(&path, render_markdown(&record)?)
-            .map_err(|source| crate::Error::io(operation, source))
+        fs::write(&path, render_markdown(&record)?).map_err(|source| crate::Error::io(operation, source))
     }
 
     fn sync(&self) -> crate::Result<()> {
@@ -393,8 +383,7 @@ fn parse_answer_file(contents: &str) -> crate::Result<Vec<AnswerArtifact>> {
 
 #[allow(dead_code)]
 fn run_grounded_evaluation(
-    metadata: &EvaluationMetadata,
-    answers: &[AnswerArtifact],
+    metadata: &EvaluationMetadata, answers: &[AnswerArtifact],
 ) -> crate::Result<GroundedEvaluationReport> {
     let fixture: RagFixtureFile = serde_json::from_str(RAG_JSON)
         .map_err(|error| crate::Error::invalid_input(format!("invalid RAG fixture: {error}")))?;
@@ -411,25 +400,15 @@ fn run_grounded_evaluation(
     validate_rag_fixture(&fixture)?;
     let mut answer_by_question = HashMap::new();
     for answer in answers {
-        if answer_by_question
-            .insert(answer.question_id.clone(), answer)
-            .is_some()
-        {
+        if answer_by_question.insert(answer.question_id.clone(), answer).is_some() {
             return Err(crate::Error::invalid_input(format!(
                 "duplicate answer artifact for question {}",
                 answer.question_id
             )));
         }
     }
-    let question_ids: HashSet<_> = fixture
-        .questions
-        .iter()
-        .map(|question| question.id.as_str())
-        .collect();
-    if answer_by_question
-        .keys()
-        .any(|id| !question_ids.contains(id.as_str()))
-    {
+    let question_ids: HashSet<_> = fixture.questions.iter().map(|question| question.id.as_str()).collect();
+    if answer_by_question.keys().any(|id| !question_ids.contains(id.as_str())) {
         return Err(crate::Error::invalid_input(
             "answer artifact names an unknown RAG question",
         ));
@@ -462,11 +441,7 @@ fn run_grounded_evaluation(
                 ..SearchOptions::default()
             };
             let search_results = search_stores(&stores.paths, &question.query, search.clone())?;
-            let retrieved_record_ids = unique_ids(
-                search_results
-                    .iter()
-                    .map(|result| result.record_id.as_str()),
-            );
+            let retrieved_record_ids = unique_ids(search_results.iter().map(|result| result.record_id.as_str()));
             let expected: HashSet<_> = question
                 .expected_context_record_ids
                 .iter()
@@ -475,9 +450,7 @@ fn run_grounded_evaluation(
             let retrieved: HashSet<_> = retrieved_record_ids.iter().map(String::as_str).collect();
             let retrieval_passed = expected.is_subset(&retrieved)
                 && (expected.is_empty() == retrieved.is_empty())
-                && search_results
-                    .iter()
-                    .all(|result| result.scope == question.scope);
+                && search_results.iter().all(|result| result.scope == question.scope);
             if !retrieval_passed {
                 retrieval_failures.push(question.id.clone());
             }
@@ -485,21 +458,13 @@ fn run_grounded_evaluation(
             let context = context_stores(
                 &stores.paths,
                 &question.query,
-                ContextOptions {
-                    budget: question.budget,
-                    search,
-                },
+                ContextOptions { budget: question.budget, search },
             )?;
-            let context_record_ids =
-                unique_ids(context.blocks.iter().map(|block| block.record_id.as_str()));
+            let context_record_ids = unique_ids(context.blocks.iter().map(|block| block.record_id.as_str()));
             let context_precision = precision(&context_record_ids, &expected);
             let context_recall = recall(&context_record_ids, &expected);
-            let scope_leak = context
-                .blocks
-                .iter()
-                .any(|block| block.scope != question.scope);
-            let context_assembly_passed =
-                context_precision == 1.0 && context_recall == 1.0 && !scope_leak;
+            let scope_leak = context.blocks.iter().any(|block| block.scope != question.scope);
+            let context_assembly_passed = context_precision == 1.0 && context_recall == 1.0 && !scope_leak;
             if !context_assembly_passed {
                 context_failures.push(question.id.clone());
             }
@@ -550,9 +515,7 @@ fn run_grounded_evaluation(
             context_assembly: stage_report(context_failures),
             generation: stage_report(generation_failures),
             metrics,
-            passed: question_reports
-                .iter()
-                .all(|report| report.failure_stages.is_empty()),
+            passed: question_reports.iter().all(|report| report.failure_stages.is_empty()),
             questions: question_reports,
         })
     })();
@@ -562,15 +525,9 @@ fn run_grounded_evaluation(
 
 #[allow(dead_code)]
 fn validate_rag_fixture(fixture: &RagFixtureFile) -> crate::Result<()> {
-    let records: HashSet<_> = fixture
-        .records
-        .iter()
-        .map(|record| record.id.as_str())
-        .collect();
+    let records: HashSet<_> = fixture.records.iter().map(|record| record.id.as_str()).collect();
     if records.len() != fixture.records.len() {
-        return Err(crate::Error::invalid_input(
-            "RAG fixture contains duplicate record IDs",
-        ));
+        return Err(crate::Error::invalid_input("RAG fixture contains duplicate record IDs"));
     }
     let mut question_ids = HashSet::new();
     for question in &fixture.questions {
@@ -620,9 +577,7 @@ fn validate_rag_fixture(fixture: &RagFixtureFile) -> crate::Result<()> {
 #[allow(dead_code)]
 fn unique_ids<'a>(ids: impl Iterator<Item = &'a str>) -> Vec<String> {
     let mut seen = HashSet::new();
-    ids.filter(|id| seen.insert(*id))
-        .map(str::to_owned)
-        .collect()
+    ids.filter(|id| seen.insert(*id)).map(str::to_owned).collect()
 }
 
 #[allow(dead_code)]
@@ -630,11 +585,7 @@ fn precision(retrieved: &[String], expected: &HashSet<&str>) -> f64 {
     if retrieved.is_empty() {
         return if expected.is_empty() { 1.0 } else { 0.0 };
     }
-    retrieved
-        .iter()
-        .filter(|id| expected.contains(id.as_str()))
-        .count() as f64
-        / retrieved.len() as f64
+    retrieved.iter().filter(|id| expected.contains(id.as_str())).count() as f64 / retrieved.len() as f64
 }
 
 #[allow(dead_code)]
@@ -665,24 +616,14 @@ struct GroundedMetricTotals {
 
 #[allow(dead_code)]
 impl GroundedMetricTotals {
-    fn add(
-        &mut self,
-        context_precision: f64,
-        context_recall: f64,
-        generation: &GenerationResult,
-        scope_leak: bool,
-    ) {
+    fn add(&mut self, context_precision: f64, context_recall: f64, generation: &GenerationResult, scope_leak: bool) {
         self.context_precision += context_precision;
         self.context_recall += context_recall;
         self.claim_support += generation.claim_support;
         self.citation_precision += generation.citation_precision;
         self.citation_recall += generation.citation_recall;
         self.answer_relevance += generation.answer_relevance;
-        self.correct_abstention += if generation.correct_abstention {
-            1.0
-        } else {
-            0.0
-        };
+        self.correct_abstention += if generation.correct_abstention { 1.0 } else { 0.0 };
         self.scope_leakage += if scope_leak { 1.0 } else { 0.0 };
     }
 
@@ -713,9 +654,7 @@ struct GenerationResult {
 
 #[allow(dead_code)]
 fn evaluate_generation(
-    question: &RagQuestion,
-    answer: &AnswerArtifact,
-    context_record_ids: &[String],
+    question: &RagQuestion, answer: &AnswerArtifact, context_record_ids: &[String],
 ) -> GenerationResult {
     let expected_claims: HashMap<_, _> = question
         .expected_claims
@@ -727,11 +666,7 @@ fn evaluate_generation(
     let mut generated_citations = 0;
     let mut cited_expected = HashSet::new();
     let context_ids: HashSet<_> = context_record_ids.iter().map(String::as_str).collect();
-    let generated_claim_ids: HashSet<_> = answer
-        .claims
-        .iter()
-        .map(|claim| claim.claim_id.as_str())
-        .collect();
+    let generated_claim_ids: HashSet<_> = answer.claims.iter().map(|claim| claim.claim_id.as_str()).collect();
     let claims_complete = generated_claim_ids.len() == answer.claims.len()
         && generated_claim_ids.len() == expected_claims.len()
         && expected_claims
@@ -750,19 +685,16 @@ fn evaluate_generation(
             })
             .unwrap_or_default();
         let claim_citations: HashSet<_> = claim.citations.iter().map(String::as_str).collect();
-        if expected_claims
-            .get(claim.claim_id.as_str())
-            .is_some_and(|expected| {
-                normalize_claim(&claim.text) == normalize_claim(&expected.text)
-                    && expected_ids.is_subset(&claim_citations)
-                    && claim_citations.is_subset(&context_ids)
-                    && !expected.supporting_record_ids.is_empty()
-                    && expected
-                        .supporting_record_ids
-                        .iter()
-                        .all(|id| claim_citations.contains(id.as_str()))
-            })
-        {
+        if expected_claims.get(claim.claim_id.as_str()).is_some_and(|expected| {
+            normalize_claim(&claim.text) == normalize_claim(&expected.text)
+                && expected_ids.is_subset(&claim_citations)
+                && claim_citations.is_subset(&context_ids)
+                && !expected.supporting_record_ids.is_empty()
+                && expected
+                    .supporting_record_ids
+                    .iter()
+                    .all(|id| claim_citations.contains(id.as_str()))
+        }) {
             supported_claims += 1;
         }
         for citation in &claim.citations {
@@ -790,11 +722,7 @@ fn evaluate_generation(
         supported_claims as f64 / question.expected_claims.len() as f64
     };
     let citation_precision = if generated_citations == 0 {
-        if expected_citations.is_empty() {
-            1.0
-        } else {
-            0.0
-        }
+        if expected_citations.is_empty() { 1.0 } else { 0.0 }
     } else {
         valid_citations as f64 / generated_citations as f64
     };
@@ -803,8 +731,8 @@ fn evaluate_generation(
     } else {
         cited_expected.len() as f64 / expected_citations.len() as f64
     };
-    let correct_abstention = answer.abstained == question.expected_abstention
-        && (!question.expected_abstention || answer.claims.is_empty());
+    let correct_abstention =
+        answer.abstained == question.expected_abstention && (!question.expected_abstention || answer.claims.is_empty());
     let answer_lower = answer.answer.to_lowercase();
     let answer_relevance = if question.answer_keywords.is_empty() {
         1.0
@@ -833,32 +761,20 @@ fn evaluate_generation(
 }
 
 fn normalize_claim(value: &str) -> String {
-    value
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase()
+    value.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
 }
 
 #[allow(dead_code)]
 fn stage_report(mut failure_question_ids: Vec<String>) -> EvaluationStageReport {
     failure_question_ids.sort();
-    EvaluationStageReport {
-        failure_count: failure_question_ids.len(),
-        failure_question_ids,
-    }
+    EvaluationStageReport { failure_count: failure_question_ids.len(), failure_question_ids }
 }
 
-fn run_evaluation_with_embedder(
-    embedder: &dyn Embedder,
-    verify_summary: bool,
-) -> crate::Result<EvaluationReport> {
-    let corpus: CorpusFile = serde_json::from_str(CORPUS_JSON).map_err(|error| {
-        crate::Error::invalid_input(format!("invalid evaluation corpus: {error}"))
-    })?;
-    let queries: QueryFile = serde_json::from_str(QUERIES_JSON).map_err(|error| {
-        crate::Error::invalid_input(format!("invalid evaluation queries: {error}"))
-    })?;
+fn run_evaluation_with_embedder(embedder: &dyn Embedder, verify_summary: bool) -> crate::Result<EvaluationReport> {
+    let corpus: CorpusFile = serde_json::from_str(CORPUS_JSON)
+        .map_err(|error| crate::Error::invalid_input(format!("invalid evaluation corpus: {error}")))?;
+    let queries: QueryFile = serde_json::from_str(QUERIES_JSON)
+        .map_err(|error| crate::Error::invalid_input(format!("invalid evaluation queries: {error}")))?;
     validate_retrieval_fixture(&corpus, &queries)?;
     let root = temporary_root();
     let result = (|| {
@@ -940,8 +856,7 @@ fn run_evaluation_with_embedder(
 }
 
 fn evaluate_relation_analysis(
-    evaluation_root: &std::path::Path,
-    embedder: &dyn Embedder,
+    evaluation_root: &std::path::Path, embedder: &dyn Embedder,
 ) -> crate::Result<RelationAnalysisReport> {
     let relation_root = evaluation_root.join("relation-shadow");
     let paths = StorePaths {
@@ -970,16 +885,8 @@ fn evaluate_relation_analysis(
         options.limit = 5;
         options.mode = RetrievalMode::Hybrid;
         let query = format!("{} {}", pair.left.title, pair.left.body);
-        let results = crate::search_stores_with_embedder(
-            std::slice::from_ref(&paths),
-            &query,
-            options,
-            embedder,
-        )?;
-        if results
-            .iter()
-            .any(|result| result.record_id == right_id.to_string())
-        {
+        let results = crate::search_stores_with_embedder(std::slice::from_ref(&paths), &query, options, embedder)?;
+        if results.iter().any(|result| result.record_id == right_id.to_string()) {
             retrieved_pair_ids.insert(pair.id.clone());
             let inference = analyzer.analyze(&pair.left, &pair.right);
             projections.push(AdvisoryRelationProjection {
@@ -987,9 +894,7 @@ fn evaluate_relation_analysis(
                 right_record_id: right_id.to_string(),
                 relation: advisory_relation_name(inference.relation).to_owned(),
                 evidence_json: serde_json::to_string(&inference.evidence).map_err(|error| {
-                    crate::Error::invalid_input(format!(
-                        "could not encode advisory relation evidence: {error}"
-                    ))
+                    crate::Error::invalid_input(format!("could not encode advisory relation evidence: {error}"))
                 })?,
                 confidence: confidence_name(inference.confidence).to_owned(),
                 analyzer_fingerprint: inference.analyzer_fingerprint,
@@ -1001,22 +906,14 @@ fn evaluate_relation_analysis(
 }
 
 fn write_relation_record(
-    paths: &StorePaths,
-    scope: &Scope,
-    pair_id: &str,
-    side: &str,
-    fixture: &RelationRecord,
+    paths: &StorePaths, scope: &Scope, pair_id: &str, side: &str, fixture: &RelationRecord,
 ) -> crate::Result<RecordId> {
     let id = RecordId::new_v7();
     let now = Timestamp::now_utc();
     let kind = fixture.kind.parse().unwrap_or(RecordKind::Fact);
     let record = Record {
         id,
-        title: fixture
-            .title
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" "),
+        title: fixture.title.split_whitespace().collect::<Vec<_>>().join(" "),
         kind,
         scope: scope.clone(),
         status: RecordStatus::Active,
@@ -1034,11 +931,7 @@ fn write_relation_record(
             revision: None,
             content_hash: None,
         }],
-        body: fixture
-            .body
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" "),
+        body: fixture.body.split_whitespace().collect::<Vec<_>>().join(" "),
     };
     let record_path = paths.records.join(format!("{}.md", record.id));
     fs::write(record_path, render_markdown(&record)?)
@@ -1073,10 +966,7 @@ struct FixtureExpectation {
 }
 
 fn validate_retrieval_fixture(corpus: &CorpusFile, queries: &QueryFile) -> crate::Result<()> {
-    if corpus.revision != queries.revision
-        || corpus.fixed_seed != queries.fixed_seed
-        || corpus.fixed_seed != 702
-    {
+    if corpus.revision != queries.revision || corpus.fixed_seed != queries.fixed_seed || corpus.fixed_seed != 702 {
         return Err(crate::Error::invalid_input(
             "retrieval corpus and queries must share the checked fixed seed and revision",
         ));
@@ -1113,9 +1003,7 @@ fn validate_retrieval_fixture(corpus: &CorpusFile, queries: &QueryFile) -> crate
 }
 
 fn evaluate_mode(
-    paths: &[StorePaths],
-    queries: &[EvaluationQuery],
-    semantic: Option<(&dyn Embedder, crate::RetrievalMode)>,
+    paths: &[StorePaths], queries: &[EvaluationQuery], semantic: Option<(&dyn Embedder, crate::RetrievalMode)>,
     expectations: &HashMap<String, FixtureExpectation>,
 ) -> crate::Result<EvaluationModeReport> {
     let mut recall = 0.0;
@@ -1149,16 +1037,10 @@ fn evaluate_mode(
         }
         if !expected.is_empty() {
             answerable_count += 1.0;
-            if results
-                .iter()
-                .any(|result| expected.contains(&result.record_id))
-            {
+            if results.iter().any(|result| expected.contains(&result.record_id)) {
                 recall += 1.0;
             }
-            if let Some(position) = results
-                .iter()
-                .position(|result| expected.contains(&result.record_id))
-            {
+            if let Some(position) = results.iter().position(|result| expected.contains(&result.record_id)) {
                 reciprocal_rank += 1.0 / (position as f64 + 1.0);
             }
         }
@@ -1171,21 +1053,11 @@ fn evaluate_mode(
                 context_stores_with_embedder(
                     paths,
                     &query.query,
-                    ContextOptions {
-                        budget: 40,
-                        search: options,
-                    },
+                    ContextOptions { budget: 40, search: options },
                     embedder,
                 )?
             }
-            None => context_stores(
-                paths,
-                &query.query,
-                ContextOptions {
-                    budget: 40,
-                    search: options,
-                },
-            )?,
+            None => context_stores(paths, &query.query, ContextOptions { budget: 40, search: options })?,
         };
         let useful = context
             .blocks
@@ -1219,8 +1091,7 @@ fn evaluate_mode(
             }
             if expected.contains(&block.record_id)
                 && expectations.get(&block.record_id).is_some_and(|record| {
-                    block.sources.len() == 1
-                        && block.sources[0].reference == record.source_reference
+                    block.sources.len() == 1 && block.sources[0].reference == record.source_reference
                 })
             {
                 correct_provenance += 1.0;
@@ -1261,10 +1132,7 @@ fn fixture_record(fixture: &FixtureRecord) -> crate::Result<Record> {
             .status
             .parse::<RecordStatus>()
             .map_err(crate::Error::invalid_input)?,
-        access: fixture
-            .access
-            .parse()
-            .map_err(crate::Error::invalid_input)?,
+        access: fixture.access.parse().map_err(crate::Error::invalid_input)?,
         created_at: now,
         updated_at: now,
         tags: vec!["evaluation".to_owned()],
@@ -1287,12 +1155,10 @@ fn fixture_record(fixture: &FixtureRecord) -> crate::Result<Record> {
 }
 
 fn verify_checked_summary(
-    corpus_revision: &str,
-    metrics: &BTreeMap<String, EvaluationModeReport>,
+    corpus_revision: &str, metrics: &BTreeMap<String, EvaluationModeReport>,
 ) -> crate::Result<()> {
-    let expected: CheckedSummary = serde_json::from_str(SUMMARY_JSON).map_err(|error| {
-        crate::Error::invalid_input(format!("invalid checked evaluation summary: {error}"))
-    })?;
+    let expected: CheckedSummary = serde_json::from_str(SUMMARY_JSON)
+        .map_err(|error| crate::Error::invalid_input(format!("invalid checked evaluation summary: {error}")))?;
     if expected.corpus_revision != corpus_revision || expected.metrics.len() != metrics.len() {
         return Err(crate::Error::invalid_input(
             "evaluation differs from the checked-in summary; review corpus and ranking changes",
@@ -1313,21 +1179,12 @@ fn verify_checked_summary(
                 expected.inactive_or_superseded_leakage_rate,
             ),
             (actual.context_precision, expected.context_precision),
-            (
-                actual.context_token_efficiency,
-                expected.context_token_efficiency,
-            ),
+            (actual.context_token_efficiency, expected.context_token_efficiency),
             (actual.citation_correctness, expected.citation_correctness),
-            (
-                actual.provenance_correctness,
-                expected.provenance_correctness,
-            ),
+            (actual.provenance_correctness, expected.provenance_correctness),
             (actual.abstention_quality, expected.abstention_quality),
         ];
-        if values
-            .iter()
-            .any(|(actual, expected)| (actual - expected).abs() > 1e-9)
-        {
+        if values.iter().any(|(actual, expected)| (actual - expected).abs() > 1e-9) {
             return Err(crate::Error::invalid_input(format!(
                 "{mode} ranking metrics differ from the checked-in summary; review expected results"
             )));
@@ -1354,8 +1211,7 @@ fn meets_thresholds(report: &EvaluationModeReport, thresholds: &BTreeMap<String,
     report.recall_at_5 >= thresholds["recall_at_5_min"]
         && report.mean_reciprocal_rank >= thresholds["mean_reciprocal_rank_min"]
         && report.scope_violation_rate <= thresholds["scope_violation_rate_max"]
-        && report.inactive_or_superseded_leakage_rate
-            <= thresholds["inactive_or_superseded_leakage_rate_max"]
+        && report.inactive_or_superseded_leakage_rate <= thresholds["inactive_or_superseded_leakage_rate_max"]
         && report.context_precision >= thresholds["context_precision_min"]
         && report.context_token_efficiency >= thresholds["context_token_efficiency_min"]
         && report.citation_correctness >= thresholds["citation_correctness_min"]
@@ -1366,10 +1222,7 @@ fn meets_thresholds(report: &EvaluationModeReport, thresholds: &BTreeMap<String,
 static NEXT_EVALUATION_ROOT: AtomicU64 = AtomicU64::new(0);
 
 fn temporary_root() -> PathBuf {
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
     let counter = NEXT_EVALUATION_ROOT.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(
         "stormbuffer-evaluation-{}-{stamp}-{counter}",
@@ -1394,12 +1247,7 @@ mod tests {
         assert_eq!(report.relation_analysis.revision, "m6-relation-pairs-1");
         assert!(report.relation_analysis.shadow_mode);
         assert_eq!(report.relation_analysis.false_contradiction_count, 0);
-        assert!(
-            report
-                .relation_analysis
-                .retrieval_candidate_recall
-                .is_finite()
-        );
+        assert!(report.relation_analysis.retrieval_candidate_recall.is_finite());
         assert!(report.relation_analysis.abstention_count > 0);
         for mode in ["fts-only", "vector-only", "hybrid"] {
             let metrics = &report.metrics[mode];
@@ -1429,14 +1277,8 @@ mod tests {
         assert_eq!(first.retrieval.failure_count, 0);
         assert_eq!(first.context_assembly.failure_count, 0);
         assert_eq!(first.generation.failure_count, 0);
-        assert_eq!(
-            first.reproducibility.generator,
-            "supplied-answer-artifact-adapter"
-        );
-        assert_eq!(
-            first.reproducibility.prompt_contract_version,
-            "stormbuffer-context-v1"
-        );
+        assert_eq!(first.reproducibility.generator, "supplied-answer-artifact-adapter");
+        assert_eq!(first.reproducibility.prompt_contract_version, "stormbuffer-context-v1");
         assert_eq!(
             serde_json::to_string(&first).expect("serialize report"),
             serde_json::to_string(&second).expect("serialize report")
@@ -1497,12 +1339,8 @@ mod tests {
             .find(|answer| answer.question_id == question.id)
             .expect("answer artifact");
 
-        assert!(
-            evaluate_generation(question, answer, &question.expected_context_record_ids).passed
-        );
+        assert!(evaluate_generation(question, answer, &question.expected_context_record_ids).passed);
         answer.claims[0].text = "A fabricated claim with a borrowed citation.".to_owned();
-        assert!(
-            !evaluate_generation(question, answer, &question.expected_context_record_ids).passed
-        );
+        assert!(!evaluate_generation(question, answer, &question.expected_context_record_ids).passed);
     }
 }

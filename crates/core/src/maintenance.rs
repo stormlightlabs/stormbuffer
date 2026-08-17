@@ -5,8 +5,8 @@ use time::Duration;
 
 use crate::repository::possible_overlap;
 use crate::{
-    Error, RecordId, RecordKind, RecordRepository, RecordStatus, Scope, SourceKind, StorePaths,
-    Timestamp, advisory_relations,
+    Error, RecordId, RecordKind, RecordRepository, RecordStatus, Scope, SourceKind, StorePaths, Timestamp,
+    advisory_relations,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -38,21 +38,14 @@ pub fn candidate_inbox(paths: &StorePaths, filter: &InboxFilter) -> crate::Resul
         .filter(|stored| stored.record().status == RecordStatus::Candidate)
     {
         let record = stored.record();
-        let age_days = (now - record.created_at.as_offset_datetime())
-            .whole_days()
-            .max(0);
+        let age_days = (now - record.created_at.as_offset_datetime()).whole_days().max(0);
         let overlap = possible_overlap(&records, record);
-        if filter
-            .min_age_days
-            .is_some_and(|days| age_days < days as i64)
+        if filter.min_age_days.is_some_and(|days| age_days < days as i64)
             || filter.kind.is_some_and(|kind| record.kind != kind)
             || filter
                 .source
                 .is_some_and(|source| !record.sources.iter().any(|item| item.kind == source))
-            || filter
-                .scope
-                .as_ref()
-                .is_some_and(|scope| &record.scope != scope)
+            || filter.scope.as_ref().is_some_and(|scope| &record.scope != scope)
             || (filter.possible_overlap && overlap.is_none())
         {
             continue;
@@ -63,11 +56,7 @@ pub fn candidate_inbox(paths: &StorePaths, filter: &InboxFilter) -> crate::Resul
             kind: record.kind.to_string(),
             scope: record.scope.to_string(),
             age_days,
-            sources: record
-                .sources
-                .iter()
-                .map(|source| source.kind.to_string())
-                .collect(),
+            sources: record.sources.iter().map(|source| source.kind.to_string()).collect(),
             possible_overlap_id: overlap.map(|item| item.record().id.to_string()),
         });
     }
@@ -107,16 +96,10 @@ pub fn audit_store(paths: &StorePaths, stale_after_days: u64) -> crate::Result<A
             findings.push(AuditFinding {
                 kind: "unresolved_candidate".to_owned(),
                 record_ids: vec![record.id.to_string()],
-                evidence: format!(
-                    "candidate created at {} has no lifecycle decision",
-                    record.created_at
-                ),
+                evidence: format!("candidate created at {} has no lifecycle decision", record.created_at),
                 confidence: "certain".to_owned(),
                 rule: "status is candidate".to_owned(),
-                follow_up: format!(
-                    "{command} approve {} or {command} reject {}",
-                    record.id, record.id
-                ),
+                follow_up: format!("{command} approve {} or {command} reject {}", record.id, record.id),
             });
         }
         for missing in record.supersedes.iter().filter(|id| !ids.contains(id)) {
@@ -161,20 +144,13 @@ pub fn audit_store(paths: &StorePaths, stale_after_days: u64) -> crate::Result<A
         };
         findings.push(AuditFinding {
             kind: "relation_duplicate_or_refinement".to_owned(),
-            record_ids: vec![
-                relation.left_record_id.clone(),
-                relation.right_record_id.clone(),
-            ],
+            record_ids: vec![relation.left_record_id.clone(), relation.right_record_id.clone()],
             evidence: relation.evidence_json,
             confidence: relation.confidence,
             rule: format!("advisory relation is {}", relation.relation),
             follow_up: format!("{command} supersede {target}"),
         });
     }
-    findings.sort_by(|left, right| {
-        left.kind
-            .cmp(&right.kind)
-            .then(left.record_ids.cmp(&right.record_ids))
-    });
+    findings.sort_by(|left, right| left.kind.cmp(&right.kind).then(left.record_ids.cmp(&right.record_ids)));
     Ok(AuditReport { findings })
 }

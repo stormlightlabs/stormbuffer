@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error as ThisError;
 
 use super::{
-    DestructionAcknowledgement, Error, ProposalActor, ProposalOutcome, Record, RecordError,
-    RecordId, RecordStatus, StorePaths, Timestamp, parse_markdown, render_markdown,
+    DestructionAcknowledgement, Error, ProposalActor, ProposalOutcome, Record, RecordError, RecordId, RecordStatus,
+    StorePaths, Timestamp, parse_markdown, render_markdown,
 };
 
 const LOCK_DIRECTORY: &str = "locks";
@@ -47,10 +47,7 @@ pub enum RepositoryError {
     #[error("record {id} must be a candidate, not {status}")]
     MustBeCandidate { id: RecordId, status: RecordStatus },
     #[error("replacement {replacement} does not supersede {old}")]
-    MissingSupersededLink {
-        replacement: RecordId,
-        old: RecordId,
-    },
+    MissingSupersededLink { replacement: RecordId, old: RecordId },
     #[error("record destination already exists")]
     DestinationExists { path: PathBuf },
     #[error("supersession recovery conflicts with an authored change")]
@@ -91,10 +88,7 @@ pub struct ProposalResult {
 
 impl ProposalResult {
     fn new(
-        outcome: ProposalOutcome,
-        record_id: RecordId,
-        related_id: Option<RecordId>,
-        status: Option<RecordStatus>,
+        outcome: ProposalOutcome, record_id: RecordId, related_id: Option<RecordId>, status: Option<RecordStatus>,
         message: impl Into<String>,
     ) -> Self {
         Self {
@@ -146,20 +140,14 @@ impl RecordRepository {
 
         let path = self.record_path(record.id);
         if path.exists() {
-            return Err(Error::repository(RepositoryError::DestinationExists {
-                path,
-            }));
+            return Err(Error::repository(RepositoryError::DestinationExists { path }));
         }
         let markdown = render_markdown(&record)?;
         write_atomic(&path, markdown.as_bytes())?;
         self.read_record(&path)
     }
 
-    pub fn propose(
-        &self,
-        mut record: Record,
-        actor: ProposalActor,
-    ) -> Result<ProposalResult, Error> {
+    pub fn propose(&self, mut record: Record, actor: ProposalActor) -> Result<ProposalResult, Error> {
         let record_id = record.id;
         if let Err(error) = record.validate().and_then(|_| record.validate_provenance()) {
             return Ok(ProposalResult::invalid(record_id, error.to_string()));
@@ -226,16 +214,9 @@ impl RecordRepository {
         ))
     }
 
-    pub fn propose_update(
-        &self,
-        old_id: RecordId,
-        mut replacement: Record,
-    ) -> Result<ProposalResult, Error> {
+    pub fn propose_update(&self, old_id: RecordId, mut replacement: Record) -> Result<ProposalResult, Error> {
         let record_id = replacement.id;
-        if let Err(error) = replacement
-            .validate()
-            .and_then(|_| replacement.validate_provenance())
-        {
+        if let Err(error) = replacement.validate().and_then(|_| replacement.validate_provenance()) {
             return Ok(ProposalResult::invalid(record_id, error.to_string()));
         }
         self.validate_store_scope(&replacement)?;
@@ -256,14 +237,9 @@ impl RecordRepository {
             return Err(Error::repository(RepositoryError::ImmutableId));
         }
         if replacement.scope != old.record.scope {
-            return Err(Error::repository(RepositoryError::ScopeDenied {
-                id: replacement.id,
-            }));
+            return Err(Error::repository(RepositoryError::ScopeDenied { id: replacement.id }));
         }
-        if let Some(existing) = records
-            .iter()
-            .find(|stored| stored.record.id == replacement.id)
-        {
+        if let Some(existing) = records.iter().find(|stored| stored.record.id == replacement.id) {
             return Err(Error::repository(RepositoryError::DuplicateId {
                 id: replacement.id,
                 first: existing.path.clone(),
@@ -272,12 +248,9 @@ impl RecordRepository {
         }
 
         replacement.supersedes = vec![old_id];
-        if let Some(existing) = matching_record_excluding_ids(
-            &records,
-            &replacement,
-            MatchKind::Duplicate,
-            &[old_id, replacement.id],
-        ) {
+        if let Some(existing) =
+            matching_record_excluding_ids(&records, &replacement, MatchKind::Duplicate, &[old_id, replacement.id])
+        {
             return Ok(ProposalResult::new(
                 ProposalOutcome::DuplicateOf,
                 replacement.id,
@@ -286,12 +259,8 @@ impl RecordRepository {
                 "update matches another memory",
             ));
         }
-        let overlap = matching_record_excluding_ids(
-            &records,
-            &replacement,
-            MatchKind::Overlap,
-            &[old_id, replacement.id],
-        );
+        let overlap =
+            matching_record_excluding_ids(&records, &replacement, MatchKind::Overlap, &[old_id, replacement.id]);
         replacement.status = RecordStatus::Candidate;
         replacement.updated_at = later_timestamp(replacement.created_at);
         let markdown = render_markdown(&replacement)?;
@@ -342,12 +311,9 @@ impl RecordRepository {
             .copied()
             .chain(std::iter::once(id))
             .collect::<Vec<_>>();
-        if let Some(existing) = matching_record_excluding_ids(
-            &records,
-            &current.record,
-            MatchKind::Duplicate,
-            &excluded,
-        ) {
+        if let Some(existing) =
+            matching_record_excluding_ids(&records, &current.record, MatchKind::Duplicate, &excluded)
+        {
             return Ok(ProposalResult::new(
                 ProposalOutcome::DuplicateOf,
                 id,
@@ -424,18 +390,11 @@ impl RecordRepository {
     }
 
     pub fn find_allowed(
-        &self,
-        id: RecordId,
-        allowed_scopes: &[String],
-        allowed_access: &[super::Access],
+        &self, id: RecordId, allowed_scopes: &[String], allowed_access: &[super::Access],
     ) -> Result<StoredRecord, Error> {
         let _lock = self.prepare_mutation()?;
         let stored = self.find_locked(id)?;
-        if !allowed_scopes.is_empty()
-            && !allowed_scopes
-                .iter()
-                .any(|scope| scope == stored.record.scope.as_str())
-        {
+        if !allowed_scopes.is_empty() && !allowed_scopes.iter().any(|scope| scope == stored.record.scope.as_str()) {
             return Err(Error::repository(RepositoryError::ScopeDenied { id }));
         }
         if !allowed_access.is_empty() && !allowed_access.contains(&stored.record.access) {
@@ -449,10 +408,7 @@ impl RecordRepository {
         self.list_scanned(include_inactive)
     }
 
-    pub(crate) fn list_read_only(
-        &self,
-        include_inactive: bool,
-    ) -> Result<Vec<StoredRecord>, Error> {
+    pub(crate) fn list_read_only(&self, include_inactive: bool) -> Result<Vec<StoredRecord>, Error> {
         self.list_scanned(include_inactive)
     }
 
@@ -465,11 +421,7 @@ impl RecordRepository {
         Ok(records)
     }
 
-    pub fn replace_if_unchanged(
-        &self,
-        current: &StoredRecord,
-        replacement: Record,
-    ) -> Result<StoredRecord, Error> {
+    pub fn replace_if_unchanged(&self, current: &StoredRecord, replacement: Record) -> Result<StoredRecord, Error> {
         replacement.validate()?;
         self.validate_store_scope(&replacement)?;
         if replacement.id != current.record.id {
@@ -509,11 +461,7 @@ impl RecordRepository {
         self.transition(id, RecordStatus::Active)
     }
 
-    pub fn supersede(
-        &self,
-        old_id: RecordId,
-        mut replacement: Record,
-    ) -> Result<StoredRecord, Error> {
+    pub fn supersede(&self, old_id: RecordId, mut replacement: Record) -> Result<StoredRecord, Error> {
         replacement.validate()?;
         replacement.validate_provenance()?;
         self.validate_store_scope(&replacement)?;
@@ -534,9 +482,7 @@ impl RecordRepository {
             return Err(Error::repository(RepositoryError::ImmutableId));
         }
         if replacement.scope != old.record.scope {
-            return Err(Error::repository(RepositoryError::ScopeDenied {
-                id: replacement.id,
-            }));
+            return Err(Error::repository(RepositoryError::ScopeDenied { id: replacement.id }));
         }
         if !replacement.supersedes.contains(&old_id) {
             return Err(Error::repository(RepositoryError::MissingSupersededLink {
@@ -544,10 +490,7 @@ impl RecordRepository {
                 old: old_id,
             }));
         }
-        if let Some(existing) = records
-            .iter()
-            .find(|stored| stored.record.id == replacement.id)
-        {
+        if let Some(existing) = records.iter().find(|stored| stored.record.id == replacement.id) {
             return Err(Error::repository(RepositoryError::DuplicateId {
                 id: replacement.id,
                 first: existing.path.clone(),
@@ -566,16 +509,11 @@ impl RecordRepository {
         self.read_record(&self.record_path(replacement.id))
     }
 
-    pub fn forget(
-        &self,
-        id: RecordId,
-        _acknowledgement: DestructionAcknowledgement,
-    ) -> Result<(), Error> {
+    pub fn forget(&self, id: RecordId, _acknowledgement: DestructionAcknowledgement) -> Result<(), Error> {
         let _lock = self.prepare_mutation()?;
         let stored = self.find_locked(id)?;
         fs::remove_file(&stored.path).map_err(|source| Error::io("delete the record", source))?;
-        sync_parent_directory(&stored.path)
-            .map_err(|source| Error::io("sync the records directory", source))?;
+        sync_parent_directory(&stored.path).map_err(|source| Error::io("sync the records directory", source))?;
         Ok(())
     }
 
@@ -640,18 +578,12 @@ impl RecordRepository {
         let markdown = String::from_utf8(bytes).map_err(|_| {
             Error::invalid_record_at(
                 path,
-                RecordError::Markdown {
-                    message: "record is not valid UTF-8".to_owned(),
-                },
+                RecordError::Markdown { message: "record is not valid UTF-8".to_owned() },
             )
         })?;
         let record = parse_markdown(path, &markdown)?;
         self.validate_store_scope(&record)?;
-        Ok(StoredRecord {
-            path: path.to_path_buf(),
-            markdown,
-            record,
-        })
+        Ok(StoredRecord { path: path.to_path_buf(), markdown, record })
     }
 
     fn record_path(&self, id: RecordId) -> PathBuf {
@@ -663,9 +595,7 @@ impl RecordRepository {
         if allowed {
             Ok(())
         } else {
-            Err(Error::repository(RepositoryError::ScopeDenied {
-                id: record.id,
-            }))
+            Err(Error::repository(RepositoryError::ScopeDenied { id: record.id }))
         }
     }
 
@@ -674,10 +604,7 @@ impl RecordRepository {
     }
 
     fn commit_supersession(
-        &self,
-        old: &StoredRecord,
-        replacement: &Record,
-        new_before: Option<&[u8]>,
+        &self, old: &StoredRecord, replacement: &Record, new_before: Option<&[u8]>,
     ) -> Result<(), Error> {
         let now = Timestamp::now_utc();
         let mut superseded = old.record.clone();
@@ -700,11 +627,8 @@ impl RecordRepository {
     }
 
     fn write_journal(&self, journal: &SupersedeJournal) -> Result<(), Error> {
-        let contents = toml::to_string(journal).map_err(|source| {
-            Error::repository(RepositoryError::InvalidJournal {
-                message: source.to_string(),
-            })
-        })?;
+        let contents = toml::to_string(journal)
+            .map_err(|source| Error::repository(RepositoryError::InvalidJournal { message: source.to_string() }))?;
         write_atomic(&self.journal_path(), contents.as_bytes())
     }
 
@@ -713,13 +637,10 @@ impl RecordRepository {
         if !path.is_file() {
             return Ok(());
         }
-        let contents = fs::read_to_string(&path)
-            .map_err(|source| Error::io("read the supersession journal", source))?;
-        let journal: SupersedeJournal = toml::from_str(&contents).map_err(|source| {
-            Error::repository(RepositoryError::InvalidJournal {
-                message: source.to_string(),
-            })
-        })?;
+        let contents =
+            fs::read_to_string(&path).map_err(|source| Error::io("read the supersession journal", source))?;
+        let journal: SupersedeJournal = toml::from_str(&contents)
+            .map_err(|source| Error::repository(RepositoryError::InvalidJournal { message: source.to_string() }))?;
 
         let old_current = read_optional_bytes(&journal.old_path)?;
         if old_current.as_deref() != Some(journal.old_before.as_slice())
@@ -755,43 +676,27 @@ enum MatchKind {
     Overlap,
 }
 
-fn matching_record<'a>(
-    records: &'a [StoredRecord],
-    record: &Record,
-    kind: MatchKind,
-) -> Option<&'a StoredRecord> {
+fn matching_record<'a>(records: &'a [StoredRecord], record: &Record, kind: MatchKind) -> Option<&'a StoredRecord> {
     matching_record_excluding(records, record, kind, record.id)
 }
 
-pub(crate) fn possible_overlap<'a>(
-    records: &'a [StoredRecord],
-    record: &Record,
-) -> Option<&'a StoredRecord> {
+pub(crate) fn possible_overlap<'a>(records: &'a [StoredRecord], record: &Record) -> Option<&'a StoredRecord> {
     matching_record(records, record, MatchKind::Overlap)
 }
 
 fn matching_record_excluding<'a>(
-    records: &'a [StoredRecord],
-    record: &Record,
-    kind: MatchKind,
-    excluded_id: RecordId,
+    records: &'a [StoredRecord], record: &Record, kind: MatchKind, excluded_id: RecordId,
 ) -> Option<&'a StoredRecord> {
     matching_record_excluding_ids(records, record, kind, &[excluded_id])
 }
 
 fn matching_record_excluding_ids<'a>(
-    records: &'a [StoredRecord],
-    record: &Record,
-    kind: MatchKind,
-    excluded_ids: &[RecordId],
+    records: &'a [StoredRecord], record: &Record, kind: MatchKind, excluded_ids: &[RecordId],
 ) -> Option<&'a StoredRecord> {
     records.iter().find(|stored| {
         let existing = &stored.record;
         !excluded_ids.contains(&existing.id)
-            && matches!(
-                existing.status,
-                RecordStatus::Candidate | RecordStatus::Active
-            )
+            && matches!(existing.status, RecordStatus::Candidate | RecordStatus::Active)
             && existing.scope == record.scope
             && existing.kind == record.kind
             && normalize(&existing.title) == normalize(&record.title)
@@ -872,8 +777,7 @@ pub(crate) fn acquire_store_initialization_lock(paths: &StorePaths) -> Result<Mu
 }
 
 fn collect_markdown_paths(directory: &Path, paths: &mut Vec<PathBuf>) -> Result<(), Error> {
-    let entries =
-        fs::read_dir(directory).map_err(|source| Error::io("scan the records", source))?;
+    let entries = fs::read_dir(directory).map_err(|source| Error::io("scan the records", source))?;
     for entry in entries {
         let entry = entry.map_err(|source| Error::io("scan the records", source))?;
         let file_type = entry
@@ -897,12 +801,9 @@ fn read_optional_bytes(path: &Path) -> Result<Option<Vec<u8>>, Error> {
 }
 
 pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), Error> {
-    let parent = path.parent().ok_or_else(|| {
-        Error::io(
-            "resolve the record parent",
-            io::Error::other("missing parent"),
-        )
-    })?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| Error::io("resolve the record parent", io::Error::other("missing parent")))?;
     fs::create_dir_all(parent).map_err(|source| Error::io("create the record parent", source))?;
     let (temp_path, mut temp_file) = create_temp_file(path)?;
     let mut cleanup = TempCleanup::new(temp_path.clone());
@@ -914,8 +815,7 @@ pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), Error> {
             .sync_all()
             .map_err(|source| Error::io("sync the temporary record", source))?;
         drop(temp_file);
-        replace_file(&temp_path, path)
-            .map_err(|source| Error::io("atomically replace the record", source))?;
+        replace_file(&temp_path, path).map_err(|source| Error::io("atomically replace the record", source))?;
         sync_parent_directory(path).map_err(|source| Error::io("sync the record directory", source))
     })();
     if result.is_ok() {
@@ -925,10 +825,7 @@ pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), Error> {
 }
 
 fn create_temp_file(path: &Path) -> Result<(PathBuf, File), Error> {
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("record");
+    let name = path.file_name().and_then(|name| name.to_str()).unwrap_or("record");
     let parent = path.parent().ok_or_else(|| {
         Error::io(
             "resolve the temporary record parent",
@@ -945,11 +842,7 @@ fn create_temp_file(path: &Path) -> Result<(PathBuf, File), Error> {
             std::process::id(),
             stamp + u128::from(attempt)
         ));
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp_path)
-        {
+        match OpenOptions::new().write(true).create_new(true).open(&temp_path) {
             Ok(file) => return Ok((temp_path, file)),
             Err(source) if source.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(source) => return Err(Error::io("create the temporary record", source)),
@@ -957,10 +850,7 @@ fn create_temp_file(path: &Path) -> Result<(PathBuf, File), Error> {
     }
     Err(Error::io(
         "create the temporary record",
-        io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            "temporary file name exhausted",
-        ),
+        io::Error::new(io::ErrorKind::AlreadyExists, "temporary file name exhausted"),
     ))
 }
 
@@ -994,9 +884,7 @@ pub(crate) fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
 #[cfg(windows)]
 pub(crate) fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
-    use windows_sys::Win32::Storage::FileSystem::{
-        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
-    };
+    use windows_sys::Win32::Storage::FileSystem::{MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW};
 
     let from: Vec<u16> = from.as_os_str().encode_wide().chain(Some(0)).collect();
     let to: Vec<u16> = to.as_os_str().encode_wide().chain(Some(0)).collect();
@@ -1008,11 +896,7 @@ pub(crate) fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
             MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
         )
     };
-    if result == 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
+    if result == 0 { Err(io::Error::last_os_error()) } else { Ok(()) }
 }
 
 #[cfg(unix)]
@@ -1028,8 +912,7 @@ fn sync_parent_directory(_path: &Path) -> io::Result<()> {
 fn remove_file_sync(path: &Path) -> Result<(), Error> {
     match fs::remove_file(path) {
         Ok(()) => {
-            sync_parent_directory(path)
-                .map_err(|source| Error::io("sync the store lock directory", source))?;
+            sync_parent_directory(path).map_err(|source| Error::io("sync the store lock directory", source))?;
             Ok(())
         }
         Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(()),

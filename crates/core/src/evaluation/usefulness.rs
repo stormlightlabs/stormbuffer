@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error, EvidenceOutcome, ProposalFeedbackOutcome, ReceiptFeedbackFile, ReceiptId, RecordId,
-    Timestamp, parse_receipt_feedback_file,
+    Error, EvidenceOutcome, ProposalFeedbackOutcome, ReceiptFeedbackFile, ReceiptId, RecordId, Timestamp,
+    parse_receipt_feedback_file,
 };
 
 const CORPUS_JSON: &str = include_str!("../../tests/fixtures/evaluation/corpus.json");
@@ -115,14 +115,11 @@ fn parse_fixture<T>(contents: &str, name: &str) -> crate::Result<T>
 where
     T: for<'de> Deserialize<'de>,
 {
-    serde_json::from_str(contents)
-        .map_err(|error| Error::invalid_input(format!("invalid {name}: {error}")))
+    serde_json::from_str(contents).map_err(|error| Error::invalid_input(format!("invalid {name}: {error}")))
 }
 
 fn validate_fixture(
-    fixture: &UsefulnessFile,
-    corpus_revision: &str,
-    feedback: &ReceiptFeedbackFile,
+    fixture: &UsefulnessFile, corpus_revision: &str, feedback: &ReceiptFeedbackFile,
 ) -> crate::Result<()> {
     if fixture.revision.trim() != fixture.revision || fixture.revision.is_empty() {
         return Err(Error::invalid_input(
@@ -142,10 +139,7 @@ fn validate_fixture(
     let mut ids = HashSet::new();
     let mut receipts = HashSet::new();
     for observation in &fixture.observations {
-        if observation.id.trim() != observation.id
-            || observation.id.is_empty()
-            || !ids.insert(&observation.id)
-        {
+        if observation.id.trim() != observation.id || observation.id.is_empty() || !ids.insert(&observation.id) {
             return Err(Error::invalid_input(
                 "usefulness observation IDs must be unique and non-empty",
             ));
@@ -162,8 +156,7 @@ fn validate_fixture(
                 observation.receipt.receipt_id
             )));
         }
-        let retrieved =
-            Timestamp::parse(&observation.receipt.retrieved_at).map_err(Error::invalid_input)?;
+        let retrieved = Timestamp::parse(&observation.receipt.retrieved_at).map_err(Error::invalid_input)?;
         if let Some(captured_at) = &observation.captured_at {
             let captured = Timestamp::parse(captured_at).map_err(Error::invalid_input)?;
             if captured > retrieved {
@@ -178,9 +171,7 @@ fn validate_fixture(
 }
 
 fn evaluate(
-    fixture: &UsefulnessFile,
-    corpus_ids: &HashSet<RecordId>,
-    feedback: Option<&ReceiptFeedbackFile>,
+    fixture: &UsefulnessFile, corpus_ids: &HashSet<RecordId>, feedback: Option<&ReceiptFeedbackFile>,
 ) -> UsefulnessReport {
     let feedback_by_receipt = feedback
         .map(|file| {
@@ -233,10 +224,9 @@ fn evaluate(
             used_tokens += observation.receipt.used_tokens;
             if let Some(captured_at) = &observation.captured_at {
                 let captured = Timestamp::parse(captured_at).expect("validated capture time");
-                let retrieved = Timestamp::parse(&observation.receipt.retrieved_at)
-                    .expect("validated retrieval time");
-                reuse_seconds += (retrieved.as_offset_datetime() - captured.as_offset_datetime())
-                    .whole_seconds() as f64;
+                let retrieved = Timestamp::parse(&observation.receipt.retrieved_at).expect("validated retrieval time");
+                reuse_seconds +=
+                    (retrieved.as_offset_datetime() - captured.as_offset_datetime()).whole_seconds() as f64;
             }
         } else if outcomes.contains(&EvidenceOutcome::Ignored) {
             breakdown.retrieved_ignored += 1;
@@ -256,11 +246,7 @@ fn evaluate(
         retrieved_and_used_rate: ratio(used, relevant_retrievals),
         stale_correction_count: breakdown.stale_or_incorrect,
         context_tokens_per_used_memory: ratio(used_tokens, used),
-        mean_seconds_to_later_reuse: if used == 0 {
-            0.0
-        } else {
-            reuse_seconds / used as f64
-        },
+        mean_seconds_to_later_reuse: if used == 0 { 0.0 } else { reuse_seconds / used as f64 },
         proposals: proposal_rates(feedback),
         breakdown,
     }
@@ -274,15 +260,7 @@ pub(crate) fn proposal_rates(feedback: Option<&ReceiptFeedbackFile>) -> Proposal
         .map(|proposal| proposal.outcome)
         .collect::<Vec<_>>();
     let count = outcomes.len();
-    let rate = |expected| {
-        ratio(
-            outcomes
-                .iter()
-                .filter(|outcome| **outcome == expected)
-                .count(),
-            count,
-        )
-    };
+    let rate = |expected| ratio(outcomes.iter().filter(|outcome| **outcome == expected).count(), count);
     ProposalOutcomeRates {
         proposal_count: count,
         approval_rate: rate(ProposalFeedbackOutcome::Approved),
@@ -294,11 +272,7 @@ pub(crate) fn proposal_rates(feedback: Option<&ReceiptFeedbackFile>) -> Proposal
 }
 
 fn ratio(numerator: usize, denominator: usize) -> f64 {
-    if denominator == 0 {
-        0.0
-    } else {
-        numerator as f64 / denominator as f64
-    }
+    if denominator == 0 { 0.0 } else { numerator as f64 / denominator as f64 }
 }
 
 fn record_ids<'de, D>(deserializer: D) -> Result<Vec<RecordId>, D::Error>

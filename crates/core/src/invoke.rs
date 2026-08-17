@@ -16,10 +16,7 @@ pub struct InvokeFailure {
 
 impl InvokeFailure {
     pub fn new(code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-        }
+        Self { code, message: message.into() }
     }
 
     pub fn code(&self) -> &'static str {
@@ -48,19 +45,12 @@ pub fn invoke_envelope(operation: &str, result: Result<Value, InvokeFailure>) ->
     }
 }
 
-pub fn invoke_request(
-    paths: &crate::StorePaths,
-    operation: &str,
-    input: &[u8],
-) -> Result<Value, InvokeFailure> {
+pub fn invoke_request(paths: &crate::StorePaths, operation: &str, input: &[u8]) -> Result<Value, InvokeFailure> {
     invoke_request_with_embedder(paths, operation, input, None)
 }
 
 pub fn invoke_request_with_embedder(
-    paths: &crate::StorePaths,
-    operation: &str,
-    input: &[u8],
-    embedder: Option<&dyn crate::Embedder>,
+    paths: &crate::StorePaths, operation: &str, input: &[u8], embedder: Option<&dyn crate::Embedder>,
 ) -> Result<Value, InvokeFailure> {
     let value: Value = serde_json::from_slice(input)
         .map_err(|_| InvokeFailure::new("invalid_json", "stdin must contain one JSON object"))?;
@@ -71,18 +61,13 @@ pub fn invoke_request_with_embedder(
 }
 
 pub fn invoke_operation(
-    paths: &crate::StorePaths,
-    operation: &str,
-    map: &Map<String, Value>,
+    paths: &crate::StorePaths, operation: &str, map: &Map<String, Value>,
 ) -> Result<Value, InvokeFailure> {
     invoke_operation_with_embedder(paths, operation, map, None)
 }
 
 pub fn invoke_operation_with_embedder(
-    paths: &crate::StorePaths,
-    operation: &str,
-    map: &Map<String, Value>,
-    embedder: Option<&dyn crate::Embedder>,
+    paths: &crate::StorePaths, operation: &str, map: &Map<String, Value>, embedder: Option<&dyn crate::Embedder>,
 ) -> Result<Value, InvokeFailure> {
     invoke_operation_with_semantic_status(
         paths,
@@ -96,10 +81,7 @@ pub fn invoke_operation_with_embedder(
 }
 
 pub fn invoke_operation_with_semantic_status(
-    paths: &crate::StorePaths,
-    operation: &str,
-    map: &Map<String, Value>,
-    embedder: Option<&dyn crate::Embedder>,
+    paths: &crate::StorePaths, operation: &str, map: &Map<String, Value>, embedder: Option<&dyn crate::Embedder>,
     unavailable_reason: Option<crate::SemanticFallbackReason>,
 ) -> Result<Value, InvokeFailure> {
     request_map(map, operation)?;
@@ -158,12 +140,7 @@ fn ensure_keys(map: &Map<String, Value>, allowed: &[&str]) -> Result<(), InvokeF
         if key == "version" || key == "operation" || allowed.contains(&key.as_str()) {
             continue;
         }
-        if key == "path"
-            || key.ends_with("_path")
-            || key.contains("file")
-            || key == "root"
-            || key == "store"
-        {
+        if key == "path" || key.ends_with("_path") || key.contains("file") || key == "root" || key == "store" {
             return Err(InvokeFailure::new(
                 "path_denied",
                 "filesystem paths are not accepted by the invocation protocol",
@@ -181,32 +158,17 @@ fn required_string<'a>(map: &'a Map<String, Value>, key: &str) -> Result<&'a str
     map.get(key)
         .and_then(Value::as_str)
         .filter(|value| !value.is_empty() && value.len() <= MAX_INVOKE_OUTPUT_BODY)
-        .ok_or_else(|| {
-            InvokeFailure::new(
-                "invalid_request",
-                format!("field `{key}` must be a bounded string"),
-            )
-        })
+        .ok_or_else(|| InvokeFailure::new("invalid_request", format!("field `{key}` must be a bounded string")))
 }
 
-fn bounded_number(
-    map: &Map<String, Value>,
-    key: &str,
-    default: usize,
-    maximum: usize,
-) -> Result<usize, InvokeFailure> {
+fn bounded_number(map: &Map<String, Value>, key: &str, default: usize, maximum: usize) -> Result<usize, InvokeFailure> {
     let Some(value) = map.get(key) else {
         return Ok(default);
     };
     let number = value
         .as_u64()
         .and_then(|number| usize::try_from(number).ok())
-        .ok_or_else(|| {
-            InvokeFailure::new(
-                "invalid_request",
-                format!("field `{key}` must be an integer"),
-            )
-        })?;
+        .ok_or_else(|| InvokeFailure::new("invalid_request", format!("field `{key}` must be an integer")))?;
     Ok(number.clamp(1, maximum))
 }
 
@@ -226,10 +188,7 @@ fn invocation_access(map: &Map<String, Value>) -> Result<Vec<crate::Access>, Inv
     Ok(vec![crate::Access::Agent])
 }
 
-fn invocation_scope(
-    paths: &crate::StorePaths,
-    map: &Map<String, Value>,
-) -> Result<Vec<String>, InvokeFailure> {
+fn invocation_scope(paths: &crate::StorePaths, map: &Map<String, Value>) -> Result<Vec<String>, InvokeFailure> {
     let defaults = crate::SearchOptions::for_store(paths)
         .allowed_scopes
         .unwrap_or_default();
@@ -251,23 +210,19 @@ fn invocation_scope(
             .ok_or_else(|| InvokeFailure::new("invalid_request", "scopes must be an array"))?
             .iter()
             .map(|value| {
-                value.as_str().map(str::to_owned).ok_or_else(|| {
-                    InvokeFailure::new("invalid_request", "scopes must contain strings")
-                })
+                value
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| InvokeFailure::new("invalid_request", "scopes must contain strings"))
             })
             .collect::<Result<Vec<_>, _>>()?,
         (None, None) => defaults.clone(),
     };
     if requested.is_empty() || requested.len() > 16 {
-        return Err(InvokeFailure::new(
-            "invalid_request",
-            "scope filter is out of bounds",
-        ));
+        return Err(InvokeFailure::new("invalid_request", "scope filter is out of bounds"));
     }
     for scope in &requested {
-        if scope.parse::<crate::Scope>().is_err()
-            || !defaults.iter().any(|allowed| allowed == scope)
-        {
+        if scope.parse::<crate::Scope>().is_err() || !defaults.iter().any(|allowed| allowed == scope) {
             return Err(InvokeFailure::new(
                 "scope_denied",
                 "requested scope is outside the selected store boundary",
@@ -278,24 +233,14 @@ fn invocation_scope(
 }
 
 fn invocation_stores(
-    paths: &crate::StorePaths,
-    allowed_scopes: &[String],
-    embedder: Option<&dyn crate::Embedder>,
+    paths: &crate::StorePaths, allowed_scopes: &[String], embedder: Option<&dyn crate::Embedder>,
     unavailable_reason: Option<crate::SemanticFallbackReason>,
-) -> Result<
-    (
-        Vec<crate::StorePaths>,
-        Option<crate::SemanticFallbackReason>,
-    ),
-    InvokeFailure,
-> {
+) -> Result<(Vec<crate::StorePaths>, Option<crate::SemanticFallbackReason>), InvokeFailure> {
     let cwd = std::env::current_dir()
         .map_err(|_| InvokeFailure::new("internal_error", "could not resolve selected stores"))?;
-    let mut stores =
-        crate::retrieval_stores(paths, &cwd).map_err(|error| map_core_error(&error))?;
+    let mut stores = crate::retrieval_stores(paths, &cwd).map_err(|error| map_core_error(&error))?;
     stores.retain(|store| {
-        store.scope != crate::StoreScope::Global
-            || allowed_scopes.iter().any(|scope| scope == "global")
+        store.scope != crate::StoreScope::Global || allowed_scopes.iter().any(|scope| scope == "global")
     });
     let mut fallback = if embedder.is_none() {
         Some(unavailable_reason.unwrap_or(crate::SemanticFallbackReason::IntentionallyUnavailable))
@@ -323,12 +268,8 @@ fn invocation_stores(
             }
             if let Err(error) = crate::rebuild_vector_index(store, embedder) {
                 fallback = match error {
-                    crate::Error::Embedding { .. } => {
-                        Some(crate::SemanticFallbackReason::EmbeddingExecutionFailed)
-                    }
-                    crate::Error::IndexBusy => {
-                        Some(crate::SemanticFallbackReason::VectorProjectionBusy)
-                    }
+                    crate::Error::Embedding { .. } => Some(crate::SemanticFallbackReason::EmbeddingExecutionFailed),
+                    crate::Error::IndexBusy => Some(crate::SemanticFallbackReason::VectorProjectionBusy),
                     crate::Error::IndexUnavailable { .. } => {
                         Some(crate::SemanticFallbackReason::VectorProjectionUnavailable)
                     }
@@ -341,9 +282,7 @@ fn invocation_stores(
 }
 
 fn invoke_search(
-    paths: &crate::StorePaths,
-    map: &Map<String, Value>,
-    embedder: Option<&dyn crate::Embedder>,
+    paths: &crate::StorePaths, map: &Map<String, Value>, embedder: Option<&dyn crate::Embedder>,
     unavailable_reason: Option<crate::SemanticFallbackReason>,
 ) -> Result<Value, InvokeFailure> {
     ensure_keys(map, &["query", "limit", "scope", "scopes", "access"])?;
@@ -374,21 +313,14 @@ fn invoke_search(
         crate::search_stores(&stores, query, options)
     }
     .map_err(|error| map_core_error(&error))?;
-    Ok(Value::Array(
-        results.iter().map(invoke_search_result).collect(),
-    ))
+    Ok(Value::Array(results.iter().map(invoke_search_result).collect()))
 }
 
 fn invoke_context(
-    paths: &crate::StorePaths,
-    map: &Map<String, Value>,
-    embedder: Option<&dyn crate::Embedder>,
+    paths: &crate::StorePaths, map: &Map<String, Value>, embedder: Option<&dyn crate::Embedder>,
     unavailable_reason: Option<crate::SemanticFallbackReason>,
 ) -> Result<Value, InvokeFailure> {
-    ensure_keys(
-        map,
-        &["query", "limit", "budget", "scope", "scopes", "access"],
-    )?;
+    ensure_keys(map, &["query", "limit", "budget", "scope", "scopes", "access"])?;
     let query = required_string(map, "query")?;
     if query.len() > MAX_INVOKE_QUERY {
         return Err(InvokeFailure::new("invalid_request", "query is too long"));
@@ -423,8 +355,7 @@ fn invoke_context(
     }
     .map_err(|error| map_core_error(&error))?;
     result.receipt.semantic_fallback = fallback;
-    serde_json::to_value(result)
-        .map_err(|_| InvokeFailure::new("internal_error", "could not encode context result"))
+    serde_json::to_value(result).map_err(|_| InvokeFailure::new("internal_error", "could not encode context result"))
 }
 
 fn invoke_get(paths: &crate::StorePaths, map: &Map<String, Value>) -> Result<Value, InvokeFailure> {
@@ -445,34 +376,18 @@ fn invoke_get(paths: &crate::StorePaths, map: &Map<String, Value>) -> Result<Val
                 }
                 return Ok(invoke_record(stored.record()));
             }
-            Err(
-                error @ crate::Error::Repository {
-                    source: crate::RepositoryError::ScopeDenied { .. },
-                },
-            )
-            | Err(
-                error @ crate::Error::Repository {
-                    source: crate::RepositoryError::AccessDenied { .. },
-                },
-            ) => {
+            Err(error @ crate::Error::Repository { source: crate::RepositoryError::ScopeDenied { .. } })
+            | Err(error @ crate::Error::Repository { source: crate::RepositoryError::AccessDenied { .. } }) => {
                 denied = Some(map_core_error(&error));
             }
-            Err(crate::Error::Repository {
-                source: crate::RepositoryError::NotFound { .. },
-            }) => {}
+            Err(crate::Error::Repository { source: crate::RepositoryError::NotFound { .. } }) => {}
             Err(error) => return Err(map_core_error(&error)),
         }
     }
-    denied.map_or_else(
-        || Err(InvokeFailure::new("not_found", "record was not found")),
-        Err,
-    )
+    denied.map_or_else(|| Err(InvokeFailure::new("not_found", "record was not found")), Err)
 }
 
-fn invoke_remember(
-    paths: &crate::StorePaths,
-    map: &Map<String, Value>,
-) -> Result<Value, InvokeFailure> {
+fn invoke_remember(paths: &crate::StorePaths, map: &Map<String, Value>) -> Result<Value, InvokeFailure> {
     ensure_keys(
         map,
         &[
@@ -489,28 +404,19 @@ fn invoke_remember(
     record_map.insert("access".to_owned(), Value::String("agent".to_owned()));
     record_map.insert("status".to_owned(), Value::String("candidate".to_owned()));
     record_map.insert("sources".to_owned(), protocol_source_array(map)?);
-    let record = parse_protocol_record(
-        &Value::Object(record_map),
-        None,
-        &default_protocol_scope(paths)?,
-    )?;
+    let record = parse_protocol_record(&Value::Object(record_map), None, &default_protocol_scope(paths)?)?;
     reject_secret_candidate(&record)?;
     let result = crate::RecordRepository::new(paths.clone())
         .propose(record, crate::ProposalActor::Agent)
         .map_err(|error| map_core_error(&error))?;
-    serde_json::to_value(result)
-        .map_err(|_| InvokeFailure::new("internal_error", "could not encode remember result"))
+    serde_json::to_value(result).map_err(|_| InvokeFailure::new("internal_error", "could not encode remember result"))
 }
 
-fn invoke_update(
-    paths: &crate::StorePaths,
-    map: &Map<String, Value>,
-) -> Result<Value, InvokeFailure> {
+fn invoke_update(paths: &crate::StorePaths, map: &Map<String, Value>) -> Result<Value, InvokeFailure> {
     ensure_keys(
         map,
         &[
-            "actor", "approved", "id", "scope", "scopes", "title", "kind", "tags", "aliases",
-            "source", "body",
+            "actor", "approved", "id", "scope", "scopes", "title", "kind", "tags", "aliases", "source", "body",
         ],
     )?;
     ensure_agent_write(map)?;
@@ -526,10 +432,7 @@ fn invoke_update(
             replacement_map.insert(key.to_owned(), value.clone());
         }
     }
-    replacement_map.insert(
-        "id".to_owned(),
-        Value::String(crate::RecordId::new_v7().to_string()),
-    );
+    replacement_map.insert("id".to_owned(), Value::String(crate::RecordId::new_v7().to_string()));
     let now = crate::Timestamp::now_utc().to_string();
     replacement_map.insert("created_at".to_owned(), Value::String(now.clone()));
     replacement_map.insert("updated_at".to_owned(), Value::String(now));
@@ -545,8 +448,7 @@ fn invoke_update(
     let result = repository
         .propose_update(target_id, replacement)
         .map_err(|error| map_core_error(&error))?;
-    serde_json::to_value(result)
-        .map_err(|_| InvokeFailure::new("internal_error", "could not encode update result"))
+    serde_json::to_value(result).map_err(|_| InvokeFailure::new("internal_error", "could not encode update result"))
 }
 
 fn reject_secret_candidate(record: &crate::Record) -> Result<(), InvokeFailure> {
@@ -573,18 +475,12 @@ fn ensure_agent_write(map: &Map<String, Value>) -> Result<(), InvokeFailure> {
 fn protocol_source_array(map: &Map<String, Value>) -> Result<Value, InvokeFailure> {
     match map.get("source") {
         Some(source) if source.is_object() => Ok(Value::Array(vec![source.clone()])),
-        Some(_) => Err(InvokeFailure::new(
-            "invalid_request",
-            "source must be an object",
-        )),
+        Some(_) => Err(InvokeFailure::new("invalid_request", "source must be an object")),
         None => Ok(Value::Array(Vec::new())),
     }
 }
 
-fn invoke_propose(
-    paths: &crate::StorePaths,
-    map: &Map<String, Value>,
-) -> Result<Value, InvokeFailure> {
+fn invoke_propose(paths: &crate::StorePaths, map: &Map<String, Value>) -> Result<Value, InvokeFailure> {
     ensure_keys(
         map,
         &[
@@ -624,9 +520,7 @@ fn invoke_propose(
     } else {
         Value::Object(
             map.iter()
-                .filter(|(key, _)| {
-                    !matches!(key.as_str(), "version" | "operation" | "actor" | "approved")
-                })
+                .filter(|(key, _)| !matches!(key.as_str(), "version" | "operation" | "actor" | "approved"))
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect(),
         )
@@ -636,14 +530,10 @@ fn invoke_propose(
     let result = crate::RecordRepository::new(paths.clone())
         .propose(record, crate::ProposalActor::Agent)
         .map_err(|error| map_core_error(&error))?;
-    serde_json::to_value(result)
-        .map_err(|_| InvokeFailure::new("internal_error", "could not encode proposal result"))
+    serde_json::to_value(result).map_err(|_| InvokeFailure::new("internal_error", "could not encode proposal result"))
 }
 
-fn invoke_supersede(
-    paths: &crate::StorePaths,
-    map: &Map<String, Value>,
-) -> Result<Value, InvokeFailure> {
+fn invoke_supersede(paths: &crate::StorePaths, map: &Map<String, Value>) -> Result<Value, InvokeFailure> {
     ensure_keys(
         map,
         &[
@@ -676,15 +566,12 @@ fn invoke_supersede(
     } else {
         Value::Object(
             map.iter()
-                .filter(|(key, _)| {
-                    !matches!(key.as_str(), "version" | "operation" | "id" | "access")
-                })
+                .filter(|(key, _)| !matches!(key.as_str(), "version" | "operation" | "id" | "access"))
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect(),
         )
     };
-    let mut replacement =
-        parse_protocol_record(&replacement_value, Some(old.record()), &default_scope)?;
+    let mut replacement = parse_protocol_record(&replacement_value, Some(old.record()), &default_scope)?;
     ensure_agent_record(&replacement)?;
     if replacement.id == target_id {
         replacement.id = crate::RecordId::new_v7();
@@ -711,10 +598,7 @@ fn ensure_agent_record(record: &crate::Record) -> Result<(), InvokeFailure> {
     }
 }
 
-fn invoke_archive(
-    paths: &crate::StorePaths,
-    map: &Map<String, Value>,
-) -> Result<Value, InvokeFailure> {
+fn invoke_archive(paths: &crate::StorePaths, map: &Map<String, Value>) -> Result<Value, InvokeFailure> {
     ensure_keys(map, &["id", "scope", "scopes", "access"])?;
     let id = parse_protocol_id(required_string(map, "id")?)?;
     let scopes = invocation_scope(paths, map)?;
@@ -723,9 +607,7 @@ fn invoke_archive(
     repository
         .find_allowed(id, &scopes, &access)
         .map_err(|error| map_core_error(&error))?;
-    let stored = repository
-        .archive(id)
-        .map_err(|error| map_core_error(&error))?;
+    let stored = repository.archive(id).map_err(|error| map_core_error(&error))?;
     Ok(
         json!({ "outcome": "accepted", "id": stored.record().id.to_string(), "status": stored.record().status.to_string() }),
     )
@@ -760,9 +642,7 @@ const PROTOCOL_RECORD_FIELDS: &[&str] = &[
 ];
 
 fn parse_protocol_record(
-    value: &Value,
-    base: Option<&crate::Record>,
-    default_scope: &str,
+    value: &Value, base: Option<&crate::Record>, default_scope: &str,
 ) -> Result<crate::Record, InvokeFailure> {
     let map = value
         .as_object()
@@ -771,9 +651,7 @@ fn parse_protocol_record(
     let now = crate::Timestamp::now_utc();
     let id = match map.get("id").and_then(Value::as_str) {
         Some(value) => parse_protocol_id(value)?,
-        None => base
-            .map(|record| record.id)
-            .unwrap_or_else(crate::RecordId::new_v7),
+        None => base.map(|record| record.id).unwrap_or_else(crate::RecordId::new_v7),
     };
     let title = protocol_string(map, "title", base.map(|record| record.title.as_str()))?;
     let kind = protocol_owned_string(map, "kind", base.map(|record| record.kind.to_string()))?
@@ -790,25 +668,14 @@ fn parse_protocol_record(
     )?
     .parse()
     .map_err(|_| InvokeFailure::new("invalid_request", "status is invalid"))?;
-    let access =
-        protocol_owned_string(map, "access", base.map(|record| record.access.to_string()))?
-            .parse()
-            .map_err(|_| InvokeFailure::new("invalid_request", "access is invalid"))?;
-    let created_at =
-        protocol_timestamp(map, "created_at", base.map(|record| record.created_at), now)?;
-    let updated_at = protocol_timestamp(
-        map,
-        "updated_at",
-        base.map(|record| record.updated_at),
-        created_at,
-    )?;
+    let access = protocol_owned_string(map, "access", base.map(|record| record.access.to_string()))?
+        .parse()
+        .map_err(|_| InvokeFailure::new("invalid_request", "access is invalid"))?;
+    let created_at = protocol_timestamp(map, "created_at", base.map(|record| record.created_at), now)?;
+    let updated_at = protocol_timestamp(map, "updated_at", base.map(|record| record.updated_at), created_at)?;
     let tags = protocol_strings(map, "tags", base.map(|record| record.tags.as_slice()))?;
     let aliases = protocol_strings(map, "aliases", base.map(|record| record.aliases.as_slice()))?;
-    let supersedes = protocol_ids(
-        map,
-        "supersedes",
-        base.map(|record| record.supersedes.as_slice()),
-    )?;
+    let supersedes = protocol_ids(map, "supersedes", base.map(|record| record.supersedes.as_slice()))?;
     let sources = protocol_sources(map, base.map(|record| record.sources.as_slice()))?;
     let body = protocol_string(map, "body", base.map(|record| record.body.as_str()))?;
     Ok(crate::Record {
@@ -828,89 +695,56 @@ fn parse_protocol_record(
     })
 }
 
-fn protocol_string(
-    map: &Map<String, Value>,
-    key: &str,
-    default: Option<&str>,
-) -> Result<String, InvokeFailure> {
+fn protocol_string(map: &Map<String, Value>, key: &str, default: Option<&str>) -> Result<String, InvokeFailure> {
     match map.get(key) {
         Some(value) => value
             .as_str()
             .filter(|value| !value.is_empty() && value.len() <= MAX_INVOKE_OUTPUT_BODY)
             .map(str::to_owned)
-            .ok_or_else(|| {
-                InvokeFailure::new(
-                    "invalid_request",
-                    format!("field `{key}` must be a bounded string"),
-                )
-            }),
-        None => default.map(str::to_owned).ok_or_else(|| {
-            InvokeFailure::new("invalid_request", format!("field `{key}` is required"))
-        }),
+            .ok_or_else(|| InvokeFailure::new("invalid_request", format!("field `{key}` must be a bounded string"))),
+        None => default
+            .map(str::to_owned)
+            .ok_or_else(|| InvokeFailure::new("invalid_request", format!("field `{key}` is required"))),
     }
 }
 
 fn protocol_owned_string(
-    map: &Map<String, Value>,
-    key: &str,
-    default: Option<String>,
+    map: &Map<String, Value>, key: &str, default: Option<String>,
 ) -> Result<String, InvokeFailure> {
     match map.get(key) {
         Some(value) => value
             .as_str()
             .filter(|value| !value.is_empty() && value.len() <= MAX_INVOKE_OUTPUT_BODY)
             .map(str::to_owned)
-            .ok_or_else(|| {
-                InvokeFailure::new(
-                    "invalid_request",
-                    format!("field `{key}` must be a bounded string"),
-                )
-            }),
-        None => default.ok_or_else(|| {
-            InvokeFailure::new("invalid_request", format!("field `{key}` is required"))
-        }),
+            .ok_or_else(|| InvokeFailure::new("invalid_request", format!("field `{key}` must be a bounded string"))),
+        None => default.ok_or_else(|| InvokeFailure::new("invalid_request", format!("field `{key}` is required"))),
     }
 }
 
 fn protocol_timestamp(
-    map: &Map<String, Value>,
-    key: &str,
-    default: Option<crate::Timestamp>,
-    fallback: crate::Timestamp,
+    map: &Map<String, Value>, key: &str, default: Option<crate::Timestamp>, fallback: crate::Timestamp,
 ) -> Result<crate::Timestamp, InvokeFailure> {
     match map.get(key) {
         Some(value) => value
             .as_str()
-            .ok_or_else(|| {
-                InvokeFailure::new(
-                    "invalid_request",
-                    format!("field `{key}` must be a timestamp"),
-                )
-            })?
+            .ok_or_else(|| InvokeFailure::new("invalid_request", format!("field `{key}` must be a timestamp")))?
             .parse()
-            .map_err(|_| {
-                InvokeFailure::new("invalid_request", format!("field `{key}` is not RFC 3339"))
-            }),
+            .map_err(|_| InvokeFailure::new("invalid_request", format!("field `{key}` is not RFC 3339"))),
         None => Ok(default.unwrap_or(fallback)),
     }
 }
 
 fn protocol_strings(
-    map: &Map<String, Value>,
-    key: &str,
-    default: Option<&[String]>,
+    map: &Map<String, Value>, key: &str, default: Option<&[String]>,
 ) -> Result<Vec<String>, InvokeFailure> {
     let Some(value) = map.get(key) else {
         return Ok(default.map_or_else(Vec::new, ToOwned::to_owned));
     };
-    let values = value.as_array().ok_or_else(|| {
-        InvokeFailure::new("invalid_request", format!("field `{key}` must be an array"))
-    })?;
+    let values = value
+        .as_array()
+        .ok_or_else(|| InvokeFailure::new("invalid_request", format!("field `{key}` must be an array")))?;
     if values.len() > 128 {
-        return Err(InvokeFailure::new(
-            "invalid_request",
-            "record collection is too large",
-        ));
+        return Err(InvokeFailure::new("invalid_request", "record collection is too large"));
     }
     values
         .iter()
@@ -919,46 +753,33 @@ fn protocol_strings(
                 .as_str()
                 .filter(|value| !value.is_empty() && value.len() <= 512)
                 .map(str::to_owned)
-                .ok_or_else(|| {
-                    InvokeFailure::new(
-                        "invalid_request",
-                        "record collection contains an invalid string",
-                    )
-                })
+                .ok_or_else(|| InvokeFailure::new("invalid_request", "record collection contains an invalid string"))
         })
         .collect()
 }
 
 fn protocol_ids(
-    map: &Map<String, Value>,
-    key: &str,
-    default: Option<&[crate::RecordId]>,
+    map: &Map<String, Value>, key: &str, default: Option<&[crate::RecordId]>,
 ) -> Result<Vec<crate::RecordId>, InvokeFailure> {
     let Some(value) = map.get(key) else {
         return Ok(default.map_or_else(Vec::new, ToOwned::to_owned));
     };
-    let values = value.as_array().ok_or_else(|| {
-        InvokeFailure::new("invalid_request", format!("field `{key}` must be an array"))
-    })?;
+    let values = value
+        .as_array()
+        .ok_or_else(|| InvokeFailure::new("invalid_request", format!("field `{key}` must be an array")))?;
     values
         .iter()
         .map(|value| {
             value
                 .as_str()
-                .ok_or_else(|| {
-                    InvokeFailure::new(
-                        "invalid_request",
-                        "record id collection contains an invalid value",
-                    )
-                })
+                .ok_or_else(|| InvokeFailure::new("invalid_request", "record id collection contains an invalid value"))
                 .and_then(parse_protocol_id)
         })
         .collect()
 }
 
 fn protocol_sources(
-    map: &Map<String, Value>,
-    default: Option<&[crate::Source]>,
+    map: &Map<String, Value>, default: Option<&[crate::Source]>,
 ) -> Result<Vec<crate::Source>, InvokeFailure> {
     let Some(value) = map.get("sources") else {
         return Ok(default.map_or_else(Vec::new, ToOwned::to_owned));
@@ -977,14 +798,7 @@ fn protocol_sources(
                 .ok_or_else(|| InvokeFailure::new("invalid_request", "source must be an object"))?;
             ensure_keys(
                 source,
-                &[
-                    "kind",
-                    "reference",
-                    "actor",
-                    "observed_at",
-                    "revision",
-                    "content_hash",
-                ],
+                &["kind", "reference", "actor", "observed_at", "revision", "content_hash"],
             )?;
             let kind = source
                 .get("kind")
@@ -996,9 +810,7 @@ fn protocol_sources(
                 .get("reference")
                 .and_then(Value::as_str)
                 .filter(|value| !value.is_empty() && value.len() <= 2048)
-                .ok_or_else(|| {
-                    InvokeFailure::new("invalid_request", "source reference is invalid")
-                })?;
+                .ok_or_else(|| InvokeFailure::new("invalid_request", "source reference is invalid"))?;
             let actor = source
                 .get("actor")
                 .and_then(Value::as_str)
@@ -1009,15 +821,10 @@ fn protocol_sources(
                 .map(|value| {
                     value
                         .as_str()
-                        .ok_or_else(|| {
-                            InvokeFailure::new("invalid_request", "source observed_at is invalid")
-                        })?
+                        .ok_or_else(|| InvokeFailure::new("invalid_request", "source observed_at is invalid"))?
                         .parse()
                         .map_err(|_| {
-                            InvokeFailure::new(
-                                "invalid_request",
-                                "source observed_at must be an RFC 3339 timestamp",
-                            )
+                            InvokeFailure::new("invalid_request", "source observed_at must be an RFC 3339 timestamp")
                         })
                 })
                 .transpose()?;
@@ -1036,9 +843,7 @@ fn protocol_sources(
 }
 
 fn protocol_optional_source_string(
-    source: &Map<String, Value>,
-    key: &str,
-    max_length: usize,
+    source: &Map<String, Value>, key: &str, max_length: usize,
 ) -> Result<Option<String>, InvokeFailure> {
     source
         .get(key)
@@ -1047,9 +852,7 @@ fn protocol_optional_source_string(
                 .as_str()
                 .filter(|value| !value.is_empty() && value.len() <= max_length)
                 .map(str::to_owned)
-                .ok_or_else(|| {
-                    InvokeFailure::new("invalid_request", format!("source {key} is invalid"))
-                })
+                .ok_or_else(|| InvokeFailure::new("invalid_request", format!("source {key} is invalid")))
         })
         .transpose()
 }
@@ -1093,26 +896,17 @@ pub fn invoke_record(record: &crate::Record) -> Value {
 fn invoke_source(source: &crate::Source) -> Value {
     let mut value = Map::from_iter([
         ("kind".to_owned(), Value::String(source.kind.to_string())),
-        (
-            "reference".to_owned(),
-            Value::String(source.reference.clone()),
-        ),
+        ("reference".to_owned(), Value::String(source.reference.clone())),
         ("actor".to_owned(), Value::String(source.actor.clone())),
     ]);
     if let Some(observed_at) = source.observed_at {
-        value.insert(
-            "observed_at".to_owned(),
-            Value::String(observed_at.to_string()),
-        );
+        value.insert("observed_at".to_owned(), Value::String(observed_at.to_string()));
     }
     if let Some(revision) = &source.revision {
         value.insert("revision".to_owned(), Value::String(revision.clone()));
     }
     if let Some(content_hash) = &source.content_hash {
-        value.insert(
-            "content_hash".to_owned(),
-            Value::String(content_hash.clone()),
-        );
+        value.insert("content_hash".to_owned(), Value::String(content_hash.clone()));
     }
     Value::Object(value)
 }
@@ -1123,45 +917,33 @@ fn map_core_error(error: &crate::Error) -> InvokeFailure {
             crate::RepositoryError::StoreNotInitialized { .. } => {
                 InvokeFailure::new("not_initialized", "the selected store is not initialized")
             }
-            crate::RepositoryError::NotFound { .. } => {
-                InvokeFailure::new("not_found", "record was not found")
-            }
+            crate::RepositoryError::NotFound { .. } => InvokeFailure::new("not_found", "record was not found"),
             crate::RepositoryError::ScopeDenied { .. } => {
                 InvokeFailure::new("scope_denied", "record is outside the selected scope")
             }
-            crate::RepositoryError::AccessDenied { .. } => InvokeFailure::new(
-                "access_denied",
-                "record is not available to this access class",
-            ),
+            crate::RepositoryError::AccessDenied { .. } => {
+                InvokeFailure::new("access_denied", "record is not available to this access class")
+            }
             crate::RepositoryError::MustBeCandidate { .. }
             | crate::RepositoryError::MustBeActive { .. }
             | crate::RepositoryError::MustBeArchived { .. }
-            | crate::RepositoryError::MissingSupersededLink { .. } => InvokeFailure::new(
-                "invalid_state",
-                "record lifecycle state does not permit this operation",
-            ),
+            | crate::RepositoryError::MissingSupersededLink { .. } => {
+                InvokeFailure::new("invalid_state", "record lifecycle state does not permit this operation")
+            }
             crate::RepositoryError::ConcurrentModification { .. }
             | crate::RepositoryError::MutationBusy { .. }
-            | crate::RepositoryError::RecoveryConflict { .. } => InvokeFailure::new(
-                "conflict",
-                "record changed or is busy; retry after inspection",
-            ),
+            | crate::RepositoryError::RecoveryConflict { .. } => {
+                InvokeFailure::new("conflict", "record changed or is busy; retry after inspection")
+            }
             _ => InvokeFailure::new("internal_error", "the store operation failed"),
         },
-        crate::Error::InvalidRecord { .. } => {
-            InvokeFailure::new("invalid_record", "record validation failed")
-        }
-        crate::Error::InvalidInput { .. } => {
-            InvokeFailure::new("invalid_request", "request input is invalid")
-        }
+        crate::Error::InvalidRecord { .. } => InvokeFailure::new("invalid_record", "record validation failed"),
+        crate::Error::InvalidInput { .. } => InvokeFailure::new("invalid_request", "request input is invalid"),
         crate::Error::IndexUnavailable { .. } => InvokeFailure::new(
             "internal_error",
             "the SQLite projection could not be opened; check that its directory is writable, then reindex the selected store",
         ),
-        crate::Error::IndexBusy => InvokeFailure::new(
-            "conflict",
-            "the SQLite projection is busy; retry the operation",
-        ),
+        crate::Error::IndexBusy => InvokeFailure::new("conflict", "the SQLite projection is busy; retry the operation"),
         crate::Error::Io { .. }
         | crate::Error::InvalidWorkingDirectory
         | crate::Error::MissingHomeDirectory
@@ -1169,21 +951,13 @@ fn map_core_error(error: &crate::Error) -> InvokeFailure {
         | crate::Error::InvalidStoreConfiguration { .. }
         | crate::Error::Index { .. }
         | crate::Error::Embedding { .. }
-        | crate::Error::Backup { .. } => {
-            InvokeFailure::new("internal_error", "the store operation failed")
-        }
+        | crate::Error::Backup { .. } => InvokeFailure::new("internal_error", "the store operation failed"),
     }
 }
 
-pub fn invoke_scope_records(
-    paths: &crate::StorePaths,
-    scope: &str,
-) -> Result<Value, InvokeFailure> {
+pub fn invoke_scope_records(paths: &crate::StorePaths, scope: &str) -> Result<Value, InvokeFailure> {
     if scope.parse::<crate::Scope>().is_err() {
-        return Err(InvokeFailure::new(
-            "invalid_request",
-            "resource scope is invalid",
-        ));
+        return Err(InvokeFailure::new("invalid_request", "resource scope is invalid"));
     }
     let request = Map::from_iter([(String::from("scope"), Value::String(scope.to_owned()))]);
     let scopes = invocation_scope(paths, &request)?;

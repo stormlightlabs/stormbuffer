@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use stormbuffer_core::{
-    AdvisoryRelationProjection, InboxFilter, ProposalActor, RecordId, RecordKind, RecordRepository,
-    RecordStatus, StoreInitMode, StorePaths, StoreScope, Timestamp, audit_store, candidate_inbox,
-    initialize_store, parse_markdown, replace_advisory_relation_projection, sync_store,
+    AdvisoryRelationProjection, InboxFilter, ProposalActor, RecordId, RecordKind, RecordRepository, RecordStatus,
+    StoreInitMode, StorePaths, StoreScope, Timestamp, audit_store, candidate_inbox, initialize_store, parse_markdown,
+    replace_advisory_relation_projection, sync_store,
 };
 
 fn temporary_paths() -> StorePaths {
@@ -14,12 +14,7 @@ fn temporary_paths() -> StorePaths {
         .expect("system clock")
         .as_nanos();
     let root = std::env::temp_dir().join(format!("stormbuffer-maintenance-{suffix}"));
-    StorePaths {
-        scope: StoreScope::Global,
-        records: root.join("records"),
-        cache: root.join("cache"),
-        root,
-    }
+    StorePaths { scope: StoreScope::Global, records: root.join("records"), cache: root.join("cache"), root }
 }
 
 fn fixture() -> stormbuffer_core::Record {
@@ -41,19 +36,12 @@ fn inbox_filters_candidates_and_reports_possible_overlap() {
         .expect("propose candidate");
     let entries = candidate_inbox(
         &paths,
-        &InboxFilter {
-            kind: Some(RecordKind::Fact),
-            possible_overlap: true,
-            ..InboxFilter::default()
-        },
+        &InboxFilter { kind: Some(RecordKind::Fact), possible_overlap: true, ..InboxFilter::default() },
     )
     .expect("read inbox");
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].id, outcome.record_id);
-    assert_eq!(
-        entries[0].possible_overlap_id,
-        Some(active.record().id.to_string())
-    );
+    assert_eq!(entries[0].possible_overlap_id, Some(active.record().id.to_string()));
     fs::remove_dir_all(paths.root).expect("remove store");
 }
 
@@ -98,11 +86,7 @@ fn audit_reports_deterministic_and_relation_supported_findings_without_mutation(
         .map(|stored| stored.path().to_path_buf())
         .collect();
     let report = audit_store(&paths, 30).expect("audit store");
-    let kinds: Vec<_> = report
-        .findings
-        .iter()
-        .map(|finding| finding.kind.as_str())
-        .collect();
+    let kinds: Vec<_> = report.findings.iter().map(|finding| finding.kind.as_str()).collect();
     assert!(kinds.contains(&"unresolved_candidate"));
     assert!(kinds.contains(&"broken_link"));
     assert!(kinds.contains(&"stale_checkpoint"));
@@ -115,12 +99,8 @@ fn audit_reports_deterministic_and_relation_supported_findings_without_mutation(
     );
     for path in before {
         assert!(path.is_file());
-        let record = parse_markdown(&path, &fs::read_to_string(&path).expect("read after"))
-            .expect("parse after");
-        assert!(matches!(
-            record.status,
-            RecordStatus::Active | RecordStatus::Candidate
-        ));
+        let record = parse_markdown(&path, &fs::read_to_string(&path).expect("read after")).expect("parse after");
+        assert!(matches!(record.status, RecordStatus::Active | RecordStatus::Candidate));
     }
     fs::remove_dir_all(paths.root).expect("remove store");
 }

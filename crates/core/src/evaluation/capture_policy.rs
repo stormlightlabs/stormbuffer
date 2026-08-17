@@ -3,12 +3,10 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Error, ProposalOutcomeRates, ReceiptFeedbackFile, ReceiptId, RecordId, RecordKind,
-    parse_receipt_feedback_file,
+    Error, ProposalOutcomeRates, ReceiptFeedbackFile, ReceiptId, RecordId, RecordKind, parse_receipt_feedback_file,
 };
 
-const CAPTURE_POLICY_JSON: &str =
-    include_str!("../../tests/fixtures/evaluation/capture-policy.json");
+const CAPTURE_POLICY_JSON: &str = include_str!("../../tests/fixtures/evaluation/capture-policy.json");
 const FEEDBACK_JSON: &str = include_str!("../../tests/fixtures/evaluation/receipt-feedback.json");
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -98,18 +96,13 @@ pub struct CapturePolicyReport {
 /// Scores assessments already made by a host. This evaluator does not infer a
 /// disposition from an event and is not used by capture or mutation paths.
 pub fn run_synthetic_capture_policy_evaluation() -> crate::Result<CapturePolicyReport> {
-    let fixture: CapturePolicyFile =
-        serde_json::from_str(CAPTURE_POLICY_JSON).map_err(|error| {
-            Error::invalid_input(format!("invalid capture policy fixture: {error}"))
-        })?;
+    let fixture: CapturePolicyFile = serde_json::from_str(CAPTURE_POLICY_JSON)
+        .map_err(|error| Error::invalid_input(format!("invalid capture policy fixture: {error}")))?;
     let feedback = parse_receipt_feedback_file(FEEDBACK_JSON)?;
     evaluate(&fixture, &feedback)
 }
 
-fn evaluate(
-    fixture: &CapturePolicyFile,
-    feedback: &ReceiptFeedbackFile,
-) -> crate::Result<CapturePolicyReport> {
+fn evaluate(fixture: &CapturePolicyFile, feedback: &ReceiptFeedbackFile) -> crate::Result<CapturePolicyReport> {
     validate(fixture, feedback)?;
     let assessments = fixture
         .assessments
@@ -201,9 +194,7 @@ fn validate(fixture: &CapturePolicyFile, feedback: &ReceiptFeedbackFile) -> crat
         .collect::<crate::Result<Vec<_>>>()?
         .into_iter()
         .collect::<HashSet<_>>();
-    if scenario_ids.len() != fixture.scenarios.len()
-        || scenario_ids.len() != fixture.assessments.len()
-    {
+    if scenario_ids.len() != fixture.scenarios.len() || scenario_ids.len() != fixture.assessments.len() {
         return Err(Error::invalid_input(
             "capture scenarios and assessments must have one unique matching entry",
         ));
@@ -218,9 +209,7 @@ fn validate(fixture: &CapturePolicyFile, feedback: &ReceiptFeedbackFile) -> crat
             ));
         }
         let actionable = assessment.disposition != CaptureDisposition::Abstain;
-        if actionable != assessment.candidate.is_some()
-            || actionable != assessment.receipt_id.is_some()
-        {
+        if actionable != assessment.candidate.is_some() || actionable != assessment.receipt_id.is_some() {
             return Err(Error::invalid_input(format!(
                 "capture assessment {} must attach one candidate and receipt exactly when actionable",
                 assessment.scenario_id
@@ -241,14 +230,8 @@ fn validate(fixture: &CapturePolicyFile, feedback: &ReceiptFeedbackFile) -> crat
                     assessment.scenario_id
                 ))
             })?;
-            if judgment
-                .proposal
-                .as_ref()
-                .map(|proposal| proposal.record_id)
-                != assessment
-                    .candidate
-                    .as_ref()
-                    .map(|candidate| candidate.record_id)
+            if judgment.proposal.as_ref().map(|proposal| proposal.record_id)
+                != assessment.candidate.as_ref().map(|candidate| candidate.record_id)
             {
                 return Err(Error::invalid_input(format!(
                     "capture assessment {} candidate does not match receipt feedback",
@@ -261,11 +244,7 @@ fn validate(fixture: &CapturePolicyFile, feedback: &ReceiptFeedbackFile) -> crat
 }
 
 fn ratio(numerator: usize, denominator: usize) -> f64 {
-    if denominator == 0 {
-        0.0
-    } else {
-        numerator as f64 / denominator as f64
-    }
+    if denominator == 0 { 0.0 } else { numerator as f64 / denominator as f64 }
 }
 
 fn record_id<'de, D>(deserializer: D) -> Result<RecordId, D::Error>

@@ -6,8 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
 use stormbuffer_core::{
-    EvidenceOutcome, ProposalFeedbackOutcome, parse_receipt_feedback_file,
-    rebuild_receipt_feedback_projection,
+    EvidenceOutcome, ProposalFeedbackOutcome, parse_receipt_feedback_file, rebuild_receipt_feedback_projection,
 };
 
 const FEEDBACK_JSON: &str = include_str!("fixtures/evaluation/receipt-feedback.json");
@@ -57,10 +56,8 @@ fn rebuilt_projection_joins_by_receipt_and_contains_no_content_fields() {
     let projection = root.join("receipt-feedback.sqlite3");
     let feedback = parse_receipt_feedback_file(FEEDBACK_JSON).expect("parse feedback judgments");
 
-    let first = rebuild_receipt_feedback_projection(&projection, &feedback)
-        .expect("build feedback projection");
-    let second = rebuild_receipt_feedback_projection(&projection, &feedback)
-        .expect("rebuild feedback projection");
+    let first = rebuild_receipt_feedback_projection(&projection, &feedback).expect("build feedback projection");
+    let second = rebuild_receipt_feedback_projection(&projection, &feedback).expect("rebuild feedback projection");
     assert_eq!(first, second);
     assert_eq!(second.receipt_count, 6);
     assert_eq!(second.evidence_count, 5);
@@ -124,10 +121,7 @@ fn content_fields_are_rejected_from_judgments() {
 }
 
 fn temporary_root() -> PathBuf {
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
     let counter = NEXT_ROOT.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir().join(format!(
         "stormbuffer-receipt-feedback-{}-{stamp}-{counter}",

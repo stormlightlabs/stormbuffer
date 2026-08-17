@@ -3,25 +3,13 @@ use crate::Record;
 pub(crate) fn contains_likely_secret(record: &Record) -> bool {
     text_contains_likely_secret(&record.title)
         || text_contains_likely_secret(&record.body)
-        || record
-            .tags
-            .iter()
-            .any(|value| text_contains_likely_secret(value))
-        || record
-            .aliases
-            .iter()
-            .any(|value| text_contains_likely_secret(value))
+        || record.tags.iter().any(|value| text_contains_likely_secret(value))
+        || record.aliases.iter().any(|value| text_contains_likely_secret(value))
         || record.sources.iter().any(|source| {
             text_contains_likely_secret(&source.reference)
                 || text_contains_likely_secret(&source.actor)
-                || source
-                    .revision
-                    .as_deref()
-                    .is_some_and(text_contains_likely_secret)
-                || source
-                    .content_hash
-                    .as_deref()
-                    .is_some_and(text_contains_likely_secret)
+                || source.revision.as_deref().is_some_and(text_contains_likely_secret)
+                || source.content_hash.as_deref().is_some_and(text_contains_likely_secret)
         })
 }
 
@@ -45,9 +33,7 @@ fn contains_authorization_header(text: &str) -> bool {
         let Some((name, value)) = line.split_once(':') else {
             return false;
         };
-        if !name.eq_ignore_ascii_case("authorization")
-            && !name.eq_ignore_ascii_case("proxy-authorization")
-        {
+        if !name.eq_ignore_ascii_case("authorization") && !name.eq_ignore_ascii_case("proxy-authorization") {
             return false;
         }
         let value = value.trim();
@@ -55,15 +41,14 @@ fn contains_authorization_header(text: &str) -> bool {
             .or_else(|| strip_prefix_ignore_ascii_case(value, "basic "))
             .unwrap_or(value);
         is_substantive_credential(credential)
-    }) || text.split_whitespace().any(|word| {
-        strip_prefix_ignore_ascii_case(word, "bearer=").is_some_and(is_substantive_credential)
-    })
+    }) || text
+        .split_whitespace()
+        .any(|word| strip_prefix_ignore_ascii_case(word, "bearer=").is_some_and(is_substantive_credential))
 }
 
 fn contains_prefixed_token(text: &str) -> bool {
     text.split(|character: char| {
-        character.is_whitespace()
-            || matches!(character, '"' | '\'' | '`' | ',' | ';' | '(' | ')' | '=')
+        character.is_whitespace() || matches!(character, '"' | '\'' | '`' | ',' | ';' | '(' | ')' | '=')
     })
     .map(|token| token.trim_matches(|character: char| matches!(character, '[' | ']' | '{' | '}')))
     .any(|token| {
@@ -90,9 +75,9 @@ fn contains_prefixed_token(text: &str) -> bool {
         .any(|(prefix, minimum)| {
             token.starts_with(prefix)
                 && token.len() >= *minimum
-                && token[prefix.len()..].chars().all(|character| {
-                    character.is_ascii_alphanumeric() || matches!(character, '_' | '-')
-                })
+                && token[prefix.len()..]
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
         }) || (token.len() == 20
             && token.starts_with("AKIA")
             && token
@@ -106,9 +91,7 @@ fn contains_credential_url(text: &str) -> bool {
     while let Some(scheme_end) = rest.find("://") {
         let after_scheme = &rest[scheme_end + 3..];
         let authority_end = after_scheme
-            .find(|character: char| {
-                character.is_whitespace() || matches!(character, '/' | '?' | '#')
-            })
+            .find(|character: char| character.is_whitespace() || matches!(character, '/' | '?' | '#'))
             .unwrap_or(after_scheme.len());
         let authority = &after_scheme[..authority_end];
         if let Some((userinfo, _host)) = authority.rsplit_once('@')
@@ -130,9 +113,8 @@ fn strip_prefix_ignore_ascii_case<'a>(value: &'a str, prefix: &str) -> Option<&'
 }
 
 fn is_substantive_credential(value: &str) -> bool {
-    let value = value.trim_matches(|character: char| {
-        character.is_ascii_whitespace() || matches!(character, '"' | '\'' | '`')
-    });
+    let value =
+        value.trim_matches(|character: char| character.is_ascii_whitespace() || matches!(character, '"' | '\'' | '`'));
     value.len() >= 8 && !is_placeholder(value)
 }
 
@@ -144,9 +126,7 @@ fn is_placeholder(value: &str) -> bool {
     ) || normalized.starts_with('<')
         || normalized.starts_with("${")
         || normalized.starts_with("{{")
-        || normalized
-            .chars()
-            .all(|character| character == '*' || character == 'x')
+        || normalized.chars().all(|character| character == '*' || character == 'x')
         || [
             "example",
             "placeholder",

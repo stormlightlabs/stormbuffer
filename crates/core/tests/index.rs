@@ -4,10 +4,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use stormbuffer_core::{
-    AdvisoryRelationProjection, INDEX_SCHEMA_VERSION, SearchOptions, StoreInitMode, StorePaths,
-    StoreScope, context_store, doctor_store, index_path, initialize_store, inspect_store,
-    invoke_request, reindex_store, repair_store, replace_advisory_relation_projection,
-    search_store, search_stores, sync_store,
+    AdvisoryRelationProjection, INDEX_SCHEMA_VERSION, SearchOptions, StoreInitMode, StorePaths, StoreScope,
+    context_store, doctor_store, index_path, initialize_store, inspect_store, invoke_request, reindex_store,
+    repair_store, replace_advisory_relation_projection, search_store, search_stores, sync_store,
 };
 
 struct TempStore {
@@ -18,10 +17,7 @@ static NEXT_TEMP_STORE: AtomicU64 = AtomicU64::new(0);
 
 impl TempStore {
     fn new() -> Self {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
+        let suffix = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
         for attempt in 0..100 {
             let counter = NEXT_TEMP_STORE.fetch_add(1, Ordering::Relaxed);
             let root = std::env::temp_dir().join(format!(
@@ -54,13 +50,7 @@ impl Drop for TempStore {
 }
 
 fn write_record(
-    paths: &StorePaths,
-    filename: &str,
-    id: &str,
-    title: &str,
-    scope: &str,
-    alias: &str,
-    body: &str,
+    paths: &StorePaths, filename: &str, id: &str, title: &str, scope: &str, alias: &str, body: &str,
 ) -> PathBuf {
     let markdown = format!(
         r#"+++
@@ -106,22 +96,15 @@ fn sync_is_incremental_and_search_returns_attributable_results() {
     assert_eq!(second.indexed, 0);
     assert_eq!(second.skipped, 1);
 
-    let results =
-        search_store(&paths, "portable source", SearchOptions::default()).expect("search");
+    let results = search_store(&paths, "portable source", SearchOptions::default()).expect("search");
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].lexical_match_reason, "phrase");
-    assert_eq!(
-        results[0].sources[0].reference,
-        "ROADMAP.md#canonical-records"
-    );
+    assert_eq!(results[0].sources[0].reference, "ROADMAP.md#canonical-records");
 
     let context = context_store(
         &paths,
         "portable",
-        stormbuffer_core::ContextOptions {
-            budget: 3,
-            search: SearchOptions::default(),
-        },
+        stormbuffer_core::ContextOptions { budget: 3, search: SearchOptions::default() },
     )
     .expect("context");
     assert!(context.receipt.used_tokens <= 3);
@@ -221,11 +204,7 @@ fn search_matches_filename_commands_aliases_and_unicode() {
     let report = sync_store(&paths).expect("sync");
     assert_eq!(report.indexed, 1, "invalid: {:?}", report.invalid_files);
 
-    for query in [
-        "production ritual",
-        "crème brûlée",
-        "cargo test --workspace",
-    ] {
+    for query in ["production ritual", "crème brûlée", "cargo test --workspace"] {
         assert_eq!(
             search_store(&paths, query, SearchOptions::default())
                 .expect("search")
@@ -234,8 +213,7 @@ fn search_matches_filename_commands_aliases_and_unicode() {
             "query {query:?}"
         );
     }
-    let filename = search_store(&paths, "deploy-runbook.md", SearchOptions::default())
-        .expect("filename search");
+    let filename = search_store(&paths, "deploy-runbook.md", SearchOptions::default()).expect("filename search");
     assert_eq!(filename[0].lexical_match_reason, "exact_filename");
 }
 
@@ -275,25 +253,13 @@ fn project_search_includes_global_and_rebuild_preserves_manual_edits() {
         "A recoverable index starts with the project record.",
     );
     let global_report = sync_store(&global).expect("sync global");
-    assert_eq!(
-        global_report.indexed, 1,
-        "invalid: {:?}",
-        global_report.invalid_files
-    );
+    assert_eq!(global_report.indexed, 1, "invalid: {:?}", global_report.invalid_files);
     let project_report = sync_store(&project).expect("sync project");
-    assert_eq!(
-        project_report.indexed, 1,
-        "invalid: {:?}",
-        project_report.invalid_files
-    );
+    assert_eq!(project_report.indexed, 1, "invalid: {:?}", project_report.invalid_files);
 
     let options = SearchOptions::for_store(&project);
-    let results = search_stores(
-        &[project.clone(), global.clone()],
-        "recoverable index",
-        options.clone(),
-    )
-    .expect("search both scopes");
+    let results = search_stores(&[project.clone(), global.clone()], "recoverable index", options.clone())
+        .expect("search both scopes");
     assert_eq!(results.len(), 2);
     assert_eq!(results[0].scope, project_scope);
     assert_eq!(results[1].scope, "global");
@@ -319,15 +285,11 @@ fn project_search_includes_global_and_rebuild_preserves_manual_edits() {
     );
 
     let canonical_before = fs::read(&project_file).expect("read canonical bytes");
-    let before =
-        search_store(&project, "manually edited", options.clone()).expect("search before rebuild");
+    let before = search_store(&project, "manually edited", options.clone()).expect("search before rebuild");
     reindex_store(&project).expect("rebuild projection");
     let after = search_store(&project, "manually edited", options).expect("search after rebuild");
     assert_eq!(
-        before
-            .iter()
-            .map(|result| &result.title)
-            .collect::<Vec<_>>(),
+        before.iter().map(|result| &result.title).collect::<Vec<_>>(),
         after.iter().map(|result| &result.title).collect::<Vec<_>>()
     );
     assert_eq!(
@@ -340,13 +302,9 @@ fn project_search_includes_global_and_rebuild_preserves_manual_edits() {
     assert!(reindex_store(&project).is_err());
     fs::rename(&records_away, &project.records).expect("restore canonical records");
     assert_eq!(
-        search_store(
-            &project,
-            "manually edited",
-            SearchOptions::for_store(&project)
-        )
-        .expect("existing index remains usable")
-        .len(),
+        search_store(&project, "manually edited", SearchOptions::for_store(&project))
+            .expect("existing index remains usable")
+            .len(),
         1
     );
 
@@ -354,21 +312,12 @@ fn project_search_includes_global_and_rebuild_preserves_manual_edits() {
     let diagnosis = doctor_store(&project).expect("diagnose index");
     assert!(diagnosis.failures > 0);
     assert!(diagnosis.warnings > 0);
-    assert!(
-        diagnosis
-            .issues
-            .iter()
-            .all(|issue| !issue.repair.is_empty())
-    );
+    assert!(diagnosis.issues.iter().all(|issue| !issue.repair.is_empty()));
     reindex_store(&project).expect("replace corrupt projection");
     assert_eq!(
-        search_store(
-            &project,
-            "manually edited",
-            SearchOptions::for_store(&project)
-        )
-        .expect("search repaired index")
-        .len(),
+        search_store(&project, "manually edited", SearchOptions::for_store(&project))
+            .expect("search repaired index")
+            .len(),
         1
     );
     assert_eq!(
@@ -381,10 +330,7 @@ fn project_search_includes_global_and_rebuild_preserves_manual_edits() {
     let invalid_bytes = fs::read(&invalid).expect("read invalid bytes");
     let report = sync_store(&project).expect("report invalid record");
     assert_eq!(report.invalid_files.len(), 1);
-    assert_eq!(
-        fs::read(invalid).expect("read invalid after sync"),
-        invalid_bytes
-    );
+    assert_eq!(fs::read(invalid).expect("read invalid after sync"), invalid_bytes);
 }
 
 #[test]
@@ -431,12 +377,8 @@ fn renamed_project_keeps_its_scope_when_reindexed_locally() {
         project_scope
     );
     reindex_store(&renamed).expect("reindex renamed project");
-    let results = search_store(
-        &renamed,
-        "renamed project",
-        SearchOptions::for_store(&renamed),
-    )
-    .expect("search renamed project");
+    let results =
+        search_store(&renamed, "renamed project", SearchOptions::for_store(&renamed)).expect("search renamed project");
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].scope, project_scope);
 }
@@ -479,9 +421,7 @@ fn global_store_uses_a_temporary_projection_when_its_cache_is_read_only() {
         "Agents can rebuild a disposable projection.",
     );
 
-    let mut permissions = fs::metadata(&paths.cache)
-        .expect("cache metadata")
-        .permissions();
+    let mut permissions = fs::metadata(&paths.cache).expect("cache metadata").permissions();
     permissions.set_mode(0o555);
     fs::set_permissions(&paths.cache, permissions).expect("make cache read-only");
 
@@ -503,13 +443,10 @@ fn global_store_uses_a_temporary_projection_when_its_cache_is_read_only() {
         1
     );
 
-    let mut permissions = fs::metadata(&paths.cache)
-        .expect("cache metadata")
-        .permissions();
+    let mut permissions = fs::metadata(&paths.cache).expect("cache metadata").permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(&paths.cache, permissions).expect("restore cache permissions");
-    fs::remove_dir_all(fallback.parent().expect("fallback directory"))
-        .expect("remove fallback projection");
+    fs::remove_dir_all(fallback.parent().expect("fallback directory")).expect("remove fallback projection");
 }
 
 #[test]
@@ -563,12 +500,9 @@ fn project_status_excludes_the_shared_global_cache() {
     initialize_store(&paths, StoreInitMode::Default).expect("initialize");
     sync_store(&paths).expect("sync");
 
-    let before = inspect_store(&paths)
-        .expect("inspect project status")
-        .disposable_bytes;
+    let before = inspect_store(&paths).expect("inspect project status").disposable_bytes;
     fs::create_dir_all(&paths.cache).expect("create shared cache");
-    fs::write(paths.cache.join("global-projection.bin"), vec![0; 4096])
-        .expect("write shared cache fixture");
+    fs::write(paths.cache.join("global-projection.bin"), vec![0; 4096]).expect("write shared cache fixture");
     let after = inspect_store(&paths)
         .expect("inspect project status with shared cache")
         .disposable_bytes;
@@ -598,8 +532,7 @@ fn repair_rebuilds_only_disposable_state_and_is_idempotent() {
     fs::create_dir_all(paths.root.join("locks")).expect("create locks");
     fs::create_dir_all(paths.root.join("tmp")).expect("create tmp");
     fs::write(paths.root.join("locks/stale.lock"), b"stale").expect("write stale lock");
-    fs::write(paths.root.join("locks/supersede.toml"), b"recovery journal")
-        .expect("write recovery journal");
+    fs::write(paths.root.join("locks/supersede.toml"), b"recovery journal").expect("write recovery journal");
     fs::write(paths.root.join("tmp/stale.json"), b"stale").expect("write stale temp");
 
     let repaired = repair_store(&paths).expect("repair store");
@@ -622,14 +555,8 @@ fn repair_rebuilds_only_disposable_state_and_is_idempotent() {
 
     let repeated = repair_store(&paths).expect("repeat repair");
     assert!(repeated.repaired.is_empty());
-    assert_eq!(
-        fs::read(marker).expect("read repeated marker"),
-        marker_before
-    );
-    assert_eq!(
-        fs::read(record).expect("read repeated record"),
-        record_before
-    );
+    assert_eq!(fs::read(marker).expect("read repeated marker"), marker_before);
+    assert_eq!(fs::read(record).expect("read repeated record"), record_before);
 }
 
 #[cfg(unix)]
@@ -675,18 +602,14 @@ fn advisory_relations_are_discarded_when_the_projection_is_rebuilt() {
     .expect("write advisory projection");
     let before: i64 = rusqlite::Connection::open(index_path(&paths))
         .expect("open projection")
-        .query_row("SELECT COUNT(*) FROM advisory_relations", [], |row| {
-            row.get(0)
-        })
+        .query_row("SELECT COUNT(*) FROM advisory_relations", [], |row| row.get(0))
         .expect("count advisory rows");
     assert_eq!(before, 1);
 
     reindex_store(&paths).expect("rebuild projection");
     let after: i64 = rusqlite::Connection::open(index_path(&paths))
         .expect("open rebuilt projection")
-        .query_row("SELECT COUNT(*) FROM advisory_relations", [], |row| {
-            row.get(0)
-        })
+        .query_row("SELECT COUNT(*) FROM advisory_relations", [], |row| row.get(0))
         .expect("count rebuilt advisory rows");
     assert_eq!(after, 0);
 }
@@ -696,16 +619,19 @@ fn repair_reports_canonical_failures_for_manual_intervention() {
     let store = TempStore::new();
     let paths = store.paths();
     initialize_store(&paths, StoreInitMode::Default).expect("initialize");
-    fs::write(paths.records.join("invalid.md"), b"not a canonical record")
-        .expect("write invalid canonical record");
+    fs::write(paths.records.join("invalid.md"), b"not a canonical record").expect("write invalid canonical record");
     let invalid_before = fs::read(paths.records.join("invalid.md")).expect("read invalid record");
 
     let repair = repair_store(&paths).expect("diagnose canonical failure");
     assert!(repair.repaired.is_empty());
     assert!(repair.diagnosis.failures > 0);
-    assert!(repair.diagnosis.issues.iter().any(|issue| {
-        issue.severity == "failure" && issue.repair.contains("repair the Markdown")
-    }));
+    assert!(
+        repair
+            .diagnosis
+            .issues
+            .iter()
+            .any(|issue| { issue.severity == "failure" && issue.repair.contains("repair the Markdown") })
+    );
     assert_eq!(
         fs::read(paths.records.join("invalid.md")).expect("read invalid record after repair"),
         invalid_before

@@ -15,16 +15,14 @@ fn temporary_root() -> PathBuf {
 }
 
 fn binary() -> PathBuf {
-    env::var_os("CARGO_BIN_EXE_sbuf")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            env::current_exe()
-                .expect("locate test executable")
-                .parent()
-                .and_then(Path::parent)
-                .expect("locate debug directory")
-                .join("sbuf")
-        })
+    env::var_os("CARGO_BIN_EXE_sbuf").map(PathBuf::from).unwrap_or_else(|| {
+        env::current_exe()
+            .expect("locate test executable")
+            .parent()
+            .and_then(Path::parent)
+            .expect("locate debug directory")
+            .join("sbuf")
+    })
 }
 
 fn run(root: &Path, args: &[&str]) -> Output {
@@ -73,33 +71,17 @@ fn inbox_and_audit_have_human_and_json_read_only_views() {
     let before = fs::read(&record).expect("read before audit");
 
     let human = run(&root, &["--global", "inbox", "--kind", "fact"]);
-    assert!(
-        human.status.success(),
-        "{}",
-        String::from_utf8_lossy(&human.stderr)
-    );
+    assert!(human.status.success(), "{}", String::from_utf8_lossy(&human.stderr));
     assert!(String::from_utf8_lossy(&human.stdout).contains("Candidates: 1"));
-    let json = run(
-        &root,
-        &["--global", "inbox", "--source", "conversation", "--json"],
-    );
-    assert!(
-        json.status.success(),
-        "{}",
-        String::from_utf8_lossy(&json.stderr)
-    );
+    let json = run(&root, &["--global", "inbox", "--source", "conversation", "--json"]);
+    assert!(json.status.success(), "{}", String::from_utf8_lossy(&json.stderr));
     let inbox: serde_json::Value = serde_json::from_slice(&json.stdout).expect("parse inbox JSON");
     assert_eq!(inbox.as_array().expect("inbox array").len(), 1);
     assert_eq!(inbox[0]["kind"], "fact");
 
     let audit = run(&root, &["--global", "audit", "--json"]);
-    assert!(
-        audit.status.success(),
-        "{}",
-        String::from_utf8_lossy(&audit.stderr)
-    );
-    let report: serde_json::Value =
-        serde_json::from_slice(&audit.stdout).expect("parse audit JSON");
+    assert!(audit.status.success(), "{}", String::from_utf8_lossy(&audit.stderr));
+    let report: serde_json::Value = serde_json::from_slice(&audit.stdout).expect("parse audit JSON");
     assert_eq!(report["findings"][0]["kind"], "unresolved_candidate");
     assert!(
         report["findings"][0]["follow_up"]

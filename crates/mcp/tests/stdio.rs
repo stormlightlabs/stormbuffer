@@ -10,8 +10,7 @@ use stormbuffer_core::{PlatformDirs, StoreInitMode, StoreScope};
 fn temporary_project() -> PathBuf {
     static NEXT_PROJECT: AtomicU64 = AtomicU64::new(0);
     let suffix = NEXT_PROJECT.fetch_add(1, Ordering::Relaxed);
-    let root =
-        std::env::temp_dir().join(format!("stormbuffer-mcp-{}-{suffix}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("stormbuffer-mcp-{}-{suffix}", std::process::id()));
     fs::create_dir_all(&root).expect("create temporary project");
     let paths = stormbuffer_core::resolve_store_with_dirs(
         StoreScope::Project,
@@ -19,8 +18,7 @@ fn temporary_project() -> PathBuf {
         &PlatformDirs::new(root.join("data"), root.join("cache")),
     )
     .expect("resolve temporary store");
-    stormbuffer_core::initialize_store(&paths, StoreInitMode::Default)
-        .expect("initialize temporary store");
+    stormbuffer_core::initialize_store(&paths, StoreInitMode::Default).expect("initialize temporary store");
     root
 }
 
@@ -71,8 +69,7 @@ fn command_line_lists_store_views_and_rejects_mixed_scopes() {
         &PlatformDirs::new(root.join("data"), root.join("cache")),
     )
     .expect("resolve global store");
-    stormbuffer_core::initialize_store(&global_paths, StoreInitMode::Default)
-        .expect("initialize global store");
+    stormbuffer_core::initialize_store(&global_paths, StoreInitMode::Default).expect("initialize global store");
     let mut global = Command::new(env!("CARGO_BIN_EXE_stormbuffer-mcp"))
         .args(["--stdio", "--global"])
         .current_dir(&root)
@@ -108,11 +105,7 @@ fn command_line_lists_store_views_and_rejects_mixed_scopes() {
         .write_all(format!("{input}\n").as_bytes())
         .expect("write global requests");
     let global = global.wait_with_output().expect("wait for global scope");
-    assert!(
-        global.status.success(),
-        "{}",
-        String::from_utf8_lossy(&global.stderr)
-    );
+    assert!(global.status.success(), "{}", String::from_utf8_lossy(&global.stderr));
     let response: Value = serde_json::from_slice(
         global
             .stdout
@@ -197,10 +190,7 @@ fn stdio_lists_surface_and_closes_cleanly_at_eof() {
         .map(|line| serde_json::from_str(line).expect("MCP response is JSON"))
         .collect();
     assert_eq!(responses.len(), 3);
-    assert_eq!(
-        responses[0]["result"]["serverInfo"]["name"],
-        "stormbuffer-mcp"
-    );
+    assert_eq!(responses[0]["result"]["serverInfo"]["name"], "stormbuffer-mcp");
     assert!(
         responses[0]["result"]["instructions"]
             .as_str()
@@ -224,13 +214,7 @@ fn stdio_lists_surface_and_closes_cleanly_at_eof() {
             "memory_update",
         ]
     );
-    assert_eq!(
-        responses[2]["result"]["resourceTemplates"]
-            .as_array()
-            .unwrap()
-            .len(),
-        3
-    );
+    assert_eq!(responses[2]["result"]["resourceTemplates"].as_array().unwrap().len(), 3);
 }
 
 #[test]
@@ -377,11 +361,7 @@ fn stdio_candidate_write_mode_allows_proposals_but_not_archival() {
             "tools/call",
             json!({"name":"memory_recall","arguments":{"query":"MCP fixture","budget":128}}),
         ),
-        request(
-            3,
-            "tools/call",
-            json!({"name":"memory_get","arguments":{"id":id}}),
-        ),
+        request(3, "tools/call", json!({"name":"memory_get","arguments":{"id":id}})),
         request(
             4,
             "tools/call",
@@ -392,11 +372,7 @@ fn stdio_candidate_write_mode_allows_proposals_but_not_archival() {
             "tools/call",
             json!({"name":"memory_update","arguments":{"id":id,"body":"An updated MCP fixture.","source":source}}),
         ),
-        request(
-            6,
-            "tools/call",
-            json!({"name":"memory_forget","arguments":{"id":id}}),
-        ),
+        request(6, "tools/call", json!({"name":"memory_forget","arguments":{"id":id}})),
     ];
     let responses = calls
         .iter()
@@ -411,15 +387,9 @@ fn stdio_candidate_write_mode_allows_proposals_but_not_archival() {
         "MCP stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(
-        initialize["result"]["serverInfo"]["name"],
-        "stormbuffer-mcp"
-    );
+    assert_eq!(initialize["result"]["serverInfo"]["name"], "stormbuffer-mcp");
     assert_eq!(responses.len(), 5);
-    for (response, operation) in responses[..4]
-        .iter()
-        .zip(["context", "get", "remember", "update"])
-    {
+    for (response, operation) in responses[..4].iter().zip(["context", "get", "remember", "update"]) {
         let content = &response["result"]["structuredContent"];
         assert_eq!(content["operation"], operation);
         assert_eq!(content["ok"], true, "{content}");
@@ -433,8 +403,7 @@ fn stdio_candidate_write_mode_allows_proposals_but_not_archival() {
     assert_eq!(receipt["embedding_model"], Value::Null);
     assert_eq!(receipt["embedding_version"], Value::Null);
     assert_eq!(receipt["semantic_fallback"], "intentionally_unavailable");
-    stormbuffer_core::ReceiptId::parse(receipt["receipt_id"].as_str().expect("receipt id"))
-        .expect("valid receipt id");
+    stormbuffer_core::ReceiptId::parse(receipt["receipt_id"].as_str().expect("receipt id")).expect("valid receipt id");
     stormbuffer_core::Timestamp::parse(receipt["retrieved_at"].as_str().expect("retrieval time"))
         .expect("valid retrieval time");
 }

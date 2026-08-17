@@ -148,10 +148,7 @@ pub enum Error {
     #[error("SQLite projection is busy; retry the operation")]
     IndexBusy,
     #[error("embedding operation failed: {operation}: {message}")]
-    Embedding {
-        operation: &'static str,
-        message: String,
-    },
+    Embedding { operation: &'static str, message: String },
     #[error("backup operation failed: {source}")]
     Backup {
         #[source]
@@ -167,25 +164,16 @@ impl Error {
     pub(crate) fn invalid_record(field: impl Into<String>, message: impl Into<String>) -> Self {
         Self::InvalidRecord {
             context: "record".to_owned(),
-            source: RecordError::Validation {
-                field: field.into(),
-                message: message.into(),
-            },
+            source: RecordError::Validation { field: field.into(), message: message.into() },
         }
     }
 
     pub(crate) fn invalid_record_at(path: &Path, source: RecordError) -> Self {
-        Self::InvalidRecord {
-            context: path_context(path),
-            source,
-        }
+        Self::InvalidRecord { context: path_context(path), source }
     }
 
     fn invalid_store_at(path: &Path, source: StoreConfigError) -> Self {
-        Self::InvalidStoreConfiguration {
-            context: path_context(path),
-            source,
-        }
+        Self::InvalidStoreConfiguration { context: path_context(path), source }
     }
 
     pub(crate) fn repository(source: RepositoryError) -> Self {
@@ -193,16 +181,11 @@ impl Error {
     }
 
     pub(crate) fn invalid_input(message: impl Into<String>) -> Self {
-        Self::InvalidInput {
-            message: message.into(),
-        }
+        Self::InvalidInput { message: message.into() }
     }
 
     pub(crate) fn embedding(operation: &'static str, message: impl Into<String>) -> Self {
-        Self::Embedding {
-            operation,
-            message: message.into(),
-        }
+        Self::Embedding { operation, message: message.into() }
     }
 
     pub(crate) fn backup(source: BackupError) -> Self {
@@ -262,9 +245,7 @@ impl StoreVisibility {
         match value {
             "private" => Ok(Self::Private),
             "shared" => Ok(Self::Shared),
-            _ => Err(StoreConfigError::InvalidVisibility {
-                value: value.to_owned(),
-            }),
+            _ => Err(StoreConfigError::InvalidVisibility { value: value.to_owned() }),
         }
     }
 }
@@ -337,8 +318,7 @@ impl PlatformDirs {
         let home = home_directory().ok_or(Error::MissingHomeDirectory)?;
         let (data_root, cache_root) = match env::consts::OS {
             "macos" => (
-                env_path("XDG_DATA_HOME")
-                    .unwrap_or_else(|| home.join("Library").join("Application Support")),
+                env_path("XDG_DATA_HOME").unwrap_or_else(|| home.join("Library").join("Application Support")),
                 env_path("XDG_CACHE_HOME").unwrap_or_else(|| home.join("Library").join("Caches")),
             ),
             "windows" => {
@@ -353,17 +333,11 @@ impl PlatformDirs {
             ),
         };
 
-        Ok(Self {
-            data_root,
-            cache_root,
-        })
+        Ok(Self { data_root, cache_root })
     }
 
     pub fn new(data_root: PathBuf, cache_root: PathBuf) -> Self {
-        Self {
-            data_root,
-            cache_root,
-        }
+        Self { data_root, cache_root }
     }
 
     pub fn data_root(&self) -> &Path {
@@ -385,12 +359,7 @@ pub struct StorePaths {
 
 impl StorePaths {
     fn new(scope: StoreScope, root: PathBuf, cache: PathBuf) -> Self {
-        Self {
-            scope,
-            records: root.join("records"),
-            root,
-            cache,
-        }
+        Self { scope, records: root.join("records"), root, cache }
     }
 }
 
@@ -428,11 +397,7 @@ pub fn resolve_store(scope: StoreScope, cwd: &Path) -> Result<StorePaths> {
     resolve_store_with_dirs(scope, cwd, &dirs)
 }
 
-pub fn resolve_store_with_dirs(
-    scope: StoreScope,
-    cwd: &Path,
-    dirs: &PlatformDirs,
-) -> Result<StorePaths> {
+pub fn resolve_store_with_dirs(scope: StoreScope, cwd: &Path, dirs: &PlatformDirs) -> Result<StorePaths> {
     if !cwd.is_dir() {
         return Err(Error::InvalidWorkingDirectory);
     }
@@ -452,12 +417,9 @@ pub fn initialize_store(paths: &StorePaths, mode: StoreInitMode) -> Result<bool>
         return Err(Error::SharedStoreRequiresProject);
     }
 
-    fs::create_dir_all(&paths.root)
-        .map_err(|source| Error::io("create the store directory", source))?;
-    fs::create_dir_all(&paths.records)
-        .map_err(|source| Error::io("create the records directory", source))?;
-    fs::create_dir_all(&paths.cache)
-        .map_err(|source| Error::io("create the cache directory", source))?;
+    fs::create_dir_all(&paths.root).map_err(|source| Error::io("create the store directory", source))?;
+    fs::create_dir_all(&paths.records).map_err(|source| Error::io("create the records directory", source))?;
+    fs::create_dir_all(&paths.cache).map_err(|source| Error::io("create the cache directory", source))?;
 
     let (created, visibility) = create_marker(paths, mode)?;
 
@@ -471,24 +433,15 @@ pub fn initialize_store(paths: &StorePaths, mode: StoreInitMode) -> Result<bool>
 
 pub fn inspect_store(paths: &StorePaths) -> Result<StoreStatus> {
     let marker = paths.root.join("store.toml");
-    let config = if marker.is_file() {
-        Some(read_store_config(&marker, paths.scope)?)
-    } else {
-        None
-    };
+    let config = if marker.is_file() { Some(read_store_config(&marker, paths.scope)?) } else { None };
     let initialized = config.is_some();
     let lifecycle = if initialized && paths.records.is_dir() {
         inspect_lifecycle(&paths.records)?
     } else {
         LifecycleCounts::default()
     };
-    let record_count =
-        lifecycle.candidate + lifecycle.active + lifecycle.superseded + lifecycle.archived;
-    let canonical_bytes = if initialized {
-        file_bytes(&marker)? + directory_bytes(&paths.records)?
-    } else {
-        0
-    };
+    let record_count = lifecycle.candidate + lifecycle.active + lifecycle.superseded + lifecycle.archived;
+    let canonical_bytes = if initialized { file_bytes(&marker)? + directory_bytes(&paths.records)? } else { 0 };
     let projection = inspect_projection_status(paths);
     let disposable_bytes = disposable_bytes(paths)?;
 
@@ -524,8 +477,7 @@ fn project_store_root(cwd: &Path) -> PathBuf {
 
 fn inspect_lifecycle(directory: &Path) -> Result<LifecycleCounts> {
     let mut counts = LifecycleCounts::default();
-    let entries =
-        fs::read_dir(directory).map_err(|source| Error::io("inspect the records", source))?;
+    let entries = fs::read_dir(directory).map_err(|source| Error::io("inspect the records", source))?;
     for entry in entries {
         let entry = entry.map_err(|source| Error::io("inspect the records", source))?;
         let file_type = entry
@@ -539,8 +491,7 @@ fn inspect_lifecycle(directory: &Path) -> Result<LifecycleCounts> {
             counts.archived += nested.archived;
         } else if file_type.is_file() && entry.path().extension().is_some_and(|ext| ext == "md") {
             let path = entry.path();
-            let markdown = fs::read_to_string(&path)
-                .map_err(|source| Error::io("read a canonical record", source))?;
+            let markdown = fs::read_to_string(&path).map_err(|source| Error::io("read a canonical record", source))?;
             match parse_markdown(&path, &markdown)?.status {
                 RecordStatus::Candidate => counts.candidate += 1,
                 RecordStatus::Active => counts.active += 1,
@@ -588,10 +539,7 @@ fn disposable_bytes(paths: &StorePaths) -> Result<u64> {
     let active_index = index::existing_index_path(paths);
     if paths.scope == StoreScope::Global {
         for suffix in ["", "-wal", "-shm"] {
-            bytes += file_bytes(&PathBuf::from(format!(
-                "{}{suffix}",
-                active_index.display()
-            )))?;
+            bytes += file_bytes(&PathBuf::from(format!("{}{suffix}", active_index.display())))?;
         }
         if let Some(parent) = active_index.parent() {
             bytes += file_bytes(&parent.join("projection.lock"))?;
@@ -644,9 +592,7 @@ fn create_marker(paths: &StorePaths, mode: StoreInitMode) -> Result<(bool, Store
             if mode == StoreInitMode::Shared && existing.visibility != StoreVisibility::Shared {
                 return Err(Error::invalid_store_at(
                     &path,
-                    StoreConfigError::VisibilityConflict {
-                        existing: existing.visibility,
-                    },
+                    StoreConfigError::VisibilityConflict { existing: existing.visibility },
                 ));
             }
             Ok((false, existing.visibility))
@@ -655,20 +601,11 @@ fn create_marker(paths: &StorePaths, mode: StoreInitMode) -> Result<(bool, Store
     }
 }
 
-fn render_store_config(
-    scope: StoreScope,
-    visibility: StoreVisibility,
-    project_name: Option<&str>,
-) -> Result<String> {
+fn render_store_config(scope: StoreScope, visibility: StoreVisibility, project_name: Option<&str>) -> Result<String> {
     let (project_id, project_name) = if scope.is_project_store() {
         let name = project_name
             .filter(|name| valid_project_name(name))
-            .ok_or_else(|| {
-                Error::invalid_store_at(
-                    Path::new("store.toml"),
-                    StoreConfigError::InvalidProjectName,
-                )
-            })?;
+            .ok_or_else(|| Error::invalid_store_at(Path::new("store.toml"), StoreConfigError::InvalidProjectName))?;
         (Some(ProjectId::new_v7().to_string()), Some(name.to_owned()))
     } else {
         (None, None)
@@ -680,39 +617,27 @@ fn render_store_config(
         project_id,
         project_name,
     })
-    .map_err(|source| {
-        Error::invalid_store_at(
-            Path::new("store.toml"),
-            StoreConfigError::TomlRender { source },
-        )
-    })
+    .map_err(|source| Error::invalid_store_at(Path::new("store.toml"), StoreConfigError::TomlRender { source }))
 }
 
 fn read_store_config(path: &Path, expected_scope: StoreScope) -> Result<StoreConfigWithVisibility> {
-    let contents =
-        fs::read_to_string(path).map_err(|source| Error::io("read store metadata", source))?;
+    let contents = fs::read_to_string(path).map_err(|source| Error::io("read store metadata", source))?;
     let config: StoreConfig = toml::from_str(&contents)
         .map_err(|source| Error::invalid_store_at(path, StoreConfigError::TomlParse { source }))?;
     if config.format_version != STORE_FORMAT_VERSION {
         return Err(Error::invalid_store_at(
             path,
-            StoreConfigError::UnsupportedFormatVersion {
-                found: config.format_version,
-                expected: STORE_FORMAT_VERSION,
-            },
+            StoreConfigError::UnsupportedFormatVersion { found: config.format_version, expected: STORE_FORMAT_VERSION },
         ));
     }
     if config.scope != expected_scope.config_scope() {
         return Err(Error::invalid_store_at(
             path,
-            StoreConfigError::WrongScope {
-                actual: config.scope,
-                expected: expected_scope.config_scope().to_owned(),
-            },
+            StoreConfigError::WrongScope { actual: config.scope, expected: expected_scope.config_scope().to_owned() },
         ));
     }
-    let visibility = StoreVisibility::parse(&config.visibility)
-        .map_err(|source| Error::invalid_store_at(path, source))?;
+    let visibility =
+        StoreVisibility::parse(&config.visibility).map_err(|source| Error::invalid_store_at(path, source))?;
     let project = if expected_scope.is_project_store() {
         let id = config
             .project_id
@@ -734,10 +659,7 @@ fn read_store_config(path: &Path, expected_scope: StoreScope) -> Result<StoreCon
         }
         None
     };
-    Ok(StoreConfigWithVisibility {
-        visibility,
-        project,
-    })
+    Ok(StoreConfigWithVisibility { visibility, project })
 }
 
 fn valid_project_name(name: &str) -> bool {
@@ -755,9 +677,9 @@ pub fn record_scope(paths: &StorePaths) -> Result<Scope> {
     match paths.scope {
         StoreScope::Global => Scope::parse("global").map_err(Error::invalid_input),
         StoreScope::Project | StoreScope::Local => {
-            let project = config.project.ok_or_else(|| {
-                Error::invalid_store_at(&marker, StoreConfigError::InvalidProjectId)
-            })?;
+            let project = config
+                .project
+                .ok_or_else(|| Error::invalid_store_at(&marker, StoreConfigError::InvalidProjectId))?;
             Scope::parse(&format!("project:{}", project.id)).map_err(Error::invalid_input)
         }
     }
@@ -782,8 +704,7 @@ fn ensure_project_gitignore(path: &Path, visibility: StoreVisibility) -> Result<
 
     if path.is_file() {
         if visibility == StoreVisibility::Shared {
-            let current =
-                fs::read(path).map_err(|source| Error::io("read project ignore rules", source))?;
+            let current = fs::read(path).map_err(|source| Error::io("read project ignore rules", source))?;
             let current = String::from_utf8_lossy(&current);
             let actual_rules = current
                 .lines()
@@ -794,10 +715,7 @@ fn ensure_project_gitignore(path: &Path, visibility: StoreVisibility) -> Result<
                 .map(str::trim)
                 .filter(|line| !line.is_empty() && !line.starts_with('#'));
             if !actual_rules.eq(expected_rules) {
-                return Err(Error::invalid_store_at(
-                    path,
-                    StoreConfigError::IncompleteIgnoreRules,
-                ));
+                return Err(Error::invalid_store_at(path, StoreConfigError::IncompleteIgnoreRules));
             }
         }
         return Ok(());
@@ -826,9 +744,7 @@ fn home_directory() -> Option<PathBuf> {
 }
 
 fn env_path(name: &str) -> Option<PathBuf> {
-    env::var_os(name)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
+    env::var_os(name).filter(|value| !value.is_empty()).map(PathBuf::from)
 }
 
 fn path_context(path: &Path) -> String {
@@ -873,12 +789,9 @@ mod tests {
     fn project_initialization_defaults_private_and_supports_explicit_shared_mode() {
         let root = temporary_directory("visibility");
         let dirs = PlatformDirs::new(root.join("data"), root.join("cache"));
-        let private_paths =
-            resolve_store_with_dirs(StoreScope::Project, &root, &dirs).expect("resolve");
+        let private_paths = resolve_store_with_dirs(StoreScope::Project, &root, &dirs).expect("resolve");
 
-        assert!(
-            initialize_store(&private_paths, StoreInitMode::Default).expect("initialize store")
-        );
+        assert!(initialize_store(&private_paths, StoreInitMode::Default).expect("initialize store"));
         assert!(
             fs::read_to_string(private_paths.root.join("store.toml"))
                 .expect("read private metadata")
@@ -889,21 +802,14 @@ mod tests {
             b"*\n!.gitignore\n"
         );
         assert_eq!(
-            inspect_store(&private_paths)
-                .expect("inspect private store")
-                .visibility,
+            inspect_store(&private_paths).expect("inspect private store").visibility,
             Some(StoreVisibility::Private)
         );
 
         let shared_root = temporary_directory("shared-store");
-        let shared_paths =
-            resolve_store_with_dirs(StoreScope::Project, &shared_root, &dirs).expect("resolve");
-        assert!(
-            initialize_store(&shared_paths, StoreInitMode::Shared)
-                .expect("initialize shared store")
-        );
-        let ignore = fs::read_to_string(shared_paths.root.join(".gitignore"))
-            .expect("read shared ignore rules");
+        let shared_paths = resolve_store_with_dirs(StoreScope::Project, &shared_root, &dirs).expect("resolve");
+        assert!(initialize_store(&shared_paths, StoreInitMode::Shared).expect("initialize shared store"));
+        let ignore = fs::read_to_string(shared_paths.root.join(".gitignore")).expect("read shared ignore rules");
         for pattern in [
             "*",
             "!.gitignore",
@@ -912,15 +818,10 @@ mod tests {
             "!records/**/",
             "!records/**/*.md",
         ] {
-            assert!(
-                ignore.lines().any(|line| line == pattern),
-                "missing {pattern}"
-            );
+            assert!(ignore.lines().any(|line| line == pattern), "missing {pattern}");
         }
         assert_eq!(
-            inspect_store(&shared_paths)
-                .expect("inspect shared store")
-                .visibility,
+            inspect_store(&shared_paths).expect("inspect shared store").visibility,
             Some(StoreVisibility::Shared)
         );
 
@@ -929,18 +830,14 @@ mod tests {
             format!("{SHARED_PROJECT_GITIGNORE}\n!index.sqlite3\n"),
         )
         .expect("make generated artifact trackable");
-        let error = initialize_store(&shared_paths, StoreInitMode::Default)
-            .expect_err("unsafe shared ignore rules must fail");
+        let error =
+            initialize_store(&shared_paths, StoreInitMode::Default).expect_err("unsafe shared ignore rules must fail");
         assert!(matches!(
             error,
-            Error::InvalidStoreConfiguration {
-                source: StoreConfigError::IncompleteIgnoreRules,
-                ..
-            }
+            Error::InvalidStoreConfiguration { source: StoreConfigError::IncompleteIgnoreRules, .. }
         ));
 
-        let global_paths =
-            resolve_store_with_dirs(StoreScope::Global, &root, &dirs).expect("resolve");
+        let global_paths = resolve_store_with_dirs(StoreScope::Global, &root, &dirs).expect("resolve");
         let error = initialize_store(&global_paths, StoreInitMode::Shared)
             .expect_err("global shared initialization should fail");
         assert!(matches!(error, Error::SharedStoreRequiresProject));
@@ -994,25 +891,14 @@ mod tests {
             .into_iter()
             .map(|handle| handle.join().expect("join initializer"))
             .collect::<Vec<_>>();
-        let created = results
-            .iter()
-            .filter(|result| matches!(result, Ok(true)))
-            .count();
+        let created = results.iter().filter(|result| matches!(result, Ok(true))).count();
         assert_eq!(created, 1);
         assert!(results.iter().all(|result| matches!(
             result,
-            Ok(_)
-                | Err(Error::Repository {
-                    source: RepositoryError::MutationBusy { .. }
-                })
+            Ok(_) | Err(Error::Repository { source: RepositoryError::MutationBusy { .. } })
         )));
         assert!(!initialize_store(&paths, StoreInitMode::Default).expect("retry initialization"));
-        assert!(
-            inspect_store(&paths)
-                .expect("inspect project")
-                .project
-                .is_some()
-        );
+        assert!(inspect_store(&paths).expect("inspect project").project.is_some());
 
         fs::remove_dir_all(root).expect("remove test directory");
     }
@@ -1025,10 +911,8 @@ mod tests {
         let second_root = root.join("two").join("service");
         fs::create_dir_all(&first_root).expect("create first project");
         fs::create_dir_all(&second_root).expect("create second project");
-        let first = resolve_store_with_dirs(StoreScope::Project, &first_root, &dirs)
-            .expect("resolve first project");
-        let second = resolve_store_with_dirs(StoreScope::Project, &second_root, &dirs)
-            .expect("resolve second project");
+        let first = resolve_store_with_dirs(StoreScope::Project, &first_root, &dirs).expect("resolve first project");
+        let second = resolve_store_with_dirs(StoreScope::Project, &second_root, &dirs).expect("resolve second project");
         initialize_store(&first, StoreInitMode::Default).expect("initialize first project");
         initialize_store(&second, StoreInitMode::Default).expect("initialize second project");
 
@@ -1046,8 +930,8 @@ mod tests {
 
         let renamed_root = root.join("one").join("renamed-service");
         fs::rename(&first_root, &renamed_root).expect("rename project directory");
-        let renamed = resolve_store_with_dirs(StoreScope::Project, &renamed_root, &dirs)
-            .expect("resolve renamed project");
+        let renamed =
+            resolve_store_with_dirs(StoreScope::Project, &renamed_root, &dirs).expect("resolve renamed project");
         assert_eq!(
             inspect_store(&renamed)
                 .expect("inspect renamed project")
@@ -1067,18 +951,14 @@ mod tests {
     fn project_name_is_editable_but_validated() {
         let root = temporary_directory("project-name");
         let dirs = PlatformDirs::new(root.join("data"), root.join("cache"));
-        let paths =
-            resolve_store_with_dirs(StoreScope::Project, &root, &dirs).expect("resolve project");
+        let paths = resolve_store_with_dirs(StoreScope::Project, &root, &dirs).expect("resolve project");
         initialize_store(&paths, StoreInitMode::Default).expect("initialize project");
         let marker = paths.root.join("store.toml");
         let metadata = fs::read_to_string(&marker).expect("read metadata");
         fs::write(
             &marker,
             metadata.replace(
-                &format!(
-                    "project_name = \"{}\"",
-                    root.file_name().unwrap().to_string_lossy()
-                ),
+                &format!("project_name = \"{}\"", root.file_name().unwrap().to_string_lossy()),
                 "project_name = \"Friendly project\"",
             ),
         )
@@ -1095,18 +975,12 @@ mod tests {
         let metadata = fs::read_to_string(&marker).expect("read edited metadata");
         fs::write(
             &marker,
-            metadata.replace(
-                "project_name = \"Friendly project\"",
-                "project_name = \"   \"",
-            ),
+            metadata.replace("project_name = \"Friendly project\"", "project_name = \"   \""),
         )
         .expect("write invalid project name");
         assert!(matches!(
             inspect_store(&paths),
-            Err(Error::InvalidStoreConfiguration {
-                source: StoreConfigError::InvalidProjectName,
-                ..
-            })
+            Err(Error::InvalidStoreConfiguration { source: StoreConfigError::InvalidProjectName, .. })
         ));
 
         fs::remove_dir_all(root).expect("remove test directory");
@@ -1116,8 +990,7 @@ mod tests {
     fn project_identity_rejects_the_nil_uuid() {
         let root = temporary_directory("nil-project-id");
         let dirs = PlatformDirs::new(root.join("data"), root.join("cache"));
-        let paths =
-            resolve_store_with_dirs(StoreScope::Project, &root, &dirs).expect("resolve project");
+        let paths = resolve_store_with_dirs(StoreScope::Project, &root, &dirs).expect("resolve project");
         initialize_store(&paths, StoreInitMode::Default).expect("initialize project");
         let marker = paths.root.join("store.toml");
         let metadata = fs::read_to_string(&marker).expect("read metadata");
@@ -1135,10 +1008,7 @@ mod tests {
 
         assert!(matches!(
             record_scope(&paths),
-            Err(Error::InvalidStoreConfiguration {
-                source: StoreConfigError::InvalidProjectId,
-                ..
-            })
+            Err(Error::InvalidStoreConfiguration { source: StoreConfigError::InvalidProjectId, .. })
         ));
 
         fs::remove_dir_all(root).expect("remove test directory");

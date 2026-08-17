@@ -73,16 +73,11 @@ pub fn existing_index_path(paths: &StorePaths) -> PathBuf {
     let fallback = std::env::temp_dir()
         .join(format!("stormbuffer-projection-{identity}"))
         .join("index.sqlite3");
-    if fallback.is_file() {
-        fallback
-    } else {
-        configured
-    }
+    if fallback.is_file() { fallback } else { configured }
 }
 
 pub fn replace_advisory_relation_projection(
-    paths: &StorePaths,
-    relations: &[AdvisoryRelationProjection],
+    paths: &StorePaths, relations: &[AdvisoryRelationProjection],
 ) -> crate::Result<()> {
     crate::record_scope(paths)?;
     let destination = active_index_path(paths)?;
@@ -124,15 +119,11 @@ pub fn inspect_projection_status(paths: &StorePaths) -> ProjectionStatus {
         Ok(connection) => connection,
         Err(_) => return ProjectionStatus::default(),
     };
-    let index_version = connection
-        .query_row("PRAGMA user_version", [], |row| row.get(0))
-        .ok();
+    let index_version = connection.query_row("PRAGMA user_version", [], |row| row.get(0)).ok();
     let last_successful_sync = connection
-        .query_row(
-            "SELECT value FROM index_metadata WHERE key = 'last_sync'",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT value FROM index_metadata WHERE key = 'last_sync'", [], |row| {
+            row.get(0)
+        })
         .optional()
         .ok()
         .flatten();
@@ -145,11 +136,7 @@ pub fn inspect_projection_status(paths: &StorePaths) -> ProjectionStatus {
         .optional()
         .ok()
         .flatten();
-    ProjectionStatus {
-        index_version,
-        embedding_version,
-        last_successful_sync,
-    }
+    ProjectionStatus { index_version, embedding_version, last_successful_sync }
 }
 
 pub fn index_path(paths: &StorePaths) -> PathBuf {
@@ -225,8 +212,7 @@ fn create_private_directory(directory: &Path) -> crate::Result<()> {
 
 #[cfg(not(unix))]
 fn create_private_directory(directory: &Path) -> crate::Result<()> {
-    fs::create_dir_all(directory)
-        .map_err(|source| Error::io("create the fallback index directory", source))
+    fs::create_dir_all(directory).map_err(|source| Error::io("create the fallback index directory", source))
 }
 
 fn db_error(operation: &'static str, source: rusqlite::Error) -> Error {

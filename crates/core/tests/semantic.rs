@@ -5,12 +5,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use fs2::FileExt;
 use stormbuffer_core::{
-    Access, ContextOptions, DeterministicEmbedder, Embedder, Embedding, Error, RetrievalMode,
-    SearchOptions, SemanticFallbackReason, StoreInitMode, StorePaths, StoreScope,
-    context_stores_with_embedder, index_path, initialize_store,
-    invoke_operation_with_semantic_status, invoke_request, invoke_request_with_embedder,
-    rebuild_vector_index, record_scope, reindex_store_with_embedder, search_stores_with_embedder,
-    sync_store,
+    Access, ContextOptions, DeterministicEmbedder, Embedder, Embedding, Error, RetrievalMode, SearchOptions,
+    SemanticFallbackReason, StoreInitMode, StorePaths, StoreScope, context_stores_with_embedder, index_path,
+    initialize_store, invoke_operation_with_semantic_status, invoke_request, invoke_request_with_embedder,
+    rebuild_vector_index, record_scope, reindex_store_with_embedder, search_stores_with_embedder, sync_store,
 };
 
 struct TempStore {
@@ -21,10 +19,7 @@ static NEXT_TEMP_STORE: AtomicU64 = AtomicU64::new(0);
 
 impl TempStore {
     fn new() -> Self {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
+        let stamp = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
         for attempt in 0..100 {
             let counter = NEXT_TEMP_STORE.fetch_add(1, Ordering::Relaxed);
             let root = std::env::temp_dir().join(format!(
@@ -50,12 +45,7 @@ impl TempStore {
 
     fn project_paths(&self, name: &str) -> StorePaths {
         let root = self.root.join(name).join(".sbuf");
-        StorePaths {
-            scope: StoreScope::Project,
-            records: root.join("records"),
-            cache: root.join("cache"),
-            root,
-        }
+        StorePaths { scope: StoreScope::Project, records: root.join("records"), cache: root.join("cache"), root }
     }
 }
 impl Drop for TempStore {
@@ -92,19 +82,17 @@ fn invoke_search_and_context_use_hybrid_retrieval_when_an_embedder_is_supplied()
         Some(&embedder),
     )
     .expect("hybrid invocation search");
-    let reasons = search[0]["match_reasons"]
-        .as_array()
-        .expect("match reasons");
-    assert!(reasons.iter().any(|reason| {
-        reason
-            .as_str()
-            .is_some_and(|reason| reason.starts_with("lexical:"))
-    }));
-    assert!(reasons.iter().any(|reason| {
-        reason
-            .as_str()
-            .is_some_and(|reason| reason.starts_with("vector:"))
-    }));
+    let reasons = search[0]["match_reasons"].as_array().expect("match reasons");
+    assert!(
+        reasons
+            .iter()
+            .any(|reason| { reason.as_str().is_some_and(|reason| reason.starts_with("lexical:")) })
+    );
+    assert!(
+        reasons
+            .iter()
+            .any(|reason| { reason.as_str().is_some_and(|reason| reason.starts_with("vector:")) })
+    );
 
     let context = invoke_request_with_embedder(
         &paths,
@@ -114,10 +102,7 @@ fn invoke_search_and_context_use_hybrid_retrieval_when_an_embedder_is_supplied()
     )
     .expect("hybrid invocation context");
     assert_eq!(context["receipt"]["retrieval_mode"], "hybrid");
-    assert_eq!(
-        context["receipt"]["embedding_model"],
-        "stormbuffer/deterministic"
-    );
+    assert_eq!(context["receipt"]["embedding_model"], "stormbuffer/deterministic");
     assert_eq!(context["receipt"]["embedding_version"], "semantic-v1");
     assert!(context["receipt"]["semantic_fallback"].is_null());
 }
@@ -150,10 +135,7 @@ impl Embedder for UnavailableEmbedder {
     }
 
     fn embed(&self, _text: &str) -> stormbuffer_core::Result<Embedding> {
-        Err(Error::Embedding {
-            operation: "embed fixture",
-            message: "model unavailable".to_owned(),
-        })
+        Err(Error::Embedding { operation: "embed fixture", message: "model unavailable".to_owned() })
     }
 }
 
@@ -187,10 +169,7 @@ fn invoke_context_falls_back_to_lexical_when_semantic_indexing_is_unavailable() 
     assert_eq!(context["receipt"]["retrieval_mode"], "lexical");
     assert!(context["receipt"]["embedding_model"].is_null());
     assert!(context["receipt"]["embedding_version"].is_null());
-    assert_eq!(
-        context["receipt"]["semantic_fallback"],
-        "embedding_execution_failed"
-    );
+    assert_eq!(context["receipt"]["semantic_fallback"], "embedding_execution_failed");
     assert_eq!(context["blocks"][0]["title"], "Fallback memory");
 }
 
@@ -210,10 +189,7 @@ fn invoke_context_returns_a_lexical_receipt_for_every_semantic_failure_status() 
             SemanticFallbackReason::IntentionallyUnavailable,
             "intentionally_unavailable",
         ),
-        (
-            SemanticFallbackReason::ModelUnavailable,
-            "model_unavailable",
-        ),
+        (SemanticFallbackReason::ModelUnavailable, "model_unavailable"),
         (
             SemanticFallbackReason::EmbedderInitializationFailed,
             "embedder_initialization_failed",
@@ -222,10 +198,7 @@ fn invoke_context_returns_a_lexical_receipt_for_every_semantic_failure_status() 
             SemanticFallbackReason::VectorProjectionUnavailable,
             "vector_projection_unavailable",
         ),
-        (
-            SemanticFallbackReason::VectorProjectionBusy,
-            "vector_projection_busy",
-        ),
+        (SemanticFallbackReason::VectorProjectionBusy, "vector_projection_busy"),
         (
             SemanticFallbackReason::EmbeddingExecutionFailed,
             "embedding_execution_failed",
@@ -233,9 +206,8 @@ fn invoke_context_returns_a_lexical_receipt_for_every_semantic_failure_status() 
     ];
 
     for (reason, expected) in cases {
-        let context =
-            invoke_operation_with_semantic_status(&paths, "context", request, None, Some(reason))
-                .expect("lexical fallback context");
+        let context = invoke_operation_with_semantic_status(&paths, "context", request, None, Some(reason))
+            .expect("lexical fallback context");
         assert_eq!(context["receipt"]["retrieval_mode"], "lexical");
         assert_eq!(context["receipt"]["semantic_fallback"], expected);
         assert!(context["receipt"]["embedding_model"].is_null());
@@ -310,8 +282,7 @@ fn vector_backfill_records_metadata_and_applies_scope_kind_and_active_filters() 
     let first_metadata = rebuild_vector_index(&alpha_paths, &embedder).expect("vector backfill");
     rebuild_vector_index(&beta_paths, &embedder).expect("beta vector backfill");
     let first_table = first_metadata.table_name.clone();
-    let second_metadata =
-        rebuild_vector_index(&alpha_paths, &embedder).expect("reuse vector index");
+    let second_metadata = rebuild_vector_index(&alpha_paths, &embedder).expect("reuse vector index");
     assert_eq!(first_metadata.index_id, second_metadata.index_id);
 
     let mut options = SearchOptions::for_store(&alpha_paths);
@@ -342,10 +313,7 @@ fn vector_backfill_records_metadata_and_applies_scope_kind_and_active_filters() 
     let context = context_stores_with_embedder(
         &[alpha_paths.clone(), beta_paths.clone()],
         "deployment procedure",
-        ContextOptions {
-            budget: 100,
-            search: context_search,
-        },
+        ContextOptions { budget: 100, search: context_search },
         &embedder,
     )
     .expect("limited semantic context");
@@ -428,9 +396,7 @@ fn semantic_search_rejects_vectors_when_canonical_content_changes() {
     sync_store(&paths).expect("sync");
     let embedder = DeterministicEmbedder::new("semantic-v1", 24).expect("embedder");
     rebuild_vector_index(&paths, &embedder).expect("vector backfill");
-    let path = paths
-        .records
-        .join("01989af2-4305-7b19-88b1-e8ae4ea9a205.md");
+    let path = paths.records.join("01989af2-4305-7b19-88b1-e8ae4ea9a205.md");
     let changed = fs::read_to_string(&path)
         .expect("read record")
         .replace("fresh canonical content", "changed canonical content");
@@ -459,9 +425,7 @@ fn rebuilding_vectors_synchronizes_changed_canonical_content() {
     sync_store(&paths).expect("sync");
     let embedder = DeterministicEmbedder::new("semantic-v1", 24).expect("embedder");
     rebuild_vector_index(&paths, &embedder).expect("vector backfill");
-    let path = paths
-        .records
-        .join("01989af2-4305-7b19-88b1-e8ae4ea9a205.md");
+    let path = paths.records.join("01989af2-4305-7b19-88b1-e8ae4ea9a205.md");
     let changed = fs::read_to_string(&path)
         .expect("read record")
         .replace("original canonical content", "changed canonical content");
@@ -471,9 +435,8 @@ fn rebuilding_vectors_synchronizes_changed_canonical_content() {
 
     let mut options = SearchOptions::for_store(&paths);
     options.mode = RetrievalMode::Semantic;
-    let results =
-        search_stores_with_embedder(&[paths], "changed canonical content", options, &embedder)
-            .expect("search rebuilt vectors");
+    let results = search_stores_with_embedder(&[paths], "changed canonical content", options, &embedder)
+        .expect("search rebuilt vectors");
     assert_eq!(results.len(), 1);
 }
 
@@ -483,20 +446,13 @@ fn rebuilding_vectors_rejects_invalid_canonical_records() {
     let paths = store.paths();
     initialize_store(&paths, StoreInitMode::Default).expect("initialize");
     let id = "01989af2-4305-7b19-88b1-e8ae4ea9a207";
-    write_record(
-        &paths,
-        id,
-        "global",
-        "fact",
-        "active",
-        "valid canonical content",
-    );
+    write_record(&paths, id, "global", "fact", "active", "valid canonical content");
     let embedder = DeterministicEmbedder::new("semantic-v1", 24).expect("embedder");
     rebuild_vector_index(&paths, &embedder).expect("initial vector backfill");
     fs::write(paths.records.join(format!("{id}.md")), "invalid record").expect("corrupt record");
 
-    let error = rebuild_vector_index(&paths, &embedder)
-        .expect_err("invalid canonical records must prevent a vector rebuild");
+    let error =
+        rebuild_vector_index(&paths, &embedder).expect_err("invalid canonical records must prevent a vector rebuild");
     assert!(matches!(error, Error::InvalidRecord { .. }));
 }
 
@@ -527,11 +483,7 @@ impl Embedder for FilteredEmbedder {
     }
 
     fn embed(&self, text: &str) -> stormbuffer_core::Result<Embedding> {
-        let value = if text.contains("rare-target") {
-            2.0
-        } else {
-            0.0
-        };
+        let value = if text.contains("rare-target") { 2.0 } else { 0.0 };
         Embedding::new(vec![value])
     }
 }
@@ -546,14 +498,7 @@ fn filtered_vector_search_adapts_beyond_the_initial_candidate_window() {
         write_record(&paths, &id, "global", "fact", "active", "common candidate");
     }
     let target_id = "01989af2-4305-7b19-88b1-e8ae4ea9ffff";
-    write_record(
-        &paths,
-        target_id,
-        "global",
-        "procedure",
-        "active",
-        "rare-target",
-    );
+    write_record(&paths, target_id, "global", "procedure", "active", "rare-target");
     sync_store(&paths).expect("sync");
     let embedder = FilteredEmbedder;
     rebuild_vector_index(&paths, &embedder).expect("vector backfill");
@@ -562,8 +507,8 @@ fn filtered_vector_search_adapts_beyond_the_initial_candidate_window() {
     options.mode = RetrievalMode::Semantic;
     options.limit = 1;
     options.allowed_kinds = Some(vec!["procedure".to_owned()]);
-    let results = search_stores_with_embedder(&[paths], "common query", options, &embedder)
-        .expect("filtered semantic search");
+    let results =
+        search_stores_with_embedder(&[paths], "common query", options, &embedder).expect("filtered semantic search");
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].record_id, target_id);
 }
@@ -590,9 +535,7 @@ impl Embedder for FailingEmbedder {
         Ok(text.split_whitespace().count())
     }
     fn embed(&self, _text: &str) -> stormbuffer_core::Result<Embedding> {
-        Err(Error::InvalidInput {
-            message: "fixture failure".to_owned(),
-        })
+        Err(Error::InvalidInput { message: "fixture failure".to_owned() })
     }
 }
 
@@ -616,8 +559,8 @@ fn failed_model_backfill_keeps_the_previous_active_index_available() {
 
     let mut options = SearchOptions::for_store(&paths);
     options.mode = RetrievalMode::Semantic;
-    let results = search_stores_with_embedder(&[paths], "recoverable semantic", options, &embedder)
-        .expect("old vector search");
+    let results =
+        search_stores_with_embedder(&[paths], "recoverable semantic", options, &embedder).expect("old vector search");
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].title, "fact memory");
 }
@@ -666,9 +609,6 @@ fn busy_projection_returns_lexical_context_with_an_explicit_receipt() {
     .expect("lexical fallback context");
 
     assert_eq!(context["receipt"]["retrieval_mode"], "lexical");
-    assert_eq!(
-        context["receipt"]["semantic_fallback"],
-        "vector_projection_busy"
-    );
+    assert_eq!(context["receipt"]["semantic_fallback"], "vector_projection_busy");
     assert_eq!(context["blocks"][0]["title"], "Busy projection fixture");
 }

@@ -20,12 +20,7 @@ pub fn chunk_record(record: &Record) -> Vec<(String, Option<String>, String, usi
         }
 
         if let Some(fence) = fence_start(trimmed) {
-            flush_section(
-                &mut sections,
-                &mut current_lines,
-                &heading_stack,
-                &mut current_atomic,
-            );
+            flush_section(&mut sections, &mut current_lines, &heading_stack, &mut current_atomic);
             current_lines.push(line);
             current_atomic = true;
             in_fence = Some(fence);
@@ -33,16 +28,8 @@ pub fn chunk_record(record: &Record) -> Vec<(String, Option<String>, String, usi
         }
 
         if let Some((level, heading)) = parse_heading(trimmed) {
-            flush_section(
-                &mut sections,
-                &mut current_lines,
-                &heading_stack,
-                &mut current_atomic,
-            );
-            while heading_stack
-                .last()
-                .is_some_and(|(previous, _)| *previous >= level)
-            {
+            flush_section(&mut sections, &mut current_lines, &heading_stack, &mut current_atomic);
+            while heading_stack.last().is_some_and(|(previous, _)| *previous >= level) {
                 heading_stack.pop();
             }
             heading_stack.push((level, heading));
@@ -50,32 +37,17 @@ pub fn chunk_record(record: &Record) -> Vec<(String, Option<String>, String, usi
         }
 
         if line.trim().is_empty() {
-            flush_section(
-                &mut sections,
-                &mut current_lines,
-                &heading_stack,
-                &mut current_atomic,
-            );
+            flush_section(&mut sections, &mut current_lines, &heading_stack, &mut current_atomic);
             continue;
         }
 
         if is_list_start(trimmed) && !current_atomic {
-            flush_section(
-                &mut sections,
-                &mut current_lines,
-                &heading_stack,
-                &mut current_atomic,
-            );
+            flush_section(&mut sections, &mut current_lines, &heading_stack, &mut current_atomic);
             current_atomic = true;
         }
         current_lines.push(line);
     }
-    flush_section(
-        &mut sections,
-        &mut current_lines,
-        &heading_stack,
-        &mut current_atomic,
-    );
+    flush_section(&mut sections, &mut current_lines, &heading_stack, &mut current_atomic);
 
     if sections.is_empty() {
         let heading = heading_stack
@@ -117,31 +89,16 @@ pub fn chunk_record(record: &Record) -> Vec<(String, Option<String>, String, usi
     for (_, heading, text, atomic) in sections {
         let word_count = text.split_whitespace().count();
         if atomic {
-            push_chunk(
-                &mut chunks,
-                &mut current_heading,
-                &mut current_text,
-                &mut current_words,
-            );
+            push_chunk(&mut chunks, &mut current_heading, &mut current_text, &mut current_words);
             current_heading = heading.clone();
             current_text = text;
             current_words = word_count;
-            push_chunk(
-                &mut chunks,
-                &mut current_heading,
-                &mut current_text,
-                &mut current_words,
-            );
+            push_chunk(&mut chunks, &mut current_heading, &mut current_text, &mut current_words);
             continue;
         }
 
         if word_count > MAX_CHUNK_WORDS {
-            push_chunk(
-                &mut chunks,
-                &mut current_heading,
-                &mut current_text,
-                &mut current_words,
-            );
+            push_chunk(&mut chunks, &mut current_heading, &mut current_text, &mut current_words);
             let words: Vec<_> = text.split_whitespace().collect();
             for piece in words.chunks(MAX_CHUNK_WORDS) {
                 let piece_text = piece.join(" ");
@@ -158,12 +115,7 @@ pub fn chunk_record(record: &Record) -> Vec<(String, Option<String>, String, usi
         let same_heading = current_heading == heading;
         let separator_words = usize::from(!current_text.is_empty());
         if !same_heading || current_words + separator_words + word_count > MAX_CHUNK_WORDS {
-            push_chunk(
-                &mut chunks,
-                &mut current_heading,
-                &mut current_text,
-                &mut current_words,
-            );
+            push_chunk(&mut chunks, &mut current_heading, &mut current_text, &mut current_words);
             current_heading = heading.clone();
         }
         if !current_text.is_empty() {
@@ -173,21 +125,14 @@ pub fn chunk_record(record: &Record) -> Vec<(String, Option<String>, String, usi
         current_text.push_str(&text);
         current_words += word_count;
     }
-    push_chunk(
-        &mut chunks,
-        &mut current_heading,
-        &mut current_text,
-        &mut current_words,
-    );
+    push_chunk(&mut chunks, &mut current_heading, &mut current_text, &mut current_words);
 
     chunks
 }
 
 fn flush_section(
-    sections: &mut Vec<(String, Option<String>, String, bool)>,
-    current_lines: &mut Vec<&str>,
-    heading_stack: &[(usize, String)],
-    current_atomic: &mut bool,
+    sections: &mut Vec<(String, Option<String>, String, bool)>, current_lines: &mut Vec<&str>,
+    heading_stack: &[(usize, String)], current_atomic: &mut bool,
 ) {
     if current_lines.is_empty() {
         return;
@@ -207,10 +152,7 @@ fn flush_section(
     *current_atomic = false;
 }
 
-pub(super) fn split_embedding_text(
-    text: &str,
-    embedder: &dyn Embedder,
-) -> crate::Result<Vec<String>> {
+pub(super) fn split_embedding_text(text: &str, embedder: &dyn Embedder) -> crate::Result<Vec<String>> {
     if embedder.token_count(text)? <= embedder.max_tokens() {
         return Ok(vec![text.to_owned()]);
     }
@@ -280,10 +222,7 @@ pub(super) fn retrieval_text(record: &Record, heading: &str, filename: &str, tex
 }
 
 fn parse_heading(line: &str) -> Option<(usize, String)> {
-    let level = line
-        .chars()
-        .take_while(|character| *character == '#')
-        .count();
+    let level = line.chars().take_while(|character| *character == '#').count();
     if !(1..=6).contains(&level) || !line.chars().nth(level).is_some_and(char::is_whitespace) {
         return None;
     }
@@ -302,10 +241,7 @@ fn fence_start(line: &str) -> Option<char> {
 }
 
 fn is_fence_end(line: &str, fence: char) -> bool {
-    line.chars()
-        .take_while(|character| *character == fence)
-        .count()
-        >= 3
+    line.chars().take_while(|character| *character == fence).count() >= 3
 }
 
 fn is_list_start(line: &str) -> bool {

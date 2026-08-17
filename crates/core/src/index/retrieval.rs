@@ -4,9 +4,9 @@ use crate::{Embedder, ReceiptId, SearchResult, StorePaths, Timestamp, VectorFilt
 
 use super::projection::Index;
 use super::{
-    CONTEXT_CONTRACT_VERSION, ContextBlock, ContextBoundary, ContextContract, ContextOptions,
-    ContextReceipt, ContextResult, INDEX_SCHEMA_VERSION, MAX_CONTEXT_BLOCK_BYTES, MAX_SEARCH_LIMIT,
-    RetrievalMode, SearchOptions, SourceReceipt, active_index_path,
+    CONTEXT_CONTRACT_VERSION, ContextBlock, ContextBoundary, ContextContract, ContextOptions, ContextReceipt,
+    ContextResult, INDEX_SCHEMA_VERSION, MAX_CONTEXT_BLOCK_BYTES, MAX_SEARCH_LIMIT, RetrievalMode, SearchOptions,
+    SourceReceipt, active_index_path,
 };
 
 #[derive(Clone, Debug)]
@@ -61,11 +61,7 @@ struct FusedEntry {
 ///
 /// Call [`sync_store`] first when canonical Markdown may have changed. This
 /// function is a read-only projection query and does not reconcile the store.
-pub fn search_store(
-    paths: &StorePaths,
-    query: &str,
-    options: SearchOptions,
-) -> crate::Result<Vec<SearchResult>> {
+pub fn search_store(paths: &StorePaths, query: &str, options: SearchOptions) -> crate::Result<Vec<SearchResult>> {
     search_stores(std::slice::from_ref(paths), query, options)
 }
 
@@ -74,9 +70,7 @@ pub fn search_store(
 /// Each store must be reconciled with [`sync_store`] before this call when its
 /// canonical Markdown may have changed.
 pub fn search_stores(
-    stores: &[StorePaths],
-    query: &str,
-    mut options: SearchOptions,
+    stores: &[StorePaths], query: &str, mut options: SearchOptions,
 ) -> crate::Result<Vec<SearchResult>> {
     options.mode = RetrievalMode::Lexical;
     let mut hits = Vec::new();
@@ -99,10 +93,7 @@ pub fn search_stores(
 /// Call [`sync_store`] and [`rebuild_vector_index`] after canonical Markdown
 /// changes. A stale semantic projection is rejected rather than queried.
 pub fn search_stores_with_embedder(
-    stores: &[StorePaths],
-    query: &str,
-    options: SearchOptions,
-    embedder: &dyn Embedder,
+    stores: &[StorePaths], query: &str, options: SearchOptions, embedder: &dyn Embedder,
 ) -> crate::Result<Vec<SearchResult>> {
     let mut lexical = Vec::new();
     let mut semantic = Vec::new();
@@ -131,11 +122,7 @@ pub fn search_stores_with_embedder(
 /// Compiles context from one store's current lexical projection.
 ///
 /// Call [`sync_store`] first when canonical Markdown may have changed.
-pub fn context_store(
-    paths: &StorePaths,
-    query: &str,
-    options: ContextOptions,
-) -> crate::Result<ContextResult> {
+pub fn context_store(paths: &StorePaths, query: &str, options: ContextOptions) -> crate::Result<ContextResult> {
     context_stores(std::slice::from_ref(paths), query, options)
 }
 
@@ -143,11 +130,7 @@ pub fn context_store(
 ///
 /// Each store must be reconciled with [`sync_store`] before this call when its
 /// canonical Markdown may have changed.
-pub fn context_stores(
-    stores: &[StorePaths],
-    query: &str,
-    mut options: ContextOptions,
-) -> crate::Result<ContextResult> {
+pub fn context_stores(stores: &[StorePaths], query: &str, mut options: ContextOptions) -> crate::Result<ContextResult> {
     normalize_context_options(&mut options, stores);
     let mut hits = Vec::new();
     for paths in stores {
@@ -164,10 +147,7 @@ pub fn context_stores(
 /// Call [`sync_store`] and [`rebuild_vector_index`] after canonical Markdown
 /// changes. A stale semantic projection is rejected rather than queried.
 pub fn context_stores_with_embedder(
-    stores: &[StorePaths],
-    query: &str,
-    mut options: ContextOptions,
-    embedder: &dyn Embedder,
+    stores: &[StorePaths], query: &str, mut options: ContextOptions, embedder: &dyn Embedder,
 ) -> crate::Result<ContextResult> {
     normalize_context_options(&mut options, stores);
     let mut lexical = Vec::new();
@@ -197,17 +177,11 @@ pub fn context_stores_with_embedder(
 }
 
 fn context_from_hits(
-    query: &str,
-    options: &ContextOptions,
-    hits: Vec<SearchHit>,
-    embedding_model: Option<String>,
+    query: &str, options: &ContextOptions, hits: Vec<SearchHit>, embedding_model: Option<String>,
     embedding_version: Option<String>,
 ) -> crate::Result<ContextResult> {
     let omitted_by_limit = hits.len().saturating_sub(options.search.bounded_limit());
-    let hits: Vec<_> = hits
-        .into_iter()
-        .take(options.search.bounded_limit())
-        .collect();
+    let hits: Vec<_> = hits.into_iter().take(options.search.bounded_limit()).collect();
     let budget = options.budget;
     let mut used_tokens = 0;
     let mut truncated = false;
@@ -355,9 +329,7 @@ fn context_contract() -> ContextContract {
 }
 
 pub(super) fn current_scope(paths: &StorePaths) -> Option<String> {
-    crate::record_scope(paths)
-        .ok()
-        .map(|scope| scope.as_str().to_owned())
+    crate::record_scope(paths).ok().map(|scope| scope.as_str().to_owned())
 }
 
 pub(super) fn scope_rank(scope: &str, current: Option<&str>) -> u8 {
@@ -370,10 +342,7 @@ pub(super) fn scope_rank(scope: &str, current: Option<&str>) -> u8 {
     }
 }
 
-pub(super) fn vector_hit_matches_filter(
-    hit: &crate::vector::VectorHit,
-    filter: &VectorFilter,
-) -> bool {
+pub(super) fn vector_hit_matches_filter(hit: &crate::vector::VectorHit, filter: &VectorFilter) -> bool {
     filter
         .scopes
         .as_ref()
@@ -403,10 +372,7 @@ pub(super) fn sort_hits(hits: &mut [SearchHit], current: Option<&str>) {
 }
 
 fn fuse_hits(
-    mut lexical: Vec<SearchHit>,
-    mut semantic: Vec<SearchHit>,
-    current: Option<&str>,
-    mode: RetrievalMode,
+    mut lexical: Vec<SearchHit>, mut semantic: Vec<SearchHit>, current: Option<&str>, mode: RetrievalMode,
 ) -> Vec<SearchHit> {
     sort_hits(&mut lexical, current);
     semantic.sort_by(|left, right| {
@@ -425,8 +391,7 @@ fn fuse_hits(
             Some(entry) => {
                 let rank = rank + 1;
                 let better_rank = entry.lexical_rank.is_none_or(|current| rank < current);
-                entry.lexical_rank =
-                    Some(entry.lexical_rank.map_or(rank, |current| current.min(rank)));
+                entry.lexical_rank = Some(entry.lexical_rank.map_or(rank, |current| current.min(rank)));
                 if better_rank && (entry.semantic_rank.is_none() || hit.score > entry.hit.score) {
                     entry.hit = hit;
                 }
@@ -453,11 +418,7 @@ fn fuse_hits(
             Some(entry) => {
                 let rank = rank + 1;
                 let better_rank = entry.semantic_rank.is_none_or(|current| rank < current);
-                entry.semantic_rank = Some(
-                    entry
-                        .semantic_rank
-                        .map_or(rank, |current| current.min(rank)),
-                );
+                entry.semantic_rank = Some(entry.semantic_rank.map_or(rank, |current| current.min(rank)));
                 if better_rank && (entry.lexical_rank.is_none() || hit.score >= entry.hit.score) {
                     entry.hit = hit.clone();
                 }

@@ -56,23 +56,15 @@ impl SearchOptions {
     /// Project views include applicable global records. Local and global views stay within their
     /// selected store.
     pub fn for_store(paths: &StorePaths) -> Self {
-        let current_scope = crate::record_scope(paths)
-            .ok()
-            .map(|scope| scope.as_str().to_owned());
+        let current_scope = crate::record_scope(paths).ok().map(|scope| scope.as_str().to_owned());
         let mut allowed_scopes = Vec::new();
         if let Some(scope) = current_scope.clone() {
             allowed_scopes.push(scope);
         }
-        if paths.scope == StoreScope::Project
-            && !allowed_scopes.iter().any(|scope| scope == "global")
-        {
+        if paths.scope == StoreScope::Project && !allowed_scopes.iter().any(|scope| scope == "global") {
             allowed_scopes.push("global".to_owned());
         }
-        Self {
-            current_scope,
-            allowed_scopes: Some(allowed_scopes),
-            ..Self::default()
-        }
+        Self { current_scope, allowed_scopes: Some(allowed_scopes), ..Self::default() }
     }
 
     pub(super) fn bounded_limit(&self) -> usize {
@@ -91,10 +83,7 @@ pub struct ContextOptions {
 
 impl Default for ContextOptions {
     fn default() -> Self {
-        Self {
-            budget: 512,
-            search: SearchOptions::default(),
-        }
+        Self { budget: 512, search: SearchOptions::default() }
     }
 }
 
@@ -268,10 +257,7 @@ pub struct WatchOptions {
 
 impl Default for WatchOptions {
     fn default() -> Self {
-        Self {
-            once: false,
-            interval: Duration::from_millis(500),
-        }
+        Self { once: false, interval: Duration::from_millis(500) }
     }
 }
 

@@ -26,8 +26,7 @@ pub(super) fn run_export(scope: StoreScope, arguments: PathArgs, output: &Echo) 
         None | Some("-") => {
             output.raw(encoded.as_bytes());
         }
-        Some(path) => match core::write_export_archive(&paths, Path::new(path), encoded.as_bytes())
-        {
+        Some(path) => match core::write_export_archive(&paths, Path::new(path), encoded.as_bytes()) {
             Ok(()) => output.line(&format!(
                 "{} {} records to {}",
                 output.success("Exported"),
@@ -54,10 +53,7 @@ pub(super) fn run_import(scope: StoreScope, arguments: ImportArgs, output: &Echo
         match read_import_archive(io::stdin()) {
             Ok(contents) => contents,
             Err(error) => {
-                return report_error(
-                    error.context("could not read import archive from stdin"),
-                    output,
-                );
+                return report_error(error.context("could not read import archive from stdin"), output);
             }
         }
     } else {
@@ -105,9 +101,7 @@ pub(super) fn run_import(scope: StoreScope, arguments: ImportArgs, output: &Echo
             Err(error) => report_error(error, output),
         };
     }
-    match core::import_store(&paths, &bundle, &options)
-        .context("could not import canonical records")
-    {
+    match core::import_store(&paths, &bundle, &options).context("could not import canonical records") {
         Ok(report) => {
             print_import_report(&report, output);
             0
@@ -135,11 +129,7 @@ pub(super) fn run_verify_export(arguments: VerifyExportArgs, output: &Echo) -> i
     0
 }
 
-pub(super) fn run_destroy_store(
-    scope: StoreScope,
-    arguments: DestroyStoreArgs,
-    output: &Echo,
-) -> i32 {
+pub(super) fn run_destroy_store(scope: StoreScope, arguments: DestroyStoreArgs, output: &Echo) -> i32 {
     let paths = match resolve(scope) {
         Ok(paths) => paths,
         Err(error) => return report_error(error, output),
@@ -167,8 +157,7 @@ pub(super) fn run_destroy_store(
         return 1;
     }
     if !arguments.yes {
-        if !io::stdin().is_terminal() || !io::stdout().is_terminal() || !io::stderr().is_terminal()
-        {
+        if !io::stdin().is_terminal() || !io::stdout().is_terminal() || !io::stderr().is_terminal() {
             output.error("noninteractive destruction requires both --yes and --store-id");
             return 1;
         }
@@ -181,10 +170,7 @@ pub(super) fn run_destroy_store(
         let _ = stderr.flush();
         let mut answer = String::new();
         if let Err(error) = io::stdin().read_line(&mut answer) {
-            return report_error(
-                anyhow::Error::new(error).context("could not read confirmation"),
-                output,
-            );
+            return report_error(anyhow::Error::new(error).context("could not read confirmation"), output);
         }
         if answer.trim() != preview.store_id {
             output.error("store destruction cancelled");

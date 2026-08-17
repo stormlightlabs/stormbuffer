@@ -40,9 +40,7 @@ pub(super) fn run_search(scope: StoreScope, arguments: SearchArgs, output: &Echo
     options.limit = arguments.limit;
     options.include_inactive = arguments.all;
     let results = match match embedder.as_deref() {
-        Some(embedder) => {
-            core::search_stores_with_embedder(&stores, &arguments.query, options, embedder)
-        }
+        Some(embedder) => core::search_stores_with_embedder(&stores, &arguments.query, options, embedder),
         None => core::search_stores(&stores, &arguments.query, options),
     } {
         Ok(results) => results,
@@ -104,14 +102,9 @@ pub(super) fn run_context(scope: StoreScope, arguments: ContextArgs, output: &Ec
     };
     search.limit = arguments.limit;
     search.include_inactive = arguments.all;
-    let context_options = core::ContextOptions {
-        budget: arguments.budget,
-        search,
-    };
+    let context_options = core::ContextOptions { budget: arguments.budget, search };
     let result = match match embedder.as_deref() {
-        Some(embedder) => {
-            core::context_stores_with_embedder(&stores, &arguments.query, context_options, embedder)
-        }
+        Some(embedder) => core::context_stores_with_embedder(&stores, &arguments.query, context_options, embedder),
         None => core::context_stores(&stores, &arguments.query, context_options),
     } {
         Ok(result) => result,
@@ -131,40 +124,23 @@ pub(super) fn run_gc(scope: StoreScope, arguments: GcArgs, output: &Echo) -> i32
         Ok(paths) => paths,
         Err(error) => return report_error(error, output),
     };
-    let report = match core::gc_store(
-        &paths,
-        core::GcOptions {
-            dry_run: arguments.dry_run,
-        },
-    )
-    .context("could not collect disposable data")
+    let report = match core::gc_store(&paths, core::GcOptions { dry_run: arguments.dry_run })
+        .context("could not collect disposable data")
     {
         Ok(report) => report,
         Err(error) => return report_error(error, output),
     };
-    let action = if report.dry_run {
-        "Reclaimable"
-    } else {
-        "Reclaimed"
-    };
+    let action = if report.dry_run { "Reclaimable" } else { "Reclaimed" };
     output.field(
         action,
         format!(
             "{} files, {} bytes",
-            if report.dry_run {
-                report.candidates.len()
-            } else {
-                report.removed
-            },
+            if report.dry_run { report.candidates.len() } else { report.removed },
             report.reclaimed_bytes
         ),
     );
     for entry in report.candidates {
-        output.line(&format!(
-            "{}\t{} bytes",
-            output.path(entry.path),
-            entry.bytes
-        ));
+        output.line(&format!("{}\t{} bytes", output.path(entry.path), entry.bytes));
     }
     0
 }
@@ -174,11 +150,7 @@ fn human_text(value: &str) -> String {
         .chars()
         .filter_map(|character| match character {
             '\n' | '\r' | '\t' | '\u{2028}' | '\u{2029}' => Some(' '),
-            '\u{061c}'
-            | '\u{200e}'
-            | '\u{200f}'
-            | '\u{202a}'..='\u{202e}'
-            | '\u{2066}'..='\u{2069}' => None,
+            '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' => None,
             character if character.is_control() => None,
             character => Some(character),
         })
@@ -208,10 +180,8 @@ pub(super) fn run_watch(scope: StoreScope, arguments: WatchArgs, output: &Echo) 
         Ok(paths) => paths,
         Err(error) => return report_error(error, output),
     };
-    let options = core::WatchOptions {
-        once: arguments.once,
-        interval: Duration::from_millis(arguments.interval_ms.max(50)),
-    };
+    let options =
+        core::WatchOptions { once: arguments.once, interval: Duration::from_millis(arguments.interval_ms.max(50)) };
     match core::watch_store(&paths, options) {
         Ok(report) => {
             output.field("Watch cycles", report.cycles);
@@ -259,11 +229,7 @@ pub(super) fn run_reindex(scope: StoreScope, output: &Echo) -> i32 {
     }
 }
 
-pub(super) fn run_doctor(
-    scope: StoreScope,
-    arguments: crate::command::DoctorArgs,
-    output: &Echo,
-) -> i32 {
+pub(super) fn run_doctor(scope: StoreScope, arguments: crate::command::DoctorArgs, output: &Echo) -> i32 {
     let paths = match resolve(scope) {
         Ok(paths) => paths,
         Err(error) => return report_error(error, output),
@@ -291,15 +257,8 @@ pub(super) fn run_doctor(
         output.field("Status", output.success("healthy"));
         return 0;
     }
-    let status = format!(
-        "{} failure(s), {} warning(s)",
-        report.failures, report.warnings
-    );
-    let status = if report.failures == 0 {
-        output.warning(&status)
-    } else {
-        output.failure(&status)
-    };
+    let status = format!("{} failure(s), {} warning(s)", report.failures, report.warnings);
+    let status = if report.failures == 0 { output.warning(&status) } else { output.failure(&status) };
     output.field("Status", status);
     output.line("");
     for issue in &report.issues {
@@ -327,10 +286,7 @@ fn reconcile(paths: &core::StorePaths, output: &Echo) -> bool {
 }
 
 fn prepare_retrieval_stores(
-    _scope: StoreScope,
-    paths: core::StorePaths,
-    output: &Echo,
-    embedder: Option<&dyn core::Embedder>,
+    _scope: StoreScope, paths: core::StorePaths, output: &Echo, embedder: Option<&dyn core::Embedder>,
 ) -> Option<Vec<core::StorePaths>> {
     let cwd = match std::env::current_dir() {
         Ok(cwd) => cwd,
@@ -368,8 +324,7 @@ pub(super) fn configured_embedder() -> AnyhowResult<Option<Box<dyn core::Embedde
         return Ok(None);
     }
     let global = resolve(StoreScope::Global)?;
-    core::ensure_default_model(&global)
-        .context("could not acquire the verified local embedding model")?;
+    core::ensure_default_model(&global).context("could not acquire the verified local embedding model")?;
     let embedder = core::LocalEmbedder::from_default_cache(&global)
         .context("could not load the verified local embedding model")?;
     Ok(Some(Box::new(embedder)))
@@ -381,9 +336,6 @@ pub(super) fn semantic_model_enabled() -> bool {
 
 pub(super) fn report_invalid_files(files: &[core::SyncInvalidFile], output: &Echo) {
     for file in files {
-        output.error(&format!(
-            "invalid canonical record {}: {}",
-            file.path, file.error
-        ));
+        output.error(&format!("invalid canonical record {}: {}", file.path, file.error));
     }
 }

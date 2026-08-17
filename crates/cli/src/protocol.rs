@@ -14,8 +14,7 @@ pub(super) fn run_mcp(scope: StoreScope, arguments: McpArgs, output: &Echo) -> i
         output.error("mcp requires --stdio");
         return FAILURE;
     }
-    let executable = std::env::var_os("STORMBUFFER_MCP_BIN")
-        .unwrap_or_else(|| OsString::from("stormbuffer-mcp"));
+    let executable = std::env::var_os("STORMBUFFER_MCP_BIN").unwrap_or_else(|| OsString::from("stormbuffer-mcp"));
     let mut command = Command::new(executable);
     command.arg("--stdio");
     match scope {
@@ -58,9 +57,7 @@ pub(super) fn run_invoke(scope: StoreScope, arguments: InvokeArgs, output: &Echo
                         "could not resolve the selected store",
                     )),
                 ))
-                .unwrap_or_else(|_| {
-                    "{\"version\":1,\"operation\":\"invoke\",\"ok\":false}".to_owned()
-                }),
+                .unwrap_or_else(|_| "{\"version\":1,\"operation\":\"invoke\",\"ok\":false}".to_owned()),
             );
             return FAILURE;
         }
@@ -69,8 +66,7 @@ pub(super) fn run_invoke(scope: StoreScope, arguments: InvokeArgs, output: &Echo
     let input_result = io::stdin()
         .take((core::MAX_INVOKE_INPUT + 1) as u64)
         .read_to_end(&mut input);
-    let request_is_object =
-        serde_json::from_slice::<Value>(&input).is_ok_and(|value| value.is_object());
+    let request_is_object = serde_json::from_slice::<Value>(&input).is_ok_and(|value| value.is_object());
     let embedder = if input_result.is_ok()
         && input.len() <= core::MAX_INVOKE_INPUT
         && request_is_object
@@ -81,12 +77,9 @@ pub(super) fn run_invoke(scope: StoreScope, arguments: InvokeArgs, output: &Echo
         None
     };
     let result = match input_result {
-        Ok(_) if input.len() <= core::MAX_INVOKE_INPUT => core::invoke_request_with_embedder(
-            &paths,
-            &arguments.operation,
-            &input,
-            embedder.as_deref(),
-        ),
+        Ok(_) if input.len() <= core::MAX_INVOKE_INPUT => {
+            core::invoke_request_with_embedder(&paths, &arguments.operation, &input, embedder.as_deref())
+        }
         Ok(_) => Err(core::InvokeFailure::new(
             "input_too_large",
             "request exceeds the bounded input limit",
@@ -115,9 +108,5 @@ pub(super) fn run_invoke(scope: StoreScope, arguments: InvokeArgs, output: &Echo
         response
     };
     output.line(&encoded);
-    if response.get("ok") == Some(&Value::Bool(true)) {
-        0
-    } else {
-        FAILURE
-    }
+    if response.get("ok") == Some(&Value::Bool(true)) { 0 } else { FAILURE }
 }

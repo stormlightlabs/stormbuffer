@@ -21,10 +21,7 @@ pub fn reindex_store(paths: &StorePaths) -> crate::Result<SyncReport> {
     reindex_store_with_embedder(paths, None)
 }
 
-pub fn reindex_store_with_embedder(
-    paths: &StorePaths,
-    embedder: Option<&dyn Embedder>,
-) -> crate::Result<SyncReport> {
+pub fn reindex_store_with_embedder(paths: &StorePaths, embedder: Option<&dyn Embedder>) -> crate::Result<SyncReport> {
     crate::record_scope(paths)?;
     let destination = active_index_path(paths)?;
     let _lock = ProjectionLock::acquire(&destination)?;
@@ -62,18 +59,17 @@ pub fn reindex_store_with_embedder(
                 status: "unavailable".to_owned(),
                 model_version: None,
                 message: Some(
-                    "no verified embedding model was supplied; run `sbuf init` when online, then `sbuf reindex`".to_owned(),
+                    "no verified embedding model was supplied; run `sbuf init` when online, then `sbuf reindex`"
+                        .to_owned(),
                 ),
             },
         });
         fresh.checkpoint()?;
         drop(fresh);
 
-        replace_file(&temporary, &destination)
-            .map_err(|source| Error::io("switch the rebuilt index", source))?;
+        replace_file(&temporary, &destination).map_err(|source| Error::io("switch the rebuilt index", source))?;
         remove_sqlite_sidecars(&destination);
-        sync_parent_directory(&destination)
-            .map_err(|source| Error::io("sync the index directory", source))?;
+        sync_parent_directory(&destination).map_err(|source| Error::io("sync the index directory", source))?;
         Ok(report)
     })();
     let _ = fs::remove_file(&temporary);
@@ -84,10 +80,7 @@ pub fn reindex_store_with_embedder(
 ///
 /// Returns an error if any canonical record is invalid; callers never receive
 /// metadata for a partial semantic index.
-pub fn rebuild_vector_index(
-    paths: &StorePaths,
-    embedder: &dyn Embedder,
-) -> crate::Result<VectorMetadata> {
+pub fn rebuild_vector_index(paths: &StorePaths, embedder: &dyn Embedder) -> crate::Result<VectorMetadata> {
     crate::record_scope(paths)?;
     let destination = active_index_path(paths)?;
     let _lock = ProjectionLock::acquire(&destination)?;
@@ -103,13 +96,7 @@ pub fn rebuild_vector_index(
 }
 
 pub fn watch_store(paths: &StorePaths, options: WatchOptions) -> crate::Result<WatchReport> {
-    let mut aggregate = WatchReport {
-        cycles: 0,
-        indexed: 0,
-        skipped: 0,
-        removed: 0,
-        invalid_files: Vec::new(),
-    };
+    let mut aggregate = WatchReport { cycles: 0, indexed: 0, skipped: 0, removed: 0, invalid_files: Vec::new() };
     loop {
         let report = sync_store(paths)?;
         aggregate.cycles += 1;

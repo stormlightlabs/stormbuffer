@@ -10,11 +10,7 @@ pub(super) fn run_init(scope: StoreScope, shared: bool, output: &Echo) -> i32 {
         Ok(paths) => paths,
         Err(error) => return report_error(error, output),
     };
-    let mode = if shared {
-        StoreInitMode::Shared
-    } else {
-        StoreInitMode::Default
-    };
+    let mode = if shared { StoreInitMode::Shared } else { StoreInitMode::Default };
     let created = match core::initialize_store(&paths, mode).context("could not initialize store") {
         Ok(created) => created,
         Err(error) => return report_error(error, output),
@@ -27,18 +23,13 @@ pub(super) fn run_init(scope: StoreScope, shared: bool, output: &Echo) -> i32 {
         report_invalid_files(&sync.invalid_files, output);
         return FAILURE;
     }
-    let action = if created {
-        "Initialized"
-    } else {
-        "Already initialized"
-    };
+    let action = if created { "Initialized" } else { "Already initialized" };
     let model_ready = scope == StoreScope::Global && semantic_model_enabled();
     if model_ready {
         if let Err(error) = core::ensure_default_model(&paths) {
             return report_error(
-                anyhow::Error::new(error).context(
-                    "store initialized, but the verified local embedding model is unavailable",
-                ),
+                anyhow::Error::new(error)
+                    .context("store initialized, but the verified local embedding model is unavailable"),
                 output,
             );
         }
@@ -76,10 +67,7 @@ pub(super) fn run_status(scope: StoreScope, json: bool, output: &Echo) -> i32 {
     };
 
     if json {
-        let project_id = status
-            .project
-            .as_ref()
-            .map(|project| project.id.to_string());
+        let project_id = status.project.as_ref().map(|project| project.id.to_string());
         let project_name = status.project.as_ref().map(|project| project.name.as_str());
         let value = serde_json::json!({
             "view": view_name(status.scope),
@@ -108,11 +96,7 @@ pub(super) fn run_status(scope: StoreScope, json: bool, output: &Echo) -> i32 {
         return 0;
     }
 
-    let state = if status.initialized {
-        output.success("initialized")
-    } else {
-        output.warning("not initialized")
-    };
+    let state = if status.initialized { output.success("initialized") } else { output.warning("not initialized") };
     output.field("View", view_name(status.scope));
     output.field("Scope", status.scope);
     output.field("Root", output.path(status.root.display()));
@@ -129,14 +113,8 @@ pub(super) fn run_status(scope: StoreScope, json: bool, output: &Echo) -> i32 {
     output.field("Active", status.lifecycle.active);
     output.field("Superseded", status.lifecycle.superseded);
     output.field("Archived", status.lifecycle.archived);
-    output.field(
-        "Canonical disk",
-        format!("{} bytes", status.canonical_bytes),
-    );
-    output.field(
-        "Disposable disk",
-        format!("{} bytes", status.disposable_bytes),
-    );
+    output.field("Canonical disk", format!("{} bytes", status.canonical_bytes));
+    output.field("Disposable disk", format!("{} bytes", status.disposable_bytes));
     output.field(
         "Index version",
         status
@@ -147,10 +125,7 @@ pub(super) fn run_status(scope: StoreScope, json: bool, output: &Echo) -> i32 {
         "Embedding version",
         status.embedding_version.as_deref().unwrap_or("unavailable"),
     );
-    output.field(
-        "Last sync",
-        status.last_successful_sync.as_deref().unwrap_or("never"),
-    );
+    output.field("Last sync", status.last_successful_sync.as_deref().unwrap_or("never"));
     0
 }
 

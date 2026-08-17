@@ -1,9 +1,9 @@
 use rmcp::{
     ErrorData as RmcpError, ServerHandler,
     model::{
-        CallToolResult, Implementation, InitializeResult, JsonObject, ListResourceTemplatesResult,
-        ListResourcesResult, PaginatedRequestParams, ProtocolVersion, ReadResourceRequestParams,
-        ReadResourceResult, ResourceContents, ResourceTemplate, ServerCapabilities, ServerInfo,
+        CallToolResult, Implementation, InitializeResult, JsonObject, ListResourceTemplatesResult, ListResourcesResult,
+        PaginatedRequestParams, ProtocolVersion, ReadResourceRequestParams, ReadResourceResult, ResourceContents,
+        ResourceTemplate, ServerCapabilities, ServerInfo,
     },
     service::{RequestContext, RoleServer},
     tool, tool_handler, tool_router,
@@ -25,37 +25,17 @@ pub struct McpServer {
 
 impl McpServer {
     pub fn new(paths: core::StorePaths, write_policy: config::McpWritePolicy) -> Self {
-        Self {
-            paths,
-            write_policy,
-            embedder: None,
-            default_embedder: None,
-        }
+        Self { paths, write_policy, embedder: None, default_embedder: None }
     }
 
-    pub fn with_default_embedder(
-        paths: core::StorePaths,
-        write_policy: config::McpWritePolicy,
-    ) -> Self {
-        Self {
-            paths,
-            write_policy,
-            embedder: None,
-            default_embedder: Some(Arc::new(Mutex::new(None))),
-        }
+    pub fn with_default_embedder(paths: core::StorePaths, write_policy: config::McpWritePolicy) -> Self {
+        Self { paths, write_policy, embedder: None, default_embedder: Some(Arc::new(Mutex::new(None))) }
     }
 
     pub fn with_embedder(
-        paths: core::StorePaths,
-        write_policy: config::McpWritePolicy,
-        embedder: Arc<dyn core::Embedder>,
+        paths: core::StorePaths, write_policy: config::McpWritePolicy, embedder: Arc<dyn core::Embedder>,
     ) -> Self {
-        Self {
-            paths,
-            write_policy,
-            embedder: Some(embedder),
-            default_embedder: None,
-        }
+        Self { paths, write_policy, embedder: Some(embedder), default_embedder: None }
     }
 
     pub fn paths(&self) -> &core::StorePaths {
@@ -71,10 +51,7 @@ impl McpServer {
     /// This is primarily useful to integration tests and benchmark harnesses
     /// that must exclude transport overhead.
     pub fn call_sync(
-        &self,
-        operation: &'static str,
-        arguments: JsonObject,
-        cancelled: bool,
+        &self, operation: &'static str, arguments: JsonObject, cancelled: bool,
     ) -> Result<CallToolResult, RmcpError> {
         let (embedder, unavailable_reason) = if operation == "context" {
             if let Some(embedder) = self.embedder.clone() {
@@ -82,10 +59,7 @@ impl McpServer {
             } else if let Some(cache) = self.default_embedder.as_ref() {
                 resolve_default_embedder(&self.paths, cache)
             } else {
-                (
-                    None,
-                    Some(core::SemanticFallbackReason::IntentionallyUnavailable),
-                )
+                (None, Some(core::SemanticFallbackReason::IntentionallyUnavailable))
             }
         } else {
             (None, None)
@@ -116,9 +90,7 @@ impl McpServer {
         )
     )]
     async fn memory_recall(
-        &self,
-        arguments: JsonObject,
-        context: RequestContext<RoleServer>,
+        &self, arguments: JsonObject, context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, RmcpError> {
         self.call("context", arguments, context).await
     }
@@ -135,9 +107,7 @@ impl McpServer {
         )
     )]
     async fn memory_get(
-        &self,
-        arguments: JsonObject,
-        context: RequestContext<RoleServer>,
+        &self, arguments: JsonObject, context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, RmcpError> {
         self.call("get", arguments, context).await
     }
@@ -154,9 +124,7 @@ impl McpServer {
         )
     )]
     async fn memory_remember(
-        &self,
-        arguments: JsonObject,
-        context: RequestContext<RoleServer>,
+        &self, arguments: JsonObject, context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, RmcpError> {
         self.call("remember", arguments, context).await
     }
@@ -173,9 +141,7 @@ impl McpServer {
         )
     )]
     async fn memory_update(
-        &self,
-        arguments: JsonObject,
-        context: RequestContext<RoleServer>,
+        &self, arguments: JsonObject, context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, RmcpError> {
         self.call("update", arguments, context).await
     }
@@ -192,24 +158,18 @@ impl McpServer {
         )
     )]
     async fn memory_forget(
-        &self,
-        arguments: JsonObject,
-        context: RequestContext<RoleServer>,
+        &self, arguments: JsonObject, context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, RmcpError> {
         self.call("archive", arguments, context).await
     }
 
     async fn call(
-        &self,
-        operation: &'static str,
-        arguments: JsonObject,
-        context: RequestContext<RoleServer>,
+        &self, operation: &'static str, arguments: JsonObject, context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, RmcpError> {
         let server = self.clone();
         let cancellation = context.ct.clone();
-        let operation_task = tokio::task::spawn_blocking(move || {
-            server.call_sync(operation, arguments, cancellation.is_cancelled())
-        });
+        let operation_task =
+            tokio::task::spawn_blocking(move || server.call_sync(operation, arguments, cancellation.is_cancelled()));
         tokio::select! {
             _ = context.ct.cancelled() => {
                 Err(RmcpError::invalid_params("request was cancelled", None))
@@ -224,10 +184,7 @@ impl McpServer {
 #[tool_handler]
 impl ServerHandler for McpServer {
     fn get_info(&self) -> ServerInfo {
-        let capabilities = ServerCapabilities::builder()
-            .enable_resources()
-            .enable_tools()
-            .build();
+        let capabilities = ServerCapabilities::builder().enable_resources().enable_tools().build();
         InitializeResult::new(capabilities)
             .with_protocol_version(ProtocolVersion::V_2025_06_18)
             .with_server_info(Implementation::new(
@@ -241,42 +198,32 @@ impl ServerHandler for McpServer {
     }
 
     async fn list_resources(
-        &self,
-        _request: Option<PaginatedRequestParams>,
-        _context: RequestContext<RoleServer>,
+        &self, _request: Option<PaginatedRequestParams>, _context: RequestContext<RoleServer>,
     ) -> Result<ListResourcesResult, RmcpError> {
         Ok(ListResourcesResult::with_all_items(Vec::new()))
     }
 
     async fn list_resource_templates(
-        &self,
-        _request: Option<PaginatedRequestParams>,
-        _context: RequestContext<RoleServer>,
+        &self, _request: Option<PaginatedRequestParams>, _context: RequestContext<RoleServer>,
     ) -> Result<ListResourceTemplatesResult, RmcpError> {
         let templates = schemas::resource_templates()
             .into_iter()
             .map(|value| {
-                serde_json::from_value::<ResourceTemplate>(value).map_err(|_| {
-                    RmcpError::internal_error("could not encode resource template", None)
-                })
+                serde_json::from_value::<ResourceTemplate>(value)
+                    .map_err(|_| RmcpError::internal_error("could not encode resource template", None))
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(ListResourceTemplatesResult::with_all_items(templates))
     }
 
     async fn read_resource(
-        &self,
-        request: ReadResourceRequestParams,
-        _context: RequestContext<RoleServer>,
+        &self, request: ReadResourceRequestParams, _context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResult, RmcpError> {
         if request.uri.len() > 4096 {
             return Err(RmcpError::invalid_params("resource URI is too long", None));
         }
         let value = resources::read(&self.paths, &request.uri).map_err(|error| {
-            RmcpError::invalid_params(
-                format!("could not read the requested resource: {}", error.code()),
-                None,
-            )
+            RmcpError::invalid_params(format!("could not read the requested resource: {}", error.code()), None)
         })?;
         let text = serde_json::to_string(&value)
             .map_err(|_| RmcpError::internal_error("could not encode resource contents", None))?;
@@ -293,12 +240,8 @@ impl ServerHandler for McpServer {
 }
 
 fn resolve_default_embedder(
-    paths: &core::StorePaths,
-    cache: &EmbedderCache,
-) -> (
-    Option<Arc<dyn core::Embedder>>,
-    Option<core::SemanticFallbackReason>,
-) {
+    paths: &core::StorePaths, cache: &EmbedderCache,
+) -> (Option<Arc<dyn core::Embedder>>, Option<core::SemanticFallbackReason>) {
     resolve_cached_embedder(cache, || {
         if core::ensure_default_model(paths).is_err() {
             return Err(core::SemanticFallbackReason::ModelUnavailable);
@@ -310,19 +253,12 @@ fn resolve_default_embedder(
 }
 
 fn resolve_cached_embedder(
-    cache: &EmbedderCache,
-    initialize: impl FnOnce() -> Result<Arc<dyn core::Embedder>, core::SemanticFallbackReason>,
-) -> (
-    Option<Arc<dyn core::Embedder>>,
-    Option<core::SemanticFallbackReason>,
-) {
+    cache: &EmbedderCache, initialize: impl FnOnce() -> Result<Arc<dyn core::Embedder>, core::SemanticFallbackReason>,
+) -> (Option<Arc<dyn core::Embedder>>, Option<core::SemanticFallbackReason>) {
     let mut slot = match cache.lock() {
         Ok(slot) => slot,
         Err(_) => {
-            return (
-                None,
-                Some(core::SemanticFallbackReason::EmbedderInitializationFailed),
-            );
+            return (None, Some(core::SemanticFallbackReason::EmbedderInitializationFailed));
         }
     };
     if let Some(embedder) = slot.as_ref() {
@@ -352,18 +288,16 @@ mod tests {
             if attempt == 0 {
                 Err(core::SemanticFallbackReason::ModelUnavailable)
             } else {
-                Ok(Arc::new(
-                    core::DeterministicEmbedder::new("retry-test", 8).expect("test embedder"),
-                ) as Arc<dyn core::Embedder>)
+                Ok(
+                    Arc::new(core::DeterministicEmbedder::new("retry-test", 8).expect("test embedder"))
+                        as Arc<dyn core::Embedder>,
+                )
             }
         };
 
         let first = resolve_cached_embedder(&cache, initialize);
         assert!(first.0.is_none());
-        assert_eq!(
-            first.1,
-            Some(core::SemanticFallbackReason::ModelUnavailable)
-        );
+        assert_eq!(first.1, Some(core::SemanticFallbackReason::ModelUnavailable));
         let second = resolve_cached_embedder(&cache, initialize);
         assert!(second.0.is_some());
         assert_eq!(second.1, None);
@@ -385,9 +319,10 @@ mod tests {
             resolve_cached_embedder(&first_cache, || {
                 first_attempts.fetch_add(1, Ordering::SeqCst);
                 first_entered.wait();
-                Ok(Arc::new(
-                    core::DeterministicEmbedder::new("single-flight", 8).expect("test embedder"),
-                ) as Arc<dyn core::Embedder>)
+                Ok(
+                    Arc::new(core::DeterministicEmbedder::new("single-flight", 8).expect("test embedder"))
+                        as Arc<dyn core::Embedder>,
+                )
             })
         });
         entered.wait();
@@ -396,9 +331,10 @@ mod tests {
         let second = std::thread::spawn(move || {
             resolve_cached_embedder(&second_cache, || {
                 second_attempts.fetch_add(1, Ordering::SeqCst);
-                Ok(Arc::new(
-                    core::DeterministicEmbedder::new("duplicate", 8).expect("test embedder"),
-                ) as Arc<dyn core::Embedder>)
+                Ok(
+                    Arc::new(core::DeterministicEmbedder::new("duplicate", 8).expect("test embedder"))
+                        as Arc<dyn core::Embedder>,
+                )
             })
         });
 

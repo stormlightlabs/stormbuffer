@@ -4,8 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
 use stormbuffer_core::{
-    RecordRepository, StoreInitMode, StorePaths, StoreScope, initialize_store, invoke_request,
-    parse_markdown,
+    RecordRepository, StoreInitMode, StorePaths, StoreScope, initialize_store, invoke_request, parse_markdown,
 };
 
 struct TempStore {
@@ -18,10 +17,7 @@ impl TempStore {
             .duration_since(UNIX_EPOCH)
             .expect("system clock")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "stormbuffer-secret-guard-test-{}-{suffix}",
-            std::process::id()
-        ));
+        let root = std::env::temp_dir().join(format!("stormbuffer-secret-guard-test-{}-{suffix}", std::process::id()));
         fs::create_dir(&root).expect("create temporary root");
         Self { root }
     }
@@ -51,12 +47,7 @@ fn record_count(paths: &StorePaths) -> usize {
     fs::read_dir(&paths.records)
         .expect("read records")
         .filter_map(Result::ok)
-        .filter(|entry| {
-            entry
-                .path()
-                .extension()
-                .is_some_and(|extension| extension == "md")
-        })
+        .filter(|entry| entry.path().extension().is_some_and(|extension| extension == "md"))
         .count()
 }
 
@@ -103,12 +94,8 @@ fn agent_remember_and_update_reject_secrets_without_writing_them() {
         "body": format!("Authorization: Bearer {secret}"),
         "source": {"kind": "conversation", "reference": "test", "actor": "agent"}
     });
-    let error = invoke_request(
-        &paths,
-        "update",
-        &serde_json::to_vec(&update).expect("encode update"),
-    )
-    .expect_err("secret update is rejected");
+    let error = invoke_request(&paths, "update", &serde_json::to_vec(&update).expect("encode update"))
+        .expect_err("secret update is rejected");
     assert_eq!(error.code(), "secret_detected");
     assert!(!error.message().contains(secret));
     assert_eq!(record_count(&paths), before);

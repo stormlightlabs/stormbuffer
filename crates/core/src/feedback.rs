@@ -25,8 +25,7 @@ impl ReceiptId {
         if value.trim() != value || value.is_empty() {
             return Err("must be a non-empty UUID without surrounding whitespace".to_owned());
         }
-        let id =
-            Uuid::parse_str(value).map_err(|error| format!("must be a valid UUID: {error}"))?;
+        let id = Uuid::parse_str(value).map_err(|error| format!("must be a valid UUID: {error}"))?;
         if id.is_nil() {
             return Err("must not be the nil UUID".to_owned());
         }
@@ -150,16 +149,14 @@ pub struct ReceiptFeedbackProjectionReport {
 }
 
 pub fn parse_receipt_feedback_file(contents: &str) -> crate::Result<ReceiptFeedbackFile> {
-    let feedback: ReceiptFeedbackFile = serde_json::from_str(contents).map_err(|error| {
-        Error::invalid_input(format!("invalid receipt feedback judgments: {error}"))
-    })?;
+    let feedback: ReceiptFeedbackFile = serde_json::from_str(contents)
+        .map_err(|error| Error::invalid_input(format!("invalid receipt feedback judgments: {error}")))?;
     validate_feedback(&feedback)?;
     Ok(feedback)
 }
 
 pub fn rebuild_receipt_feedback_projection(
-    path: &Path,
-    feedback: &ReceiptFeedbackFile,
+    path: &Path, feedback: &ReceiptFeedbackFile,
 ) -> crate::Result<ReceiptFeedbackProjectionReport> {
     validate_feedback(feedback)?;
     let parent = path.parent().ok_or_else(|| {
@@ -184,11 +181,7 @@ pub fn rebuild_receipt_feedback_projection(
     Ok(ReceiptFeedbackProjectionReport {
         revision: feedback.revision.clone(),
         receipt_count: feedback.judgments.len(),
-        evidence_count: feedback
-            .judgments
-            .iter()
-            .map(|judgment| judgment.evidence.len())
-            .sum(),
+        evidence_count: feedback.judgments.iter().map(|judgment| judgment.evidence.len()).sum(),
         proposal_count: feedback
             .judgments
             .iter()
@@ -231,8 +224,8 @@ fn validate_feedback(feedback: &ReceiptFeedbackFile) -> crate::Result<()> {
 }
 
 fn build_projection(path: &Path, feedback: &ReceiptFeedbackFile) -> crate::Result<()> {
-    let mut connection = Connection::open(path)
-        .map_err(|source| db_error("open the receipt feedback projection", source))?;
+    let mut connection =
+        Connection::open(path).map_err(|source| db_error("open the receipt feedback projection", source))?;
     connection
         .execute_batch(
             "PRAGMA foreign_keys = ON;

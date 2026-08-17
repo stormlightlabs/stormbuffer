@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::repository::{RecordRepository, StoredRecord, write_atomic};
 use crate::{
-    DestructionAcknowledgement, Error, Record, RecordId, RecordStatus, StorePaths, StoreScope,
-    parse_markdown, render_markdown,
+    DestructionAcknowledgement, Error, Record, RecordId, RecordStatus, StorePaths, StoreScope, parse_markdown,
+    render_markdown,
 };
 
 pub const EXPORT_FORMAT_VERSION: u32 = 1;
@@ -148,10 +148,7 @@ pub enum BackupError {
     #[error("scope collision: archive has `{actual}`, selected store requires `{expected}`")]
     ScopeCollision { actual: String, expected: String },
     #[error("archive record {imported} already exists as record {existing}")]
-    ExistingRecordCollision {
-        imported: RecordId,
-        existing: RecordId,
-    },
+    ExistingRecordCollision { imported: RecordId, existing: RecordId },
     #[error("archive contains duplicate record id {id}")]
     DuplicateArchiveId { id: RecordId },
     #[error("archive import would write two records to the same destination")]
@@ -247,18 +244,11 @@ fn export_records(paths: &StorePaths, records: Vec<StoredRecord>) -> crate::Resu
                 })
                 .collect::<Vec<_>>()
                 .join("/");
-            Ok(ExportedRecord {
-                path,
-                markdown: stored.markdown().to_owned(),
-            })
+            Ok(ExportedRecord { path, markdown: stored.markdown().to_owned() })
         })
         .collect::<crate::Result<Vec<_>>>()?;
     exported.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(ExportBundle {
-        format_version: EXPORT_FORMAT_VERSION,
-        source_scope: expected_scope(paths)?,
-        records: exported,
-    })
+    Ok(ExportBundle { format_version: EXPORT_FORMAT_VERSION, source_scope: expected_scope(paths)?, records: exported })
 }
 
 pub fn encode_export(bundle: &ExportBundle) -> crate::Result<String> {
@@ -274,11 +264,8 @@ pub fn decode_export(contents: &str) -> crate::Result<ExportBundle> {
             message: format!("archive exceeds the {MAX_EXPORT_ARCHIVE_BYTES} byte limit"),
         }));
     }
-    let bundle: ExportBundle = serde_json::from_str(contents).map_err(|source| {
-        Error::backup(BackupError::InvalidArchive {
-            message: format!("invalid JSON: {source}"),
-        })
-    })?;
+    let bundle: ExportBundle = serde_json::from_str(contents)
+        .map_err(|source| Error::backup(BackupError::InvalidArchive { message: format!("invalid JSON: {source}") }))?;
     validate_bundle_header(&bundle)?;
     Ok(bundle)
 }
@@ -289,16 +276,11 @@ pub fn verify_export(bundle: &ExportBundle) -> crate::Result<ExportVerificationR
     for (index, item) in bundle.records.iter().enumerate() {
         validate_archive_path(index, &item.path)?;
         let record = parse_archive_record(index, item)?;
-        record.validate_provenance().map_err(|error| {
-            Error::backup(BackupError::InvalidArchiveRecord {
-                index,
-                message: error.to_string(),
-            })
-        })?;
+        record
+            .validate_provenance()
+            .map_err(|error| Error::backup(BackupError::InvalidArchiveRecord { index, message: error.to_string() }))?;
         if !ids.insert(record.id) {
-            return Err(Error::backup(BackupError::DuplicateArchiveId {
-                id: record.id,
-            }));
+            return Err(Error::backup(BackupError::DuplicateArchiveId { id: record.id }));
         }
     }
     Ok(ExportVerificationReport {
@@ -308,23 +290,17 @@ pub fn verify_export(bundle: &ExportBundle) -> crate::Result<ExportVerificationR
     })
 }
 
-pub fn write_export_archive(
-    paths: &StorePaths,
-    destination: &Path,
-    contents: &[u8],
-) -> crate::Result<()> {
-    let store = fs::canonicalize(&paths.root)
-        .map_err(|source| Error::io("resolve the selected store", source))?;
+pub fn write_export_archive(paths: &StorePaths, destination: &Path, contents: &[u8]) -> crate::Result<()> {
+    let store = fs::canonicalize(&paths.root).map_err(|source| Error::io("resolve the selected store", source))?;
     let resolved_destination = if destination.exists() {
-        fs::canonicalize(destination)
-            .map_err(|source| Error::io("resolve the export destination", source))?
+        fs::canonicalize(destination).map_err(|source| Error::io("resolve the export destination", source))?
     } else {
         let parent = destination
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
-        let parent = fs::canonicalize(parent)
-            .map_err(|source| Error::io("resolve the export destination directory", source))?;
+        let parent =
+            fs::canonicalize(parent).map_err(|source| Error::io("resolve the export destination directory", source))?;
         let name = destination
             .file_name()
             .ok_or_else(|| Error::invalid_input("export destination must name a file"))?;
@@ -336,11 +312,7 @@ pub fn write_export_archive(
     write_atomic(&resolved_destination, contents)
 }
 
-pub fn import_store(
-    paths: &StorePaths,
-    bundle: &ExportBundle,
-    options: &ImportOptions,
-) -> crate::Result<ImportReport> {
+pub fn import_store(paths: &StorePaths, bundle: &ExportBundle, options: &ImportOptions) -> crate::Result<ImportReport> {
     let repository = RecordRepository::new(paths.clone());
     let _lock = repository.prepare_mutation()?;
     let existing = repository.scan_locked()?;
@@ -352,9 +324,7 @@ pub fn import_store(
 }
 
 pub fn preview_import(
-    paths: &StorePaths,
-    bundle: &ExportBundle,
-    options: &ImportOptions,
+    paths: &StorePaths, bundle: &ExportBundle, options: &ImportOptions,
 ) -> crate::Result<ImportPreview> {
     let repository = RecordRepository::new(paths.clone());
     let existing = repository.list_read_only(true)?;
@@ -362,10 +332,7 @@ pub fn preview_import(
 }
 
 fn plan_import(
-    paths: &StorePaths,
-    bundle: &ExportBundle,
-    options: &ImportOptions,
-    existing: &[StoredRecord],
+    paths: &StorePaths, bundle: &ExportBundle, options: &ImportOptions, existing: &[StoredRecord],
 ) -> crate::Result<(Vec<ImportPlan>, ImportPreview)> {
     verify_export(bundle)?;
     let by_id: HashMap<_, _> = existing
@@ -380,9 +347,7 @@ fn plan_import(
     for (index, item) in bundle.records.iter().enumerate() {
         let mut record = parse_archive_record(index, item)?;
         if !archive_ids.insert(record.id) {
-            return Err(Error::backup(BackupError::DuplicateArchiveId {
-                id: record.id,
-            }));
+            return Err(Error::backup(BackupError::DuplicateArchiveId { id: record.id }));
         }
 
         let mut changed = false;
@@ -393,8 +358,7 @@ fn plan_import(
                     continue;
                 }
                 Some(ScopeCollisionPolicy::Remap) => {
-                    record.scope =
-                        crate::Scope::parse(&expected_scope).map_err(Error::invalid_input)?;
+                    record.scope = crate::Scope::parse(&expected_scope).map_err(Error::invalid_input)?;
                     changed = true;
                 }
                 Some(ScopeCollisionPolicy::Fail) => {
@@ -404,9 +368,7 @@ fn plan_import(
                     }));
                 }
                 None => {
-                    return Err(Error::backup(BackupError::PolicyRequired {
-                        collision: "scope",
-                    }));
+                    return Err(Error::backup(BackupError::PolicyRequired { collision: "scope" }));
                 }
             }
         }
@@ -416,18 +378,12 @@ fn plan_import(
         let mut destination = paths.records.join(format!("{target_id}.md"));
         let mut overwritten = false;
         let mut remapped = false;
-        let equivalent_record_id =
-            existing_identity(existing, &record).map(|stored| stored.record().id);
+        let equivalent_record_id = existing_identity(existing, &record).map(|stored| stored.record().id);
         if let Some(current) = by_id.get(&record.id) {
             if !changed && current.markdown() == item.markdown {
                 match options.existing_record {
                     Some(ExistingRecordPolicy::Skip) => {
-                        add_skipped_preview(
-                            &mut preview,
-                            &record,
-                            "existing_record",
-                            Some(current),
-                        );
+                        add_skipped_preview(&mut preview, &record, "existing_record", Some(current));
                         continue;
                     }
                     Some(ExistingRecordPolicy::Overwrite) => {
@@ -467,9 +423,7 @@ fn plan_import(
                         return Err(Error::backup(BackupError::IdCollision { id: record.id }));
                     }
                     None => {
-                        return Err(Error::backup(BackupError::PolicyRequired {
-                            collision: "id",
-                        }));
+                        return Err(Error::backup(BackupError::PolicyRequired { collision: "id" }));
                     }
                 }
             }
@@ -562,11 +516,9 @@ fn plan_import(
 pub fn preview_store_destruction(paths: &StorePaths) -> crate::Result<StoreDestructionPreview> {
     let status = crate::inspect_store(paths)?;
     if !status.initialized {
-        return Err(Error::repository(
-            crate::RepositoryError::StoreNotInitialized {
-                root: paths.root.clone(),
-            },
-        ));
+        return Err(Error::repository(crate::RepositoryError::StoreNotInitialized {
+            root: paths.root.clone(),
+        }));
     }
     let store_id = status
         .project
@@ -583,9 +535,7 @@ pub fn preview_store_destruction(paths: &StorePaths) -> crate::Result<StoreDestr
 }
 
 pub fn destroy_store(
-    paths: &StorePaths,
-    expected_store_id: &str,
-    _acknowledgement: DestructionAcknowledgement,
+    paths: &StorePaths, expected_store_id: &str, _acknowledgement: DestructionAcknowledgement,
     export_destination: Option<&Path>,
 ) -> crate::Result<()> {
     let repository = RecordRepository::new(paths.clone());
@@ -611,8 +561,7 @@ pub fn destroy_store(
     if paths.scope == StoreScope::Global {
         remove_global_projection(paths)?;
     }
-    fs::remove_dir_all(&paths.root)
-        .map_err(|source| Error::io("destroy the selected store", source))?;
+    fs::remove_dir_all(&paths.root).map_err(|source| Error::io("destroy the selected store", source))?;
     Ok(())
 }
 
@@ -644,12 +593,7 @@ pub fn gc_store(paths: &StorePaths, options: GcOptions) -> crate::Result<GcRepor
     add_candidate(&index, "index.sqlite3", &mut candidates, &mut seen)?;
     for suffix in ["-wal", "-shm"] {
         let path = PathBuf::from(format!("{}{}", index.display(), suffix));
-        add_candidate(
-            &path,
-            &format!("index.sqlite3{suffix}"),
-            &mut candidates,
-            &mut seen,
-        )?;
+        add_candidate(&path, &format!("index.sqlite3{suffix}"), &mut candidates, &mut seen)?;
     }
 
     collect_directory(
@@ -659,20 +603,8 @@ pub fn gc_store(paths: &StorePaths, options: GcOptions) -> crate::Result<GcRepor
         &mut candidates,
         &mut seen,
     )?;
-    collect_directory(
-        &paths.root.join("tmp"),
-        "tmp",
-        None,
-        &mut candidates,
-        &mut seen,
-    )?;
-    collect_directory(
-        &paths.root.join("logs"),
-        "logs",
-        None,
-        &mut candidates,
-        &mut seen,
-    )?;
+    collect_directory(&paths.root.join("tmp"), "tmp", None, &mut candidates, &mut seen)?;
+    collect_directory(&paths.root.join("logs"), "logs", None, &mut candidates, &mut seen)?;
     collect_suffixes(&paths.root, "", ".tmp", &mut candidates, &mut seen)?;
     collect_directory(
         &paths.cache.join("models"),
@@ -684,12 +616,7 @@ pub fn gc_store(paths: &StorePaths, options: GcOptions) -> crate::Result<GcRepor
     candidates.sort_by(|left, right| left.path.cmp(&right.path));
 
     let reclaimed_bytes = candidates.iter().map(|entry| entry.bytes).sum();
-    let mut report = GcReport {
-        dry_run: options.dry_run,
-        candidates,
-        removed: 0,
-        reclaimed_bytes,
-    };
+    let mut report = GcReport { dry_run: options.dry_run, candidates, removed: 0, reclaimed_bytes };
     if !options.dry_run {
         for entry in &report.candidates {
             let path = gc_path(paths, &entry.path);
@@ -713,20 +640,11 @@ struct ImportPlan {
 }
 
 fn parse_archive_record(index: usize, item: &ExportedRecord) -> crate::Result<Record> {
-    parse_markdown(Path::new("<export>"), &item.markdown).map_err(|error| {
-        Error::backup(BackupError::InvalidArchiveRecord {
-            index,
-            message: error.to_string(),
-        })
-    })
+    parse_markdown(Path::new("<export>"), &item.markdown)
+        .map_err(|error| Error::backup(BackupError::InvalidArchiveRecord { index, message: error.to_string() }))
 }
 
-fn add_skipped_preview(
-    preview: &mut ImportPreview,
-    record: &Record,
-    action: &str,
-    equivalent: Option<&StoredRecord>,
-) {
+fn add_skipped_preview(preview: &mut ImportPreview, record: &Record, action: &str, equivalent: Option<&StoredRecord>) {
     preview.report.skipped += 1;
     preview.records.push(ImportPreviewEntry {
         source_id: record.id.to_string(),
@@ -762,21 +680,14 @@ fn validate_archive_path(index: usize, path: &str) -> crate::Result<()> {
             .iter()
             .all(|component| matches!(component, Component::Normal(_)))
         && path.extension().is_some_and(|extension| extension == "md");
-    if safe {
-        Ok(())
-    } else {
-        Err(Error::backup(BackupError::UnsafeArchivePath { index }))
-    }
+    if safe { Ok(()) } else { Err(Error::backup(BackupError::UnsafeArchivePath { index })) }
 }
 
 fn expected_scope(paths: &StorePaths) -> crate::Result<String> {
     crate::record_scope(paths).map(|scope| scope.as_str().to_owned())
 }
 
-fn existing_identity<'a>(
-    existing: &'a [StoredRecord],
-    record: &Record,
-) -> Option<&'a StoredRecord> {
+fn existing_identity<'a>(existing: &'a [StoredRecord], record: &Record) -> Option<&'a StoredRecord> {
     existing.iter().find(|stored| {
         let current = stored.record();
         current.id != record.id
@@ -807,32 +718,21 @@ fn fresh_id(existing: &HashMap<RecordId, StoredRecord>, plans: &[ImportPlan]) ->
 }
 
 fn add_candidate(
-    path: &Path,
-    label: &str,
-    candidates: &mut Vec<GcEntry>,
-    seen: &mut HashSet<PathBuf>,
+    path: &Path, label: &str, candidates: &mut Vec<GcEntry>, seen: &mut HashSet<PathBuf>,
 ) -> crate::Result<()> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(source) if source.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(source) => return Err(Error::io("inspect disposable data", source)),
     };
-    if (metadata.is_file() || metadata.file_type().is_symlink()) && seen.insert(path.to_path_buf())
-    {
-        candidates.push(GcEntry {
-            path: label.to_owned(),
-            bytes: metadata.len(),
-        });
+    if (metadata.is_file() || metadata.file_type().is_symlink()) && seen.insert(path.to_path_buf()) {
+        candidates.push(GcEntry { path: label.to_owned(), bytes: metadata.len() });
     }
     Ok(())
 }
 
 fn collect_directory(
-    directory: &Path,
-    label: &str,
-    skip_name: Option<&str>,
-    candidates: &mut Vec<GcEntry>,
-    seen: &mut HashSet<PathBuf>,
+    directory: &Path, label: &str, skip_name: Option<&str>, candidates: &mut Vec<GcEntry>, seen: &mut HashSet<PathBuf>,
 ) -> crate::Result<()> {
     let entries = match fs::read_dir(directory) {
         Ok(entries) => entries,
@@ -846,8 +746,8 @@ fn collect_directory(
             continue;
         }
         let child_label = format!("{label}/{}", name.to_string_lossy());
-        let metadata = fs::symlink_metadata(entry.path())
-            .map_err(|source| Error::io("inspect disposable data", source))?;
+        let metadata =
+            fs::symlink_metadata(entry.path()).map_err(|source| Error::io("inspect disposable data", source))?;
         if metadata.is_dir() {
             collect_directory(&entry.path(), &child_label, skip_name, candidates, seen)?;
         } else {
@@ -858,11 +758,7 @@ fn collect_directory(
 }
 
 fn collect_suffixes(
-    directory: &Path,
-    label: &str,
-    suffix: &str,
-    candidates: &mut Vec<GcEntry>,
-    seen: &mut HashSet<PathBuf>,
+    directory: &Path, label: &str, suffix: &str, candidates: &mut Vec<GcEntry>, seen: &mut HashSet<PathBuf>,
 ) -> crate::Result<()> {
     let entries = match fs::read_dir(directory) {
         Ok(entries) => entries,
@@ -877,8 +773,8 @@ fn collect_suffixes(
         } else {
             format!("{label}/{}", name.to_string_lossy())
         };
-        let metadata = fs::symlink_metadata(entry.path())
-            .map_err(|source| Error::io("inspect disposable data", source))?;
+        let metadata =
+            fs::symlink_metadata(entry.path()).map_err(|source| Error::io("inspect disposable data", source))?;
         if metadata.is_dir() {
             collect_suffixes(&entry.path(), &child_label, suffix, candidates, seen)?;
         } else if name.to_string_lossy().ends_with(suffix) {

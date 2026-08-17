@@ -7,9 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result as AnyhowResult, bail};
 use stormbuffer_core::{self as core, ProposalActor, StoreScope};
 
-use crate::command::{
-    AddArgs, EditArgs, ForgetArgs, IdArgs, ListArgs, SupersedeArgs, WriteStubArgs,
-};
+use crate::command::{AddArgs, EditArgs, ForgetArgs, IdArgs, ListArgs, SupersedeArgs, WriteStubArgs};
 use crate::echo::Echo;
 use crate::{FAILURE, report_error, resolve};
 
@@ -23,13 +21,7 @@ pub(super) fn run_add(scope: StoreScope, arguments: AddArgs, output: &Echo) -> i
         return FAILURE;
     }
     let repository = core::RecordRepository::new(paths.clone());
-    let draft = match draft_record(
-        &paths,
-        scope,
-        arguments.title,
-        arguments.kind,
-        arguments.body,
-    ) {
+    let draft = match draft_record(&paths, scope, arguments.title, arguments.kind, arguments.body) {
         Ok(record) => record,
         Err(error) => return report_error(error, output),
     };
@@ -46,20 +38,14 @@ pub(super) fn run_add(scope: StoreScope, arguments: AddArgs, output: &Echo) -> i
         Err(error) => return report_error(error, output),
     };
     if record.status != core::RecordStatus::Active {
-        return report_error(
-            anyhow::anyhow!("new records must have active status"),
-            output,
-        );
+        return report_error(anyhow::anyhow!("new records must have active status"), output);
     }
     match repository.add(record) {
         Ok(stored) => {
             output.line(&stored.record().id.to_string());
             0
         }
-        Err(error) => report_error(
-            anyhow::Error::new(error).context("could not add record"),
-            output,
-        ),
+        Err(error) => report_error(anyhow::Error::new(error).context("could not add record"), output),
     }
 }
 
@@ -73,13 +59,7 @@ pub(super) fn run_propose(scope: StoreScope, arguments: WriteStubArgs, output: &
         return FAILURE;
     }
     let repository = core::RecordRepository::new(paths.clone());
-    let mut draft = match draft_record(
-        &paths,
-        scope,
-        arguments.title,
-        arguments.kind,
-        arguments.body,
-    ) {
+    let mut draft = match draft_record(&paths, scope, arguments.title, arguments.kind, arguments.body) {
         Ok(record) => record,
         Err(error) => return report_error(error, output),
     };
@@ -141,11 +121,7 @@ fn run_candidate_decision(scope: StoreScope, raw_id: String, approve: bool, outp
         Ok(id) => id,
         Err(error) => return report_error(error, output),
     };
-    let result = if approve {
-        repository.approve(id)
-    } else {
-        repository.reject(id)
-    };
+    let result = if approve { repository.approve(id) } else { repository.reject(id) };
     match result.context("could not update candidate") {
         Ok(result) => {
             output.line(&format!(
@@ -220,10 +196,7 @@ pub(super) fn run_list(scope: StoreScope, arguments: ListArgs, output: &Echo) ->
         Err(error) => return report_error(error, output),
     };
     let repository = core::RecordRepository::new(paths);
-    match repository
-        .list(arguments.all)
-        .context("could not list records")
-    {
+    match repository.list(arguments.all).context("could not list records") {
         Ok(records) => {
             for stored in records {
                 let record = stored.record();
@@ -248,10 +221,7 @@ pub(super) fn run_supersede(scope: StoreScope, arguments: SupersedeArgs, output:
         Ok(id) => id,
         Err(error) => return report_error(error, output),
     };
-    let old = match repository
-        .find(old_id)
-        .context("could not find record to supersede")
-    {
+    let old = match repository.find(old_id).context("could not find record to supersede") {
         Ok(record) => record,
         Err(error) => return report_error(error, output),
     };
@@ -319,18 +289,10 @@ fn run_transition(scope: StoreScope, raw_id: String, archive: bool, output: &Ech
         Ok(id) => id,
         Err(error) => return report_error(error, output),
     };
-    let result = if archive {
-        repository.archive(id)
-    } else {
-        repository.restore(id)
-    };
+    let result = if archive { repository.archive(id) } else { repository.restore(id) };
     match result.context("could not change record lifecycle") {
         Ok(stored) => {
-            output.line(&format!(
-                "{}\t{}",
-                stored.record().id,
-                stored.record().status
-            ));
+            output.line(&format!("{}\t{}", stored.record().id, stored.record().status));
             0
         }
         Err(error) => report_error(error, output),
@@ -356,25 +318,16 @@ pub(super) fn run_forget(scope: StoreScope, arguments: ForgetArgs, output: &Echo
         Err(error) => return report_error(error, output),
     };
     if !arguments.yes {
-        if !io::stdin().is_terminal() || !io::stdout().is_terminal() || !io::stderr().is_terminal()
-        {
+        if !io::stdin().is_terminal() || !io::stdout().is_terminal() || !io::stderr().is_terminal() {
             output.error("noninteractive deletion requires --yes");
             return FAILURE;
         }
         let mut stderr = io::stderr().lock();
-        let _ = write!(
-            stderr,
-            "Permanently delete {} ({})? [y/N] ",
-            stored.record().title,
-            id
-        );
+        let _ = write!(stderr, "Permanently delete {} ({})? [y/N] ", stored.record().title, id);
         let _ = stderr.flush();
         let mut answer = String::new();
         if let Err(error) = io::stdin().read_line(&mut answer) {
-            return report_error(
-                anyhow::Error::new(error).context("could not read confirmation"),
-                output,
-            );
+            return report_error(anyhow::Error::new(error).context("could not read confirmation"), output);
         }
         if !matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
             output.error("deletion cancelled");
@@ -394,11 +347,7 @@ pub(super) fn run_forget(scope: StoreScope, arguments: ForgetArgs, output: &Echo
 }
 
 fn draft_record(
-    paths: &core::StorePaths,
-    _scope: StoreScope,
-    title: Option<String>,
-    kind: Option<String>,
-    body: Option<String>,
+    paths: &core::StorePaths, _scope: StoreScope, title: Option<String>, kind: Option<String>, body: Option<String>,
 ) -> AnyhowResult<core::Record> {
     let now = core::Timestamp::now_utc();
     let record_scope = core::record_scope(paths).context("could not read the store identity")?;
@@ -431,14 +380,11 @@ fn draft_record(
 }
 
 fn parse_id(value: &str) -> AnyhowResult<core::RecordId> {
-    value
-        .parse()
-        .map_err(|error: String| anyhow::Error::msg(error))
+    value.parse().map_err(|error: String| anyhow::Error::msg(error))
 }
 
 fn parse_editor_record(markdown: &str) -> AnyhowResult<core::Record> {
-    core::parse_markdown(Path::new("<editor>"), markdown)
-        .context("editor output is not a valid record")
+    core::parse_markdown(Path::new("<editor>"), markdown).context("editor output is not a valid record")
 }
 
 fn edit_markdown(markdown: &str) -> AnyhowResult<String> {
@@ -476,10 +422,7 @@ fn editor_temp_path() -> AnyhowResult<PathBuf> {
         .duration_since(UNIX_EPOCH)
         .context("system clock is before the Unix epoch")?
         .as_nanos();
-    Ok(std::env::temp_dir().join(format!(
-        "stormbuffer-edit-{}-{stamp}.md",
-        std::process::id()
-    )))
+    Ok(std::env::temp_dir().join(format!("stormbuffer-edit-{}-{stamp}.md", std::process::id())))
 }
 
 struct EditorTemp {
